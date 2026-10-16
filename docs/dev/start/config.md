@@ -40,6 +40,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | `JWT_SECRET` | `lemon.jwt.secret` | 内置开发密钥 | 必填，至少 32 字节 |
 | `UPLOAD_PATH` | `lemon.upload.path` | `./uploads`（来自 application.yml） | 必填 |
 | `LEMON_TENANT_ENABLED` | `lemon.tenant.enabled` | `false` | 默认 `false` |
+| `LEMON_DEMO_ENABLED` | `lemon.demo.enabled` | `false` | 默认 `false`，搭建对外演示环境时设为 `true` |
 
 前端构建时可选的环境变量：
 
@@ -48,6 +49,15 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | `VITE_COMPANY_NAME` | 打印单据上的默认公司名称（未开启 SaaS、打印模板中也没有设置公司名称时使用），默认「柠檬ERP」。在 `npm run build` 时生效，例如 `VITE_COMPANY_NAME=某某公司 npm run build` |
 
 ## lemon.* 配置项
+
+### lemon.demo：演示模式
+
+对应 `framework/demo/DemoProperties`，详见 [搭建演示环境](../deploy/demo)。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `lemon.demo.enabled` | `false`（环境变量 `LEMON_DEMO_ENABLED`） | 开启后所有用户只能查看，不能新增、修改、删除数据 |
+| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、标记消息已读，以及用 POST 传参的只读查询 |
 
 ### lemon.tenant：SaaS 多租户
 

@@ -48,6 +48,7 @@ logging:
 | `UPLOAD_PATH` | 是 | `/data/lemon-erp/uploads` | 头像等公开文件目录 |
 | `LEMON_UPLOAD_ATTACHMENTPATH` | 建议 | `/data/lemon-erp/attachments` | 业务附件目录，默认是工作目录下的 `./attachments` |
 | `LEMON_TENANT_ENABLED` | 否 | `false` | 是否开启 SaaS 多租户 |
+| `LEMON_DEMO_ENABLED` | 否 | `false` | 是否开启演示模式（只能查看），见 [搭建演示环境](./demo) |
 | `LEMON_JOB_ENABLED` | 否 | `true` | 多实例部署时只在一个实例上为 true |
 | `SERVER_PORT` | 否 | `8080` | 后端端口 |
 | `TZ` | 建议 | `Asia/Shanghai` | 进程时区，影响 `LocalDate.now()`、定时任务的执行时间 |
