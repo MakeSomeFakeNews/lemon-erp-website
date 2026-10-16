@@ -1,0 +1,119 @@
+---
+order: 2
+---
+
+# 认证与会话
+
+柠檬ERP 使用「JWT + 服务端会话」的认证方式：JWT 只携带会话 ID，真正的登录状态保存在缓存中。这样既保持了无状态接口的便利，又可以随时让令牌失效（退出登录、强制下线、停用账号、重置密码后立即生效）。
+
+## 相关类
+
+| 类 | 位置 | 职责 |
+| --- | --- | --- |
+| `JwtTokenProvider` | framework/security | 签发、解析 JWT（HMAC，密钥 `lemon.jwt.secret`） |
+| `TokenService` | framework/security | 创建 / 删除会话，在线会话列表，登录用户（权限）缓存 |
+| `JwtAuthenticationFilter` | framework/security | 每个请求解析令牌、校验会话、设置租户、加载登录用户 |
+| `LoginUser` | framework/security | 当前登录用户（record），放在 `SecurityContext` 的 principal 中 |
+| `LoginUserLoader` | framework/security | 从数据库加载登录用户的接口，由 system 模块的 `SysLoginUserLoader` 实现 |
+| `SecurityUtils` | framework/security | 静态方法取当前用户、用户 ID、数据权限、门户关联的供应商 / 客户 |
+| `SecurityConfig` | framework/config | Spring Security 配置：无状态、关闭表单登录和 CSRF、放行公开接口 |
+| `AuthService` / `AuthController` | modules/system | 登录、退出、当前用户信息、当前用户菜单 |
+| `PasswordPolicy`、`CaptchaService` | modules/system | 登录失败锁定、密码策略与过期、验证码 |
+
+## 登录流程
+
+`POST /api/auth/login`，请求体：
+
+```json
+{ "username": "admin", "password": "admin123", "tenantName": "柠檬科技", "captchaId": null, "captchaCode": null }
+```
+
+`AuthService.login` 的处理顺序：
+
+1. **确定租户**：按 `tenantName` 解析租户并设置 `TenantContext`，之后的查询（用户、登录日志）都在该租户下执行。未开启 SaaS 时为平台租户。
+2. **锁定检查**：同一用户名连续失败次数达到「密码错误锁定次数」时拒绝登录（锁定期间密码正确也不行）。
+3. **验证码**：参数「登录验证码」为「每次登录」，或为「密码输错后」且该用户名有失败记录时，校验验证码（`GET /api/auth/captcha` 获取，2 分钟有效，校验一次作废）。验证码错误不计入密码错误次数。
+4. **校验用户名和密码**（BCrypt）：失败时累加失败次数（不存在的用户名同样计数，避免借此探测账号），剩余 2 次以内时提示「再错 N 次将锁定账号」。
+5. **校验账号状态**：停用的账号不能登录。
+6. **创建会话**：清除失败次数，`TokenService.createToken` 创建会话并签发 JWT，发布登录日志事件。
+7. 返回 `{ token, passwordExpired }`：`passwordExpired` 为 true 时（管理员设置的初始密码、重置过的密码、超过密码有效期），前端提示用户修改密码。
+
+## 令牌与会话
+
+`TokenService.createToken` 的处理：
+
+- 开启了参数「同一账号只允许一处登录」时，先删除该用户已有的全部会话；
+- 生成随机的会话 ID（UUID），记录 IP、归属地、浏览器、操作系统、登录时间、租户，以 `OnlineSession` 存入缓存 `login:token:{tokenId}`，过期时间为「登录有效期（小时）」；
+- 签发 JWT：`jti` 为会话 ID，`sub` 为用户 ID，附带 `username`，过期时间与会话一致。
+
+| 缓存键 | 内容 | 过期 | 清理时机 |
+| --- | --- | --- | --- |
+| `login:token:{tokenId}` | `OnlineSession` 登录会话 | 登录有效期 | 退出登录、强制下线、停用 / 删除账号、重置密码、租户停用或到期 |
+| `login:perms:{userId}` | `LoginUser`（角色、权限、数据权限、租户、门户关联） | 30 分钟 | 用户、角色、菜单、部门、租户套餐变更后（事务提交后清理） |
+
+## 请求认证
+
+`JwtAuthenticationFilter`（`OncePerRequestFilter`）对每个请求：
+
+1. 读取 `Authorization: Bearer <token>`，解析出会话 ID；签名无效或已过期时视为未登录。
+2. 按会话 ID 读取 `login:token:*`，会话不存在（已退出、被强退）时视为未登录。
+3. 按会话中的租户设置 `TenantContext`（请求结束后清除）。
+4. `TokenService.getLoginUser(userId)` 读取权限缓存，未命中时调用 `LoginUserLoader` 从数据库加载并缓存 30 分钟；用户已停用或租户已失效时返回 null，视为未登录。
+5. 把 `LoginUser` 及其权限放入 `SecurityContext`。
+6. 门户账号（供应商 / 经销商）访问不属于其门户的接口时直接返回 403，见 [供应商门户接口开发](../guide/portal)。
+
+未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。
+
+不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，以及 GET `/files/**`（头像等公开文件）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
+
+## LoginUser
+
+```java
+public record LoginUser(Long userId, String username, Long deptId, Set<String> roles, Set<String> perms,
+                        DataScope dataScope, String tokenId, Long tenantId, Long supplierId, Long customerId) {
+    public boolean isAdmin();     // 平台租户中角色编码为 admin 的用户（超级管理员）
+    public boolean isSupplier();  // 供应商门户账号
+    public boolean isDealer();    // 经销商门户账号
+}
+```
+
+业务代码中获取当前用户：
+
+```java
+LoginUser user = SecurityUtils.getLoginUser();   // 未登录抛 BizException(401)
+Long userId = SecurityUtils.getUserId();
+Long userIdOrNull = SecurityUtils.getUserIdOrNull(); // 异步线程、定时任务中可能为 null
+DataScope scope = SecurityUtils.getDataScope();
+```
+
+`SysLoginUserLoader` 加载时的规则：
+
+- 平台租户的 admin 角色拥有通配权限 `*:*:*` 和全部数据权限；
+- 其他用户的权限是其启用角色的菜单权限并集，租户用户以租户套餐为上限，非平台租户去掉平台专属权限（`PlatformFeatures`）；
+- 门户账号只保留所属门户的权限（`portal:*` 或 `dealer:*`），数据权限为仅本人；
+- 数据权限由 `SysDataScopeResolver` 按多个角色取并集计算，见 [数据权限](./data-scope)。
+
+## 会话失效的场景
+
+| 操作 | 处理 |
+| --- | --- |
+| 退出登录 | 删除当前会话 |
+| 系统监控 → 在线用户 → 强制下线 | 删除指定会话 |
+| 停用、删除用户，重置密码 | `kickUser`：删除该用户全部会话并清除权限缓存 |
+| 修改用户角色、部门 | 清除该用户的权限缓存，下次请求重新加载 |
+| 修改角色权限、菜单、部门，修改租户套餐 | 清空全部权限缓存（`login:perms:*`） |
+| 租户停用、到期 | `kickTenant`：删除该租户全部会话 |
+| 修改 `lemon.jwt.secret` | 已签发的令牌全部无法通过签名校验 |
+
+权限缓存的清理在事务提交后执行（`TransactionSynchronization.afterCommit`），避免并发请求在提交前把旧权限重新加载进缓存。
+
+::: warning 直接修改数据库后
+直接用 SQL 修改了角色、菜单、用户角色等权限数据时，需要手工删除 Redis 中的 `login:perms:*`（或在「系统监控 → 缓存监控」中清空「用户权限」），否则最多 30 分钟后才生效。
+:::
+
+## 前端
+
+- 登录成功后令牌保存在 `localStorage`（键 `lemon_erp_token`），`utils/request.js` 的请求拦截器自动加上 `Authorization: Bearer` 请求头。
+- 路由守卫在首次进入页面时请求 `/auth/info` 和 `/auth/menus`，生成动态路由；没有令牌时跳转 `/login?redirect=原地址`。
+- 响应 `code` 为 401 或 HTTP 状态 401 时，清除令牌并跳转登录页（多个并发请求只处理一次）。
+- 登录页在进入前请求 `/auth/config`，获取是否开启 SaaS（显示「租户」输入框）、系统名称、验证码模式、密码策略、水印等公开配置。

@@ -1,0 +1,347 @@
+---
+order: 2
+---
+
+# 前端开发规范
+
+前端位于 `lemon-web`，使用 Vue 3 组合式 API（`<script setup>`）+ Ant Design Vue 4。本页介绍页面的标准写法，新页面请参照现有页面保持一致的交互。
+
+## 目录与命名
+
+| 位置 | 内容 |
+| --- | --- |
+| `src/api/<模块>/<功能>.js` | 接口函数，基于 `@/utils/request` |
+| `src/views/<模块>/<页面>/index.vue` | 菜单页面，路径即菜单的「组件路径」（`wms/warehouse/index`） |
+| `src/components/<模块>/` | 本模块的单据表单（`XxxForm.vue`）、详情（`XxxDetail.vue`）等组件 |
+| `src/components/` | 通用组件：`TableToolbar`、`SearchForm`、`FormDrawer`、`SubPage`、`DictTag`、`StatusSwitch`、`AttachmentPanel`、`ChangeLogPanel`、`ImportModal` |
+| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict` |
+
+## 接口封装
+
+```js
+// src/api/wms/warehouse.js
+import request from '@/utils/request'
+
+const ids = (v) => [].concat(v).join(',')
+
+export const pageWarehouse = (params) => request.get('/wms/warehouse', { params })
+export const getWarehouse = (id) => request.get(`/wms/warehouse/${id}`)
+export const addWarehouse = (data) => request.post('/wms/warehouse', data)
+export const updateWarehouse = (id, data) => request.put(`/wms/warehouse/${id}`, data)
+export const changeWarehouseStatus = (id, status) => request.put(`/wms/warehouse/${id}/status`, { status })
+export const deleteWarehouse = (id) => request.delete(`/wms/warehouse/${ids(id)}`)
+```
+
+`request` 的 `baseURL` 为 `/api`，超时 15 秒。响应拦截器的处理：
+
+- `code === 200`：直接返回 `data`（页面中 `const page = await pageWarehouse(params)` 拿到的就是 `{ records, total }`）；
+- `code === 401` 或 HTTP 401：清除令牌，提示「登录已过期」后跳转登录页；
+- 其他错误：`message.error` 显示后端的 `msg`，并给错误对象打上 `handled` 标记后 reject。
+
+因此页面中**不需要 catch 来提示错误**，用 `try / finally` 恢复 loading 状态即可；`main.js` 的全局错误处理会忽略已提示过的错误。
+
+```js
+async function remove(id) {
+  await deleteWarehouse(id)      // 失败时拦截器已提示，后续代码不会执行
+  message.success('删除成功')
+  load()
+}
+```
+
+文件下载用 `responseType: 'blob'`，成功时返回 Blob，失败时拦截器会把 JSON 错误解析出来提示。
+
+## 列表页
+
+列表页参照 `views/system/user/index.vue` 或 `views/wms/warehouse/index.vue`，结构固定：
+
+```vue
+<template>
+  <div class="table-page">
+    <a-card v-show="showSearch" :bordered="false" class="page-card">
+      <SearchForm :model="query" @search="search" @reset="resetQuery">
+        <a-form-item label="仓库" name="keyword">
+          <a-input v-model:value="query.keyword" placeholder="编码或名称" allow-clear />
+        </a-form-item>
+        <a-form-item label="状态" name="status">
+          <a-select v-model:value="query.status" placeholder="全部" allow-clear :options="toOptions(dict.sys_common_status, true)" />
+        </a-form-item>
+      </SearchForm>
+    </a-card>
+
+    <a-card :bordered="false" class="page-card table-card">
+      <TableToolbar
+        :exporter="exportAll"
+        v-model:size="size"
+        v-model:checked="checked"
+        v-model:show-search="showSearch"
+        :columns="columns"
+        @refresh="load"
+      >
+        <a-button v-perm="'wms:warehouse:add'" type="primary" @click="drawer.openCreate()">
+          <template #icon><PlusOutlined /></template>新增仓库
+        </a-button>
+      </TableToolbar>
+
+      <a-table
+        row-key="id"
+        :size="size"
+        :columns="visibleColumns"
+        :data-source="list"
+        :loading="loading"
+        :pagination="pagination"
+        :scroll="{ x: 1200, y: '100%' }"
+        @change="onTableChange"
+      >
+        <template #bodyCell="{ column, record }">
+          <template v-if="column.key === 'type'">
+            <DictTag type="wms_warehouse_type" :value="record.type" />
+          </template>
+          <template v-else-if="column.key === 'action'">
+            <span class="table-actions">
+              <a-button v-perm="'wms:warehouse:edit'" type="link" size="small" @click="drawer.openEdit(record)">编辑</a-button>
+            </span>
+          </template>
+        </template>
+      </a-table>
+    </a-card>
+  </div>
+</template>
+
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { PlusOutlined } from '@ant-design/icons-vue'
+import DictTag from '@/components/DictTag.vue'
+import SearchForm from '@/components/SearchForm.vue'
+import TableToolbar from '@/components/TableToolbar.vue'
+import { pageWarehouse } from '@/api/wms/warehouse'
+import { useColumns } from '@/composables/useColumns'
+import { useDict } from '@/composables/useDict'
+import { useTable } from '@/composables/useTable'
+import { toOptions } from '@/utils/dict'
+
+const dict = useDict('sys_common_status', 'wms_warehouse_type')
+
+const columns = [
+  { title: '仓库', key: 'name', width: 200 },
+  { title: '类型', key: 'type', width: 150, dict: 'wms_warehouse_type' },
+  { title: '地址', dataIndex: 'address', width: 240, ellipsis: true },
+  { title: '操作', key: 'action', width: 220, fixed: 'right' }
+]
+const { checked, visibleColumns } = useColumns(columns, 'wms-warehouse')
+const showSearch = ref(true)
+
+const query = reactive({ keyword: undefined, status: undefined })
+const { list, loading, size, pagination, load, search, onTableChange, exportAll } = useTable(pageWarehouse, query)
+
+function resetQuery() {
+  Object.assign(query, { keyword: undefined, status: undefined })
+  search()
+}
+
+onMounted(load)
+</script>
+```
+
+要点：
+
+- 根元素 `class="table-page"`，表格所在卡片加 `table-card`，表格设置 `:scroll="{ x: 总宽度, y: '100%' }"`：表头固定，只有表格区域滚动，分页条始终可见；
+- `TableToolbar` 提供刷新、密度、列设置、显示 / 隐藏搜索栏、导出，默认插槽放操作按钮，`extra` 插槽放右侧附加按钮；
+- `useColumns(columns, 存储键)` 记住用户隐藏的列（只存隐藏的列，以后新增的列默认显示）；
+- 列定义加 `dict: '字典类型'` 后导出 Excel 时输出字典标签，或用 `exportValue: (record) => 值` 自定义；
+- 操作列 `key: 'action'`、`fixed: 'right'`，按钮放在 `span.table-actions` 中。
+
+### useTable
+
+```js
+const { list, loading, size, pagination, selectedKeys, rowSelection, load, search, onTableChange, exportAll } =
+  useTable(fetcher, query, { params: (q) => ({ ...q, beginTime: q.range?.[0], endTime: q.range?.[1], range: undefined }) })
+```
+
+| 返回值 | 说明 |
+| --- | --- |
+| `list` / `loading` / `pagination` | 绑定到 `a-table` |
+| `load()` | 按当前页重新加载；快速切换条件时只采用最后一次请求的结果；删除最后一页的全部数据后自动回到上一页 |
+| `search()` | 回到第 1 页并加载 |
+| `onTableChange` | 绑定 `@change`，处理翻页、改每页条数 |
+| `selectedKeys` / `rowSelection` | 多选 |
+| `exportAll(columns, filename?)` | 按当前条件导出 Excel，传给 `TableToolbar` 的 `exporter` |
+
+`fetcher` 接收 `{ current, size, ...query }`，返回 `{ records, total }`。`options.params` 用于把查询条件转换为接口参数（如把时间范围拆成两个参数）。
+
+## 表单：useFormDrawer + FormDrawer
+
+新增 / 编辑表单统一用 `useFormDrawer` 管理状态，`FormDrawer` 渲染外壳（标题、保存 / 取消按钮、加载状态）：
+
+```vue
+<FormDrawer :drawer="drawer" create-title="新增仓库" edit-title="编辑仓库">
+  <a-form ref="formRef" :model="form" :rules="rules" layout="vertical">
+    <a-form-item label="仓库编码" name="code">
+      <a-input v-model:value="form.code" :maxlength="32" />
+    </a-form-item>
+    <a-form-item label="仓库名称" name="name">
+      <a-input v-model:value="form.name" :maxlength="64" />
+    </a-form-item>
+  </a-form>
+</FormDrawer>
+```
+
+```js
+const rules = {
+  code: [{ required: true, message: '请输入仓库编码' }],
+  name: [{ required: true, whitespace: true, message: '请输入仓库名称' }]
+}
+const drawer = useFormDrawer({
+  emptyForm: () => ({ id: undefined, code: '', name: '', type: 'NORMAL', remark: '' }),
+  fetch: (record) => getWarehouse(record.id),   // 编辑时加载详情，不传则直接用表格行数据
+  create: addWarehouse,
+  update: updateWarehouse,
+  toPayload: ({ code, name, type, remark }) => ({ code, name, type, remark }),   // 可选，默认去掉 id 和只读字段
+  onSuccess: load
+})
+const { formRef, form } = drawer
+```
+
+| 选项 | 说明 |
+| --- | --- |
+| `emptyForm` | 返回空表单（必填） |
+| `beforeOpen(record)` | 打开前加载下拉选项等依赖数据，新增时 `record` 为 null |
+| `fetch(record)` | 编辑时加载详情 |
+| `create(payload)` / `update(id, payload)` | 保存，按表单是否有 `id` 调用 |
+| `toPayload(form)` | 提交数据，默认去掉 `id`、`createTime`、`updateTime`、`children` |
+| `onSuccess` | 保存成功后回调，一般用于刷新列表 |
+| `successMessage` | 默认「保存成功」 |
+
+自带的行为：打开时加载详情（失败自动关闭）、保存前校验、有未保存的修改时关闭会二次确认、`Ctrl / ⌘ + Enter` 快捷保存。返回值中的 `openCreate(defaults)`、`openEdit(record)` 打开表单。
+
+### 抽屉还是子页
+
+| 场景 | 写法 |
+| --- | --- |
+| 字段少的简单资料（仓库、库位、职位等） | 默认的抽屉：`<FormDrawer :drawer="drawer">` |
+| 有明细行、字段多的单据（订单、出入库单、凭证等） | 子页：`<FormDrawer page :drawer="drawer" width="min(1200px, 100vw)">` |
+
+子页占满内容区、覆盖在列表之上，返回后列表的筛选、分页、滚动位置不变。单据表单一般封装为组件（如 `components/scm/OrderForm.vue`），通过 `defineExpose({ openCreate, openEdit: drawer.openEdit })` 暴露给列表页，保存成功后 `emit('success', id)`。
+
+## 详情：SubPage
+
+单据详情用 `SubPage`，用法与 `a-drawer` 一致（`open`、`title`、`@close`，插槽 `title`、`extra`、`footer`；`width` 等抽屉属性会被忽略）：
+
+```vue
+<template>
+  <SubPage :open="open" :title="detail ? `用车申请 ${detail.requestNo}` : '用车申请'" @close="emit('update:open', false)">
+    <template #extra>
+      <a-space>
+        <a-button size="small" @click="print">打印</a-button>
+        <a-button v-perm="'oa:car:edit'" size="small" @click="emit('edit', detail)">编辑</a-button>
+      </a-space>
+    </template>
+    <a-spin :spinning="loading">
+      <!-- 详情内容 -->
+    </a-spin>
+  </SubPage>
+</template>
+
+<script setup>
+import { ref, watch } from 'vue'
+import SubPage from '@/components/SubPage.vue'
+import { getCarRequest } from '@/api/oa/car'
+
+const props = defineProps({ open: Boolean, requestId: Number })
+const emit = defineEmits(['update:open', 'edit'])
+
+const detail = ref()
+const loading = ref(false)
+
+async function load() {
+  loading.value = true
+  try {
+    detail.value = await getCarRequest(props.requestId)
+  } finally {
+    loading.value = false
+  }
+}
+
+watch(() => [props.open, props.requestId], ([open]) => open && load(), { immediate: true })
+
+defineExpose({ reload: load })
+</script>
+```
+
+**从详情进入编辑时不要关闭详情**：编辑子页会叠在详情之上，保存后回到详情，由列表页调用详情组件暴露的 `reload()` 刷新：
+
+```js
+const detailRef = ref()
+function onSaved(id) {
+  load()   // 刷新列表
+  if (detailOpen.value && id === detailId.value) detailRef.value?.reload()
+}
+```
+
+多个子页叠加时后打开的在上面，返回时逐层关闭。
+
+## 字典：useDict + DictTag
+
+```js
+import { useDict } from '@/composables/useDict'
+import { toOptions } from '@/utils/dict'
+
+const dict = useDict('sys_common_status', 'wms_warehouse_type')
+// 模板中：dict.wms_warehouse_type 为该类型的字典数据数组
+// 下拉选项：:options="toOptions(dict.wms_warehouse_type)"
+```
+
+```vue
+<!-- 按字典显示带颜色的标签（颜色取字典数据的 tag_color） -->
+<DictTag type="wms_warehouse_type" :value="record.type" />
+```
+
+字典数据由 `store/dict.js` 按类型缓存，同一类型只请求一次（接口 `/system/dict/data/type/{type}`）。状态、类型等取值一律通过字典显示，不在页面中硬编码标签文字。字典在「系统管理 → 字典管理」或 `init.sql` 中维护，`dict_value` 与后端枚举名称一致。
+
+## 按钮权限：v-perm
+
+```vue
+<a-button v-perm="'wms:warehouse:add'" type="primary">新增仓库</a-button>
+<a-button v-perm="['scm:purchase:add', 'scm:purchase:edit']">满足其一即可</a-button>
+
+<!-- a-popconfirm 这类没有根元素的组件，外面包一层元素 -->
+<span v-perm="'wms:warehouse:remove'">
+  <a-popconfirm :title="`确定删除仓库「${record.name}」？`" @confirm="remove(record.id)">
+    <a-button type="link" danger size="small">删除</a-button>
+  </a-popconfirm>
+</span>
+```
+
+`v-perm` 在挂载时移除没有权限的元素。需要在脚本中判断时用 `useUserStore().hasPerm(perm)`，例如 `StatusSwitch` 的 `:disabled="!userStore.hasPerm('wms:warehouse:edit')"`。
+
+## 样式与深色模式
+
+- 自定义样式使用全局 CSS 变量（定义在 `src/style.css`）：`--app-primary`、`--app-bg`、`--app-card`、`--app-border`、`--app-hover`、`--app-text`、`--app-text-2`、`--app-text-3` 等。亮色为默认值，`html[data-theme='dark']` 时切换为暗色，使用变量的样式自动适配深色模式。
+- 页面私有样式写在 `<style scoped>` 中。
+- 必须针对深色模式单独写的样式（变量覆盖不到的渐变、图片透明度等），写在**非 scoped** 的 `<style>` 中，并用页面根类名限定范围，因为需要匹配根元素 `html` 上的 `data-theme`，而 scoped 样式中的 `:global()` 不生效：
+
+```vue
+<style scoped>
+.hero {
+  background: var(--app-card);
+}
+</style>
+
+<style>
+/* 暗色：需要匹配根元素的 data-theme，不能放在 scoped 中 */
+html[data-theme='dark'] .workbench .hero {
+  background: linear-gradient(100deg, rgba(255, 212, 59, 0.07), rgba(0, 0, 0, 0) 55%), var(--app-card);
+}
+</style>
+```
+
+## 移动端
+
+- 页面要在窄屏下可用：表单用 `a-row` / `a-col` 的响应式栅格（`:xs="24" :sm="12"`），抽屉宽度用 `min(640px, 100vw)`。
+- 手机 / PDA 的移动作业页面放在 `views/mobile` 下，菜单路径以 `/m` 开头，使用全屏的 `MobileLayout`。
+
+## 其他约定
+
+- 不使用 `alert`、`confirm`，确认用 `Modal.confirm` 或 `a-popconfirm`，提示用 `message`。
+- 复用已有的格式化函数保持全站一致：数字 `utils/format.js` 的 `formatNumber`，金额 `components/scm/scm.js` 的 `formatMoney`，金额大写 `components/fin/fin.js` 的 `moneyUpper`。
+- 打印使用 `utils/print.js` 的 `printDocs`，见 [单据编号与打印](./doc-no-print)。
+- 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题和窄屏显示。
