@@ -63,7 +63,7 @@ order: 2
 5. 把 `LoginUser` 及其权限放入 `SecurityContext`。
 6. 门户账号（供应商 / 经销商）访问不属于其门户的接口时直接返回 403，见 [供应商门户接口开发](../guide/portal)。
 
-未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。
+未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。安全过滤器链中输出的 401 / 403 提示同样按请求头 `Accept-Language` 返回中文或英文（`I18nConfig` 中的过滤器在安全过滤器之前设置语言，见 [国际化](../guide/i18n#语言的传递与解析)）。
 
 不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），GET `/screen-share/**`（数据大屏投屏链接，见下文），以及 `/auth/im/**`（钉钉、企业微信、飞书授权登录，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
 
@@ -109,7 +109,7 @@ order: 2
 
 1. 租户和用途来自授权时创建的 `state`（`SecureRandom` 128 位随机数，缓存 `im:state:` 10 分钟，回调时读取后立即删除），不信任回调请求中的其他参数；
 2. 授权码由平台换成成员 userid，按 `sys_im_user` 的绑定关系找到用户。未绑定时 `AuthService.recordLoginFailure` 记入登录日志（用户名为「钉钉:userid」）并提示先绑定；
-3. `AuthService.loginAs(user, "钉钉登录")` 校验账号启用、不是门户账号，然后与密码登录共用 `issue()`：`createToken`、登录日志（「钉钉登录成功」）、返回 `passwordExpired`。第三方登录不经过验证码和密码错误锁定；
+3. `AuthService.loginAs(user, platform.loginLabel())`（第二个参数是登录方式的消息键，如 `system.label.dingtalkLogin`，登录日志按中文记录） 校验账号启用、不是门户账号，然后与密码登录共用 `issue()`：`createToken`、登录日志（「钉钉登录成功」）、返回 `passwordExpired`。第三方登录不经过验证码和密码错误锁定；
 4. 授权页地址中的回调地址固定为 `{系统访问地址}/im-callback`，必须与平台中登记的一致；`redirect` 只接受站内路由，防止借登录跳转到外部网站。
 
 已登录用户绑定本人账号走同一流程（`GET /system/im/mine/{platform}/bind-url`，state 中记录当前用户 ID）。前端 `/im-callback`、`/im-login` 在路由白名单中，且已登录时也不加载菜单路由（`BARE_PAGES`），由页面自行处理令牌。完整流程见 [第三方集成](./im#授权登录与绑定)。

@@ -17,6 +17,7 @@ order: 2
 | `src/components/common/` | `CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
 | `src/components/print/` | `PrintPreview`（全局打印预览窗口）、`OverlayDesigner`（套打设计器） |
 | `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useCustomFields` |
+| `src/locales/<语言>/<模块>.js` | 界面文字的语言包（`zh-CN`、`en-US`，键一致），`en-US/menu.js`、`dict.js` 是菜单和字典的英文译文，见 [国际化](./i18n) |
 
 ## 接口封装
 
@@ -40,12 +41,14 @@ export const deleteWarehouse = (id) => request.delete(`/wms/warehouse/${ids(id)}
 - `code === 401` 或 HTTP 401：清除令牌，提示「登录已过期」后跳转登录页；
 - 其他错误：`message.error` 显示后端的 `msg`，并给错误对象打上 `handled` 标记后 reject。
 
+请求拦截器给每个请求加上 `Accept-Language: <界面语言>`（`zh-CN` / `en-US`），后端据此返回对应语言的 `msg`，所以页面直接显示后端的提示即可，不需要自己翻译。
+
 因此页面中**不需要 catch 来提示错误**，用 `try / finally` 恢复 loading 状态即可；`main.js` 的全局错误处理会忽略已提示过的错误。
 
 ```js
 async function remove(id) {
   await deleteWarehouse(id)      // 失败时拦截器已提示，后续代码不会执行
-  message.success('删除成功')
+  message.success(t('common.msg.deleteSuccess'))
   load()
 }
 ```
@@ -61,11 +64,11 @@ async function remove(id) {
   <div class="table-page">
     <a-card v-show="showSearch" :bordered="false" class="page-card">
       <SearchForm :model="query" @search="search" @reset="resetQuery">
-        <a-form-item label="仓库" name="keyword">
-          <a-input v-model:value="query.keyword" placeholder="编码或名称" allow-clear />
+        <a-form-item :label="$t('wms.common.warehouse')" name="keyword">
+          <a-input v-model:value="query.keyword" :placeholder="$t('wms.flow.codeOrName')" allow-clear />
         </a-form-item>
-        <a-form-item label="状态" name="status">
-          <a-select v-model:value="query.status" placeholder="全部" allow-clear :options="toOptions(dict.sys_common_status, true)" />
+        <a-form-item :label="$t('common.field.status')" name="status">
+          <a-select v-model:value="query.status" :placeholder="$t('common.placeholder.all')" allow-clear :options="toOptions(dict.sys_common_status, true)" />
         </a-form-item>
       </SearchForm>
     </a-card>
@@ -80,7 +83,7 @@ async function remove(id) {
         @refresh="load"
       >
         <a-button v-perm="'wms:warehouse:add'" type="primary" @click="drawer.openCreate()">
-          <template #icon><PlusOutlined /></template>新增仓库
+          <template #icon><PlusOutlined /></template>{{ $t('wms.warehouse.createTitle') }}
         </a-button>
       </TableToolbar>
 
@@ -100,7 +103,7 @@ async function remove(id) {
           </template>
           <template v-else-if="column.key === 'action'">
             <span class="table-actions">
-              <a-button v-perm="'wms:warehouse:edit'" type="link" size="small" @click="drawer.openEdit(record)">编辑</a-button>
+              <a-button v-perm="'wms:warehouse:edit'" type="link" size="small" @click="drawer.openEdit(record)">{{ $t('common.action.edit') }}</a-button>
             </span>
           </template>
         </template>
@@ -111,6 +114,7 @@ async function remove(id) {
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { PlusOutlined } from '@ant-design/icons-vue'
 import DictTag from '@/components/DictTag.vue'
 import SearchForm from '@/components/SearchForm.vue'
@@ -121,13 +125,15 @@ import { useDict } from '@/composables/useDict'
 import { useTable } from '@/composables/useTable'
 import { toOptions } from '@/utils/dict'
 
+const { t } = useI18n()
 const dict = useDict('sys_common_status', 'wms_warehouse_type')
 
+// 切换语言会刷新整个页面，列定义直接用 t()，不需要 computed
 const columns = [
-  { title: '仓库', key: 'name', width: 200 },
-  { title: '类型', key: 'type', width: 150, dict: 'wms_warehouse_type' },
-  { title: '地址', dataIndex: 'address', width: 240, ellipsis: true },
-  { title: '操作', key: 'action', width: 220, fixed: 'right' }
+  { title: t('wms.common.warehouse'), key: 'name', width: 200 },
+  { title: t('common.field.type'), key: 'type', width: 150, dict: 'wms_warehouse_type' },
+  { title: t('wms.warehouse.address'), dataIndex: 'address', width: 240, ellipsis: true },
+  { title: t('common.action.operation'), key: 'action', width: 220, fixed: 'right' }
 ]
 const { checked, visibleColumns } = useColumns(columns, 'wms-warehouse')
 const showSearch = ref(true)
@@ -150,7 +156,8 @@ onMounted(load)
 - `TableToolbar` 提供刷新、密度、列设置、显示 / 隐藏搜索栏、导出，默认插槽放操作按钮，`extra` 插槽放右侧附加按钮；
 - `useColumns(columns, 存储键)` 记住用户隐藏的列（只存隐藏的列，以后新增的列默认显示）；
 - 列定义加 `dict: '字典类型'` 后导出 Excel 时输出字典标签，或用 `exportValue: (record) => 值` 自定义；
-- 操作列 `key: 'action'`、`fixed: 'right'`，按钮放在 `span.table-actions` 中。
+- 操作列 `key: 'action'`、`fixed: 'right'`，按钮放在 `span.table-actions` 中；
+- 页面上的文字全部用 `$t` / `t`，列 `title` 同时用作导出 Excel 的表头，导出也会跟随界面语言。
 
 ### useTable
 
@@ -175,12 +182,12 @@ const { list, loading, size, pagination, selectedKeys, rowSelection, load, searc
 新增 / 编辑表单统一用 `useFormDrawer` 管理状态，`FormDrawer` 渲染外壳（标题、保存 / 取消按钮、加载状态）：
 
 ```vue
-<FormDrawer :drawer="drawer" create-title="新增仓库" edit-title="编辑仓库">
+<FormDrawer :drawer="drawer" :create-title="$t('wms.warehouse.createTitle')" :edit-title="$t('wms.warehouse.editTitle')">
   <a-form ref="formRef" :model="form" :rules="rules" layout="vertical">
-    <a-form-item label="仓库编码" name="code">
+    <a-form-item :label="$t('wms.warehouse.code')" name="code">
       <a-input v-model:value="form.code" :maxlength="32" />
     </a-form-item>
-    <a-form-item label="仓库名称" name="name">
+    <a-form-item :label="$t('wms.warehouse.name')" name="name">
       <a-input v-model:value="form.name" :maxlength="64" />
     </a-form-item>
   </a-form>
@@ -189,8 +196,8 @@ const { list, loading, size, pagination, selectedKeys, rowSelection, load, searc
 
 ```js
 const rules = {
-  code: [{ required: true, message: '请输入仓库编码' }],
-  name: [{ required: true, whitespace: true, message: '请输入仓库名称' }]
+  code: [{ required: true, message: t('wms.warehouse.inputCode') }],
+  name: [{ required: true, whitespace: true, message: t('wms.warehouse.inputName') }]
 }
 const drawer = useFormDrawer({
   emptyForm: () => ({ id: undefined, code: '', name: '', type: 'NORMAL', remark: '' }),
@@ -211,7 +218,7 @@ const { formRef, form } = drawer
 | `create(payload)` / `update(id, payload)` | 保存，按表单是否有 `id` 调用 |
 | `toPayload(form)` | 提交数据，默认去掉 `id`、`createTime`、`updateTime`、`children` |
 | `onSuccess` | 保存成功后回调，一般用于刷新列表 |
-| `successMessage` | 默认「保存成功」 |
+| `successMessage` | 默认 `t('common.msg.saveSuccess')`（「保存成功」） |
 
 自带的行为：打开时加载详情（失败自动关闭）、保存前校验、有未保存的修改时关闭会二次确认、`Ctrl / ⌘ + Enter` 快捷保存。返回值中的 `openCreate(defaults)`、`openEdit(record)` 打开表单。
 
@@ -230,11 +237,11 @@ const { formRef, form } = drawer
 
 ```vue
 <template>
-  <SubPage :open="open" :title="detail ? `用车申请 ${detail.requestNo}` : '用车申请'" @close="emit('update:open', false)">
+  <SubPage :open="open" :title="detail ? $t('oa.car.detailTitle', { no: detail.requestNo }) : $t('oa.car.title')" @close="emit('update:open', false)">
     <template #extra>
       <a-space>
-        <a-button size="small" @click="print">打印</a-button>
-        <a-button v-perm="'oa:car:edit'" size="small" @click="emit('edit', detail)">编辑</a-button>
+        <a-button size="small" @click="print">{{ $t('common.action.print') }}</a-button>
+        <a-button v-perm="'oa:car:edit'" size="small" @click="emit('edit', detail)">{{ $t('common.action.edit') }}</a-button>
       </a-space>
     </template>
     <a-spin :spinning="loading">
@@ -297,18 +304,19 @@ const dict = useDict('sys_common_status', 'wms_warehouse_type')
 <DictTag type="wms_warehouse_type" :value="record.type" />
 ```
 
-字典数据由 `store/dict.js` 按类型缓存，同一类型只请求一次（接口 `/system/dict/data/type/{type}`）。状态、类型等取值一律通过字典显示，不在页面中硬编码标签文字。字典在「系统管理 → 字典管理」或 `init.sql` 中维护，`dict_value` 与后端枚举名称一致。
+字典数据由 `store/dict.js` 按类型缓存，同一类型只请求一次（接口 `/system/dict/data/type/{type}`）。加载后标签按界面语言翻译：英文译文在 `locales/en-US/dict.js`（`字典类型: { 字典值: '英文' }`），没有译文时显示数据库中的标签，所以新增内置字典时要同时加英文译文。状态、类型等取值一律通过字典显示，不在页面中硬编码标签文字。字典在「系统管理 → 字典管理」或 `init.sql` 中维护，`dict_value` 与后端枚举名称一致。
 
 ## 按钮权限：v-perm
 
 ```vue
-<a-button v-perm="'wms:warehouse:add'" type="primary">新增仓库</a-button>
-<a-button v-perm="['scm:purchase:add', 'scm:purchase:edit']">满足其一即可</a-button>
+<a-button v-perm="'wms:warehouse:add'" type="primary">{{ $t('wms.warehouse.createTitle') }}</a-button>
+<!-- 数组：满足其一即可 -->
+<a-button v-perm="['scm:purchase:add', 'scm:purchase:edit']">{{ $t('common.action.save') }}</a-button>
 
 <!-- a-popconfirm 这类没有根元素的组件，外面包一层元素 -->
 <span v-perm="'wms:warehouse:remove'">
-  <a-popconfirm :title="`确定删除仓库「${record.name}」？`" @confirm="remove(record.id)">
-    <a-button type="link" danger size="small">删除</a-button>
+  <a-popconfirm :title="$t('wms.warehouse.confirmDelete', { name: record.name })" @confirm="remove(record.id)">
+    <a-button type="link" danger size="small">{{ $t('common.action.delete') }}</a-button>
   </a-popconfirm>
 </span>
 ```
@@ -364,10 +372,19 @@ html[data-theme='dark'] .workbench .hero {
 
 ### 新增一块大屏
 
-1. 后端：在 `bi/model/ScreenKey` 中加枚举值（名称即大屏标题），在 `BiScreenService.data` 的 `switch` 中加一个方法，一次返回 `kpi`、各图表和列表的全部数据；统计 SQL 写在 `BiScreenMapper.xml` 中，按租户自动过滤，不加数据权限（大屏接口要求「全部数据」）。列表加 `LIMIT`，趋势类数据用 `fillDays` 补齐没有数据的日期。
-2. 前端：在 `views/screen` 下新建 `XxxScreen.vue`（接收 `data` 属性，引入 `./screen.css` 使用 `screen-grid` 的「一行指标卡 + 两行面板」布局），在 `ScreenRunner.vue` 的 `COMPONENTS` 中登记，在 `components/screen/screen.js` 的 `SCREENS` 中加入 `key`、`label`、`desc`（数据大屏页面的卡片、投屏链接表单的选项都来自这里）。
+1. 后端：在 `bi/model/ScreenKey` 中加枚举值（参数为大屏标题的消息键，如 `FACTORY("bi.label.factory")`，在 `bi.properties`、`bi_en.properties` 中登记），在 `BiScreenService.data` 的 `switch` 中加一个方法，一次返回 `kpi`、各图表和列表的全部数据；统计 SQL 写在 `BiScreenMapper.xml` 中，按租户自动过滤，不加数据权限（大屏接口要求「全部数据」）。列表加 `LIMIT`，趋势类数据用 `fillDays` 补齐没有数据的日期。
+2. 前端：在 `views/screen` 下新建 `XxxScreen.vue`（接收 `data` 属性，引入 `./screen.css` 使用 `screen-grid` 的「一行指标卡 + 两行面板」布局），在 `ScreenRunner.vue` 的 `COMPONENTS` 中登记，在 `components/screen/screen.js` 的 `SCREENS` 中加入 `key`、`label`、`desc`（用 `t('screen.screens.xxx')`，译文在 `locales/<语言>/screen.js`；数据大屏页面的卡片、投屏链接表单的选项都来自这里）。大屏上直接拿到的字典值用 `dictLabel` / `withDictLabel` 按语言显示。
 3. 投屏链接按 `ScreenKey` 保存（`bi_screen_share.screens` 逗号分隔），无需改表；如果 `screens` 的总长度可能超过 128 个字符，需要加宽该列。
 4. 只适合部分用户看的数据（如薪资）不要放进大屏：大屏可以通过投屏链接免登录查看。
+
+## 国际化
+
+- **不要在页面中硬编码中文**：模板用 `$t('键')`，`<script setup>` 中 `const { t } = useI18n()`，普通 js 模块 `import { t } from '@/locales'`；键同时加到 `locales/zh-CN/<模块>.js` 和 `locales/en-US/<模块>.js`。
+- 通用的操作、字段、状态、提示、校验优先复用 `common.*`（`common.action.save`、`common.field.status`、`common.msg.saveSuccess`、`common.rule.required` 等）。
+- 带参数的句子写成一个完整的键（`'确定删除仓库「{name}」？'`），不要用 `t()` 拼接片段；文字中的 `@ | $ { }` 写成 `{'@'}`。
+- 新增内置菜单时在 `locales/en-US/menu.js` 按菜单 ID 加英文名称，新增内置字典时在 `dict.js` 加译文。
+- 只对中文有意义的处理（金额大写等）用 `isZh()` 判断；有意保留的中文在行内写 `i18n-ignore`。
+- 提交前运行 `npm run i18n:check`，并切换为 English 检查布局（英文通常更长）。详见 [国际化](./i18n)。
 
 ## 其他约定
 
@@ -375,4 +392,4 @@ html[data-theme='dark'] .workbench .hero {
 - 复用已有的格式化函数保持全站一致：数字 `utils/format.js` 的 `formatNumber`，金额 `components/scm/scm.js` 的 `formatMoney`，金额大写 `components/fin/fin.js` 的 `moneyUpper`。
 - 打印使用 `utils/print.js` 的 `printDocs`（后端生成 PDF，在全局的打印预览窗口中打印或下载），见 [单据编号与打印](./doc-no-print)。
 - 需要支持自定义字段的表单、列表、详情使用 `useCustomFields`、`CustomFieldsForm`、`useCustomColumns`、`CustomFieldsView`，见 [业务实体接入自定义字段](./custom-field)。
-- 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题和窄屏显示。
+- 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题、中英文两种语言和窄屏显示。

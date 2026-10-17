@@ -139,7 +139,7 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 
     <section class="block">
       <h2>舒适的使用体验</h2>
-      <p class="sub">顶部模块导航、多标签页、全局菜单搜索，支持深色模式</p>
+      <p class="sub">顶部模块导航、多标签页、全局菜单搜索，支持深色模式和中英文界面切换</p>
       <div class="browser dark-shot">
         <div class="bar"><i /><i /><i /></div>
         <img :src="img('dashboard-dark')" alt="深色模式" />

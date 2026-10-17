@@ -91,7 +91,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   </div>`)}
   ${arrow('HTTPS')}
   ${layer('AppstoreOutlined', '前端', 'lemon-web', `<div class="chips">
-    ${['Vue 3.5', 'Vite 7', 'Ant Design Vue 4', 'Pinia', 'Vue Router（按菜单动态注册路由）', 'Axios', 'ECharts 5', '按钮权限 v-perm', '多标签页', '深色模式', '移动端布局'].map(chip).join('')}
+    ${['Vue 3.5', 'Vite 7', 'Ant Design Vue 4', 'Pinia', 'Vue Router（按菜单动态注册路由）', 'Axios', 'ECharts 5', 'vue-i18n 中英文', '按钮权限 v-perm', '多标签页', '深色模式', '移动端布局'].map(chip).join('')}
   </div>`)}
   ${arrow('/api 反向代理')}
   ${layer('CloudServerOutlined', '接入层', 'Nginx', `<div class="chips">
@@ -113,7 +113,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     </div>
     <div class="group">
       <div class="group-title"><b>公共层</b><span>lemon-common</span></div>
-      <div class="chips">${['统一返回 R', '全局异常处理', '基础实体与树形实体', '校验分组', '分页结果', '工具类'].map(chip).join('')}</div>
+      <div class="chips">${['统一返回 R', '全局异常处理', '国际化消息（MessageSource）', '基础实体与树形实体', '校验分组', '分页结果', '工具类'].map(chip).join('')}</div>
     </div>
     <div class="group">
       <div class="group-title"><b>技术底座</b></div>

@@ -32,6 +32,7 @@
 | 单据打印 | `modules/system/print`（JasperReports）+ `utils/print.js` | 页面调用 `printDocs`，在 `PRINT_TYPES` 中登记 | [单据编号与打印](../guide/doc-no-print) |
 | 业务参数 | `framework/rule` + `SysBizRuleService` | 实现 `BizRuleProvider` 登记，注入 `BizRules` 读取 | [新增业务参数](../guide/biz-rule) |
 | 自定义字段 | `SysCustomFieldService` + `useCustomFields` | 登记业务记录类型，表单 / 列表 / 详情接入 | [业务实体接入自定义字段](../guide/custom-field) |
+| 国际化 | 前端 vue-i18n（`src/locales`）；后端 `MessageSource` 资源包（各模块 `i18n/*.properties`）+ `I18nConfig`（`Accept-Language`） | 页面文字用 `$t`，提示和校验用消息键，内置菜单和字典加英文译文 | [国际化](../guide/i18n) |
 
 ## MyBatis-Plus 拦截器链
 
@@ -51,13 +52,15 @@
 ## 统一返回与异常
 
 - 接口统一返回 `R<T>`：`code`（200 成功、401 未登录、403 无权限、404、500 业务错误）、`msg`、`data`；分页数据为 `PageResult<T>`（`records`、`total`）。
-- 业务校验失败抛 `BizException(message)`，由 `GlobalExceptionHandler` 转为 `R.fail`，前端拦截器统一弹出提示。
+- 业务校验失败抛 `BizException(消息键, 参数…)`，由 `GlobalExceptionHandler` 按请求语言取消息后转为 `R.fail`，前端拦截器统一弹出提示。
 - 未知异常只记录日志，返回「系统繁忙，请稍后重试」，不把 SQL、堆栈等内部信息返回给前端；被框架包装的 `BizException` 会被解开按业务异常处理。
 - 参数校验失败、请求体格式错误、唯一索引冲突（「数据已存在，请刷新后重试」）、上传过大等都有对应的友好提示。
+- 返回的 `msg` 按请求头 `Accept-Language` 输出中文或英文（前端按界面语言发送），没有请求头、定时任务和异步线程中为中文，见 [国际化](../guide/i18n)。
 
 ## 前端架构
 
 - 登录后请求 `/auth/info`（用户、角色、权限）和 `/auth/menus`（目录 + 菜单树），按菜单的 `component` 字段动态注册路由，见 [权限模型](./permission)。
-- `utils/request.js` 是唯一的 HTTP 客户端：自动附带 `Authorization: Bearer` 令牌；`code` 为 200 时直接返回 `data`；401 跳转登录页；其他错误统一 `message.error` 提示并给错误打上 `handled` 标记，页面中不需要再 catch 提示。
+- `utils/request.js` 是唯一的 HTTP 客户端：自动附带 `Authorization: Bearer` 令牌和界面语言的 `Accept-Language`；`code` 为 200 时直接返回 `data`；401 跳转登录页；其他错误统一 `message.error` 提示并给错误打上 `handled` 标记，页面中不需要再 catch 提示。
 - 布局分为顶部模块导航（`sys_menu` 一级目录）+ 侧边栏（当前模块的分组和页面）+ 多标签页；`/m` 下的移动作业页面使用全屏的移动端布局。
 - 亮色 / 深色两套主题，通过 `html[data-theme='dark']` 切换全局 CSS 变量（`--app-*`）。
+- 简体中文 / 英文两种界面语言（vue-i18n），语言包在 `src/locales/<语言>/<模块>.js`；菜单和字典在数据库中保存中文，英文译文在 `locales/en-US/menu.js`、`dict.js`；切换语言后刷新页面，Ant Design 和 dayjs 同步切换语言包。

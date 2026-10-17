@@ -4,7 +4,7 @@ order: 6
 
 # 扩展审批人类型、运算符、字段类型
 
-流程设计器的审批人类型、条件运算符、表单字段类型、节点类型都是前后端共同约定的取值：后端是 `modules/workflow/model` 中的枚举，前端是 `components/workflow` 中的常量。**扩展时后端枚举和前端常量必须同步修改**，否则设计器保存的值后端无法识别（或反过来）。
+流程设计器的审批人类型、条件运算符、表单字段类型、节点类型都是前后端共同约定的取值：后端是 `modules/workflow/model` 中的枚举，前端是 `components/workflow` 中的常量。**扩展时后端枚举和前端常量必须同步修改**，否则设计器保存的值后端无法识别（或反过来）。前端常量的显示名称用 `t('workflow.xxx')`，新增的取值要同时在 `locales/zh-CN/workflow.js` 和 `locales/en-US/workflow.js` 中加译文；后端枚举中的中文名称只用于内部、不返回前端（行内 `// i18n-ignore`），后端返回给前端的校验提示用消息键，见 [国际化](./i18n)。
 
 | 扩展点 | 后端 | 前端 |
 | --- | --- | --- |
@@ -25,12 +25,12 @@ order: 6
 @AllArgsConstructor
 public enum AssigneeType {
 
-    USER("指定成员", true),
-    ROLE("指定角色", true),
-    DEPT_LEADER("部门主管", false),
-    INITIATOR("发起人自己", false),
+    USER("指定成员", true),  // i18n-ignore 未输出给前端，前端常量 ASSIGNEE_TYPES 翻译
+    ROLE("指定角色", true),  // i18n-ignore
+    DEPT_LEADER("部门主管", false),  // i18n-ignore
+    INITIATOR("发起人自己", false),  // i18n-ignore
     /** 从直属主管向上连续 level 级的部门主管 */
-    DEPT_LEADER_CHAIN("连续多级主管", false);
+    DEPT_LEADER_CHAIN("连续多级主管", false);  // i18n-ignore
 
     private final String label;
 
@@ -98,7 +98,7 @@ public class DeptLeaderChainAssigneeStrategy implements AssigneeStrategy {
 ```java
 if ((assignee.type() == AssigneeType.DEPT_LEADER || assignee.type() == AssigneeType.DEPT_LEADER_CHAIN)
         && (assignee.levelOrDefault() < 1 || assignee.levelOrDefault() > AssigneeConfig.MAX_LEVEL)) {
-    throw new BizException("「" + name(node) + "」的主管级别只能是 1 - " + AssigneeConfig.MAX_LEVEL);
+    throw new BizException("workflow.error.supervisorLevelMust", name(node), AssigneeConfig.MAX_LEVEL);
 }
 ```
 
@@ -109,19 +109,19 @@ if ((assignee.type() == AssigneeType.DEPT_LEADER || assignee.type() == AssigneeT
 ```js
 /** 审批人类型；requiresIds：需要选择具体成员 / 角色；single：只会得到一个人，不需要多人审批方式 */
 export const ASSIGNEE_TYPES = [
-  { label: '指定成员', value: 'USER', requiresIds: true },
-  { label: '指定角色', value: 'ROLE', requiresIds: true },
-  { label: '部门主管', value: 'DEPT_LEADER', single: true },
-  { label: '发起人自己', value: 'INITIATOR', single: true },
-  { label: '连续多级主管', value: 'DEPT_LEADER_CHAIN' }
+  { label: t('workflow.assignee.user'), value: 'USER', requiresIds: true },
+  { label: t('workflow.assignee.role'), value: 'ROLE', requiresIds: true },
+  { label: t('workflow.assignee.deptLeader'), value: 'DEPT_LEADER', single: true },
+  { label: t('workflow.assignee.initiator'), value: 'INITIATOR', single: true },
+  { label: t('workflow.assignee.leaderChain'), value: 'DEPT_LEADER_CHAIN' }
 ]
 
 export function assigneeText(node) {
   const a = node.assignee
   if (!a) return ''
-  if (a.type === 'INITIATOR') return '发起人自己'
-  if (a.type === 'DEPT_LEADER') return (a.level || 1) === 1 ? '直属主管' : `第 ${a.level} 级主管`
-  if (a.type === 'DEPT_LEADER_CHAIN') return `直属主管至第 ${a.level || 1} 级主管`
+  if (a.type === 'INITIATOR') return t('workflow.assignee.initiator')
+  if (a.type === 'DEPT_LEADER') return (a.level || 1) === 1 ? t('workflow.leader.direct') : t('workflow.leader.level', { n: a.level })
+  if (a.type === 'DEPT_LEADER_CHAIN') return t('workflow.leader.chain', { n: a.level || 1 })
   // ...
 }
 ```
@@ -191,32 +191,32 @@ AMOUNT {
         try {
             number = new BigDecimal(raw.toString().trim());
         } catch (NumberFormatException e) {
-            throw invalid(field, "必须是数字");
+            throw invalid(field, Messages.get("workflow.text.mustNumber"));
         }
         if (number.signum() < 0 || number.compareTo(MAX_NUMBER) > 0) {
-            throw invalid(field, "超出范围");
+            throw invalid(field, Messages.get("workflow.text.outRange"));
         }
         if (number.stripTrailingZeros().scale() > 2) {
-            throw invalid(field, "最多两位小数");
+            throw invalid(field, Messages.get("workflow.text.atMostTwoDecimals"));
         }
         return number.doubleValue();
     }
 },
 ```
 
-`parse` 方法已统一处理必填校验（未填写时必填报错、非必填返回 null）和类型检查（只接受字符串和数字），`convert` 只需处理有值的情况。流程变量的类型要能被条件比较：数字保存为 Long / Double，文本、日期保存为字符串。
+`invalid(field, 原因)` 抛出 `BizException("workflow.error.fieldInvalid", 字段名, 原因)`（「「{0}」{1}」），原因用 `Messages.get` 按请求语言取，新增的 `workflow.text.atMostTwoDecimals` 要登记在 `workflow.properties` 和 `workflow_en.properties` 中。`parse` 方法已统一处理必填校验（未填写时必填报错、非必填返回 null）和类型检查（只接受字符串和数字），`convert` 只需处理有值的情况。流程变量的类型要能被条件比较：数字保存为 Long / Double，文本、日期保存为字符串。
 
 前端：
 
 ```js
 // components/workflow/form/form.js
 export const FIELD_TYPES = [
-  { label: '单行文本', value: 'INPUT' },
-  { label: '多行文本', value: 'TEXTAREA' },
-  { label: '数字', value: 'NUMBER' },
-  { label: '金额', value: 'AMOUNT' },
-  { label: '日期', value: 'DATE' },
-  { label: '下拉选择', value: 'SELECT' }
+  { label: t('workflow.fieldType.input'), value: 'INPUT' },
+  { label: t('workflow.fieldType.textarea'), value: 'TEXTAREA' },
+  { label: t('workflow.fieldType.number'), value: 'NUMBER' },
+  { label: t('workflow.fieldType.amount'), value: 'AMOUNT' },
+  { label: t('workflow.fieldType.date'), value: 'DATE' },
+  { label: t('workflow.fieldType.select'), value: 'SELECT' }
 ]
 ```
 
@@ -227,7 +227,7 @@ export const FIELD_TYPES = [
   v-model:value="model[f.field]"
   :min="0"
   :precision="2"
-  :placeholder="f.placeholder || '请输入金额'"
+  :placeholder="f.placeholder || $t('workflow.form.inputAmount')"
   class="full"
 />
 ```

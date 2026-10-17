@@ -135,8 +135,11 @@ Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCatego
 删除主数据前调用 `ReferenceGuard.checkDeletable`，任一模块报告有引用时拒绝删除（提示「已被 XX 使用，不能删除，可以停用」）：
 
 ```java
-referenceGuard.checkDeletable(RefType.MATERIAL, id, "物料「" + material.getCode() + " " + material.getName() + "」");
+// 第三个参数是显示在提示中的名称，按请求语言取（wms.text.material=物料「{0} {1}」）
+referenceGuard.checkDeletable(RefType.MATERIAL, id, Messages.get("wms.text.material", material.getCode(), material.getName()));
 ```
+
+`ReferenceChecker.findReference` 返回的是引用它的单据名称的**消息键**（由实现的模块登记），`ReferenceGuard` 用 `Messages.get` 取消息后拼成提示。
 
 上游模块（如仓库）看不到下游模块（如生产、客户关系）的表，因此由下游模块实现 `ReferenceChecker`。新增业务表引用主数据时，在本模块的 `XxxRefMapper.xml` 中加一条查询。
 
@@ -146,9 +149,11 @@ referenceGuard.checkDeletable(RefType.MATERIAL, id, "物料「" + material.getCo
 
 ```java
 messageSender.sendToPermission("wms:stock:list", Message.of("REMIND",
-        "批次即将到期：" + code, "有效期至 " + expiryDate, "/wms/trace")
+        "批次即将到期：" + code, "有效期至 " + expiryDate, "/wms/trace") // i18n-ignore 站内消息存库
         .dedup("batch-expiry:" + materialId + ":" + batchNo));
 ```
+
+站内消息存入数据库并推送到钉钉等平台，标题和内容保持中文，不按触发用户的语言生成（见 [国际化](../guide/i18n)）。
 
 | 方法 | 说明 |
 | --- | --- |

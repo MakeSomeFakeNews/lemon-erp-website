@@ -87,7 +87,8 @@ public class OaRecordTypes implements RecordTypeProvider {
 
     @Override
     public List<RecordType> recordTypes() {
-        return List.of(new RecordType("oa_car_request", "用车申请", "oa:car:list", "oa:car:edit",
+        // 名称写消息键（oa.label.carRequest），自定义字段、附件等页面按请求语言显示
+        return List.of(new RecordType("oa_car_request", "oa.label.carRequest", "oa:car:list", "oa:car:edit",
                 OaCarRequestService.RULE, requestMapper::selectById));
     }
 }
@@ -131,15 +132,17 @@ const drawer = useFormDrawer(
 在表单中放输入项（没有启用的字段时不渲染任何内容）：
 
 ```vue
-<FormDrawer :drawer="drawer" create-title="新增用车申请" edit-title="编辑用车申请">
+<FormDrawer :drawer="drawer" :create-title="$t('oa.car.create')" :edit-title="$t('oa.car.edit')">
   <a-form ref="formRef" :model="form" :rules="rules" layout="vertical">
     <a-row :gutter="16">
       <!-- 原有字段 ... -->
     </a-row>
-    <CustomFieldsForm :fields="cfFields" :values="form.cf || {}" title="扩展信息" />
+    <CustomFieldsForm :fields="cfFields" :values="form.cf || {}" :title="$t('oa.car.extraInfo')" />
   </a-form>
 </FormDrawer>
 ```
+
+自定义字段的名称、选项是管理员在「自定义字段」页面中录入的数据，按录入的文字显示，不随界面语言翻译。
 
 `CustomFieldsForm` 的属性：`fields`（启用的字段）、`values`（直接修改的值对象）、`title`（分组标题）、`span`（每项在 sm 以上占的栅格，默认 12 即每行两项；子页表单可用 8 每行三项）、`disabled`。必填字段带红色星号，字段的「说明」显示为输入提示。
 

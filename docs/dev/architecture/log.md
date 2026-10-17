@@ -75,6 +75,7 @@ changeLogger.log("wms_material", id, before, materialMapper.selectById(id),
         ChangeLogger.fields("name", "物料名称", "spec", "规格型号", "unit", "单位"));
 ```
 
+- `fields` 中的字段名称（如「物料名称」）随变更记录存入数据库，保持中文，不使用消息键；
 - `bizType` 是业务记录类型编码，需要在 `RecordTypeProvider` 中登记，查看变更历史时按其 `viewPerm` 和数据权限校验，见 [文件与附件](./file)；
 - `before` / `after` 通过 getter 或 record 访问器读取字段，只记录 `fields` 中列出且值有变化的字段。
 

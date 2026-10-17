@@ -76,7 +76,7 @@ private ScmPurchaseContract getAccessible(Long id) {
             ? loader.get()
             : DataPermissionContext.execute(CONTRACT_RULE, loader);
     if (contract == null) {
-        throw new BizException("采购合同不存在或没有权限");
+        throw new BizException("scm.error.purchaseContractDoesNotExistAccess");
     }
     return contract;
 }

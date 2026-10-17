@@ -32,6 +32,8 @@ lemon-erp
 │   └── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
 ├── lemon-admin                 启动模块：组装全部业务模块，打包为 lemon-erp.jar
 ├── lemon-web                   前端（Vite + Vue 3 + Ant Design Vue）
+├── scripts
+│   └── check_i18n.py           后端国际化检查（资源包、消息键、残留中文）
 └── sql
     └── init.sql                建表 + 初始数据（MySQL）
 ```
@@ -54,7 +56,8 @@ lemon-erp
 com.lemon.erp.common
 ├── base          BaseEntity（id、createTime、updateTime）、TreeEntity（parentId、sort、children）
 ├── dto           StatusRequest（启用 / 停用请求体）
-├── exception     BizException、GlobalExceptionHandler
+├── exception     BizException（消息键 + 参数）、GlobalExceptionHandler
+├── i18n          Messages：自动发现各模块的消息资源包，按请求语言取消息
 ├── result        R（统一返回）、PageResult（分页结果）
 ├── util          ServletUtils（请求、客户端 IP）、UserAgentUtils、TreeUtils
 └── validation    校验分组 Create、Update
@@ -66,7 +69,7 @@ com.lemon.erp.common
 com.lemon.erp.framework
 ├── cache         CacheService 及 Redis / 内存两种实现
 ├── code          DocNoCatalog：模块声明的单据编号类型
-├── config        MyBatis-Plus、Security、JWT、Jackson、异步 / 定时 / 重试、上传目录、静态资源映射
+├── config        MyBatis-Plus、Security、JWT、Jackson、异步 / 定时 / 重试、上传目录、静态资源映射；I18nConfig（messageSource、按 Accept-Language 解析语言）
 ├── demo          演示模式：DemoProperties、DemoModeInterceptor（只读拦截）
 ├── excel         Excel 导入：ImportExecutor、ImportRequest、ImportResult
 ├── file          FileStorageService：头像等公开文件、业务附件的本地存储
@@ -90,7 +93,7 @@ com.lemon.erp.framework
 └── workflow      FlowApi、FlowBusiness、FlowFinishedEvent 等工作流契约
 ```
 
-`resources/ip2region/ip2region_v4.xdb` 是 IP 归属地离线库。
+`resources/ip2region/ip2region_v4.xdb` 是 IP 归属地离线库。`lemon-common`、`lemon-framework` 和每个业务模块的 `src/main/resources/i18n/` 下都有本模块的消息资源包（如 `common.properties` / `common_en.properties`、`framework.properties` / `framework_en.properties`），见 [国际化](../guide/i18n)。
 
 ## 业务模块内部结构
 
@@ -108,7 +111,9 @@ lemon-modules/lemon-scm
     │   ├── dto             请求体、视图对象（多为 record）
     │   ├── model           枚举与常量（状态、种类，与字典对应）
     │   └── event           本模块发布的领域事件
-    └── resources/mapper/scm  mapper XML（自定义 SQL 只写在这里）
+    └── resources
+        ├── mapper/scm      mapper XML（自定义 SQL 只写在这里）
+        └── i18n            消息资源包：scm.properties（默认，简体中文）、scm_en.properties（英文）
 ```
 
 ## 启动模块 lemon-admin
@@ -129,8 +134,10 @@ lemon-web
 ├── index.html
 ├── vite.config.js              开发端口 5173、/api 代理、构建分包
 ├── public                      favicon 等静态资源
+├── scripts/check-i18n.mjs      前端多语言检查（npm run i18n:check）
 └── src
-    ├── main.js                 注册 Pinia、Router、Ant Design Vue、v-perm 指令、全局错误处理
+    ├── main.js                 注册 vue-i18n、Pinia、Router、Ant Design Vue、v-perm 指令、全局错误处理
+    ├── App.vue                 按界面语言切换 Ant Design、dayjs 的语言包
     ├── style.css               全局样式与亮 / 暗主题 CSS 变量（--app-*）、table-page 等布局类
     ├── api/<模块>/*.js          接口封装，基于 utils/request.js
     ├── views/<模块>/<页面>/index.vue   页面，菜单的「组件路径」即相对 views 的路径（不含 .vue）
@@ -142,6 +149,8 @@ lemon-web
     ├── composables             useTable、useColumns、useFormDrawer、useDict、useCustomFields
     ├── directives/perm.js      按钮权限指令 v-perm
     ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）
+    ├── locales                 界面语言包：index.js（createI18n、语言列表、切换），zh-CN/、en-US/ 下按模块的
+    │                           <模块>.js（common、layout、route、print 等通用文件），en-US/menu.js、dict.js 为菜单和字典的英文译文
     ├── router/index.js         静态路由 + 按菜单动态注册路由
     ├── store                   user（用户、权限、菜单）、config（公开配置）、dict（字典缓存）、app（主题等）
     └── utils                   request、print（提交后端生成 PDF）、printTemplates（打印模板目录与套用）、labels（条码标签）、excel、dict、format 等工具

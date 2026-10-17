@@ -53,6 +53,17 @@ INSERT INTO sys_menu (id, parent_id, name, type, path, component, perms, icon, s
 - `visible = 0` 的菜单不在侧边栏显示，但仍会注册路由（可用于只从其他页面跳转进入的页面）；
 - `status = 0` 的菜单停用，不会返回给前端。
 
+菜单名称在数据库中保存中文。内置菜单要同时在前端 `lemon-web/src/locales/en-US/menu.js` 中按菜单 ID 加英文名称（注释写中文名称），英文界面才会显示英文；没有译文的菜单（包括用户在页面上新增的菜单）在英文界面也显示数据库中的名称：
+
+```js
+// locales/en-US/menu.js
+  5000: 'Office', // 行政办公
+  5010: 'Vehicles', // 车辆管理
+  5001: 'Car Requests', // 用车申请
+```
+
+按钮（`F`）只用于授权，不需要译文。菜单 ID 是译文的键，所以增量脚本中的菜单 ID 要与 `init.sql` 一致，见 [国际化](./i18n)。
+
 ### 给内置角色授权
 
 内置角色的 ID 固定（`init.sql` 中插入）：
@@ -100,6 +111,19 @@ SELECT 0, '行政办公', 'M', '/oa', NULL, NULL, 'CoffeeOutlined', 8, 1, 1, NOW
 WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE type = 'M' AND path = '/oa');
 ```
 
+::: warning 菜单 ID 与英文译文
+英文界面按菜单 ID 查找译文（`locales/en-US/menu.js`），上面这种不写 ID、由数据库自增的写法会让已有环境中的菜单 ID 与 `init.sql` 不一致，英文界面将显示中文名称。内置菜单的增量脚本建议写明与 `init.sql` 相同的 ID，并按 ID 判断是否已存在（`sql/upgrade` 中的脚本就是这样写的）：
+
+```sql
+INSERT INTO sys_menu (id, parent_id, name, type, path, component, perms, icon, sort, visible, status, create_time, update_time)
+SELECT m.* FROM (
+    SELECT 5000 AS id, 0 AS parent_id, '行政办公' AS name, 'M' AS type, '/oa' AS path, NULL AS component, NULL AS perms, 'CoffeeOutlined' AS icon, 8 AS sort, 1 AS visible, 1 AS status, NOW() AS create_time, NOW() AS update_time
+    UNION ALL SELECT 5001, 5000, '用车申请', 'C', 'car', 'oa/car/index', 'oa:car:list', 'CarOutlined', 1, 1, 1, NOW(), NOW()
+) m
+WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = m.id);
+```
+:::
+
 需要引用上级菜单 ID、按角色编码授权时，可以先查询出 ID，再用 `VALUES` 插入；或者直接在页面上登记（方式一）。注意多租户约定中「不写 `INSERT ... SELECT`」针对的是业务代码中经过 MyBatis 的 SQL，`sys_menu`、`sys_role_menu` 是平台共享表，在数据库客户端中执行的维护脚本不受影响。
 
 直接改库后要清理权限缓存：删除 Redis 中的 `login:perms:*`，或在「系统监控 → 缓存监控」中清空「用户权限」。
@@ -129,3 +153,4 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE type = 'M' AND path = '/oa');
 | 按钮显示了但点击提示「没有权限」 | 接口 `@PreAuthorize` 的权限标识与按钮不一致 |
 | 改库授权后不生效 | 权限缓存未清理（最多 30 分钟后自动过期） |
 | 租户用户看不到新菜单 | 租户套餐中没有加入该菜单 |
+| 英文界面中新菜单显示为中文 | `locales/en-US/menu.js` 中没有该菜单 ID 的译文 |

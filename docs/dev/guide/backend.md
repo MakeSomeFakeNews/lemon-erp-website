@@ -59,21 +59,36 @@ public R<PageResult<WmsWarehouse>> page(@RequestParam(defaultValue = "1") long c
 
 ## 异常
 
-业务校验失败直接抛 `BizException`，不要返回 `R.fail`：
+业务校验失败直接抛 `BizException`，不要返回 `R.fail`。第一个参数是国际化**消息键**（登记在本模块的 `i18n/<模块>.properties` 和 `<模块>_en.properties` 中），其余是消息参数：
 
 ```java
-if (contract.getStatus() != status) {
-    throw new BizException("合同当前状态不能" + action);
+if (contract == null) {
+    throw new BizException("scm.error.purchaseContractDoesNotExistAccess");
+}
+if (!Integer.valueOf(1).equals(supplier.getStatus())) {
+    throw new BizException("scm.error.supplierDisabled", supplier.getName());   // 参数填入 {0}
 }
 // 指定错误码
-throw new BizException(R.FORBIDDEN, "供应商门户仅供供应商账号使用");
+throw new BizException(R.FORBIDDEN, "framework.error.supplierPortalOnlySupplierAccounts");
 ```
+
+```properties
+# lemon-scm/src/main/resources/i18n/scm.properties（默认，简体中文）
+scm.error.purchaseContractDoesNotExistAccess=采购合同不存在或没有权限
+scm.error.supplierDisabled=供应商「{0}」已停用
+
+# scm_en.properties（英文，键与占位符必须一致）
+scm.error.purchaseContractDoesNotExistAccess=Purchase contract does not exist or access denied
+scm.error.supplierDisabled=Supplier "{0}" is disabled
+```
+
+返回给前端时按请求头 `Accept-Language` 取对应语言的消息，`getMessage()` 为中文（用于日志）。**不要在 Java 中硬编码返回前端的中文提示**，也不要拼接句子（`"合同当前状态不能" + action`），写成带 `{0}` 参数的完整消息。资源包、参数、单引号转义等规则见 [国际化](./i18n)。
 
 `GlobalExceptionHandler`（`@RestControllerAdvice`）统一转换：
 
 | 异常 | 返回 |
 | --- | --- |
-| `BizException` | `R.fail(code, message)` |
+| `BizException` | `R.fail(code, 按请求语言取的消息)` |
 | `AccessDeniedException` / `AuthorizationDeniedException` | 403「没有权限，请联系管理员」 |
 | `BindException`（校验失败） | 各字段错误信息用「; 」连接 |
 | `HttpMessageNotReadableException` | 「请求参数格式不正确」 |
@@ -83,11 +98,11 @@ throw new BizException(R.FORBIDDEN, "供应商门户仅供供应商账号使用"
 | `MaxUploadSizeExceededException` | 「上传文件过大」 |
 | 其他异常 | 记录 ERROR 日志，返回「系统繁忙，请稍后重试」；异常链中包含 `BizException` 时按业务异常处理 |
 
-注意：HTTP 状态码大多仍为 200，前端按 `code` 判断结果。未登录（401）和 Spring Security 层面的拒绝（403）由 `SecurityConfig` 返回对应的 HTTP 状态码。
+以上通用提示都在 `common.properties` 的 `common.text.*` 中，同样按请求语言返回。注意：HTTP 状态码大多仍为 200，前端按 `code` 判断结果。未登录（401）和 Spring Security 层面的拒绝（403）由 `SecurityConfig` 返回对应的 HTTP 状态码。
 
 ## 参数校验与校验分组
 
-使用 Jakarta Bean Validation，错误信息写中文 `message`。`lemon-common` 提供两个校验分组，都继承 `Default`（未指定分组的约束在两个分组中都生效）：
+使用 Jakarta Bean Validation，错误信息 `message` 写成消息键 `{模块.valid.名称}`，由 Bean Validation 通过 Spring 的 `messageSource` 按请求语言插值（见 [国际化](./i18n#校验注解)）。`lemon-common` 提供两个校验分组，都继承 `Default`（未指定分组的约束在两个分组中都生效）：
 
 - `com.lemon.erp.common.validation.Create`：新增
 - `com.lemon.erp.common.validation.Update`：修改
@@ -96,12 +111,12 @@ throw new BizException(R.FORBIDDEN, "供应商门户仅供供应商账号使用"
 
 ```java
 public class SysUser extends BaseEntity {
-    @NotBlank(message = "密码不能为空", groups = Create.class)
+    @NotBlank(message = "{system.valid.passwordRequired}", groups = Create.class)
     private String password;
 }
 
 public class WmsMaterial extends BaseEntity {
-    @NotBlank(groups = Update.class, message = "物料编码不能为空")
+    @NotBlank(groups = Update.class, message = "{wms.valid.materialCodeRequired}")
     private String code;
 }
 ```
@@ -111,17 +126,17 @@ Controller 中新增用 `@Validated(Create.class)`、修改用 `@Validated(Updat
 ```java
 @PostMapping
 @PreAuthorize("@ss.hasPerm('wms:warehouse:add')")
-@OperLog(title = "仓库管理", type = OperType.INSERT)
+@OperLog(title = "仓库管理", type = OperType.INSERT) // i18n-ignore
 public R<Void> create(@Validated(Create.class) @RequestBody WmsWarehouse warehouse) { ... }
 
 @PutMapping("/{id}")
 @PreAuthorize("@ss.hasPerm('wms:warehouse:edit')")
-@OperLog(title = "仓库管理", type = OperType.UPDATE)
+@OperLog(title = "仓库管理", type = OperType.UPDATE) // i18n-ignore
 public R<Void> update(@PathVariable Long id, @Validated(Update.class) @RequestBody WmsWarehouse warehouse) { ... }
 
 @PutMapping("/{id}/status")
 @PreAuthorize("@ss.hasPerm('wms:warehouse:edit')")
-@OperLog(title = "仓库管理-修改状态", type = OperType.UPDATE)
+@OperLog(title = "仓库管理-修改状态", type = OperType.UPDATE) // i18n-ignore
 public R<Void> changeStatus(@PathVariable Long id, @Valid @RequestBody StatusRequest req) { ... }
 ```
 
@@ -175,7 +190,7 @@ public enum ContractStatus {
 ```java
 private void transit(Long id, ContractStatus from, ContractStatus to) {
     if (contractMapper.transit(id, from, to) == 0) {
-        throw new BizException("合同状态已变化，请刷新后重试");
+        throw new BizException("scm.error.contractStatusHasChangedRefreshTry");
     }
 }
 ```
@@ -209,7 +224,7 @@ private void transit(Long id, ContractStatus from, ContractStatus to) {
 @OperLog(title = "物料管理-导入", type = OperType.IMPORT)
 ```
 
-`title` 用「功能」或「功能-动作」；上传文件等参数无意义的接口设 `saveParams = false`。密码、薪资、证件号、手机号等字段会自动脱敏，见 [日志与审计](../architecture/log)。
+`title` 用「功能」或「功能-动作」；上传文件等参数无意义的接口设 `saveParams = false`。操作日志标题存入数据库，**保持中文、不使用消息键**，源码中在行尾写 `// i18n-ignore`（国际化检查脚本跳过该行）。密码、薪资、证件号、手机号等字段会自动脱敏，见 [日志与审计](../architecture/log)。
 
 ## 事务
 
@@ -232,6 +247,14 @@ entity.setCreateBy(user.userId());
 ## 日期时间
 
 `JacksonConfig` 统一了 JSON 格式：`LocalDateTime` 输出 `yyyy-MM-dd HH:mm:ss`，读取时兼容空格或 `T` 分隔、秒和毫秒可选；Mapper 返回 Map 时的 `java.util.Date` / `Timestamp` 按服务器时区输出 `yyyy-MM-dd HH:mm:ss`，`java.sql.Date` 输出 `yyyy-MM-dd`。`LocalDate` 为 `yyyy-MM-dd`。字段上的 `@JsonFormat` 优先。
+
+## 国际化
+
+- 返回前端的文字一律使用消息键：业务异常 `new BizException("模块.error.xxx", 参数…)`、校验注解 `message = "{模块.valid.xxx}"`、其他文字 `Messages.get("模块.text.xxx", 参数…)`；键同时登记在本模块的 `<模块>.properties`（中文）和 `<模块>_en.properties`（英文）中。
+- 编码规则目录、业务参数、记录类型、流程业务名称和变量、首页待办标题、定时任务名称、`OptionEnum` 选项等登记给框架的名称同样写消息键，由输出方 `Messages.get` 翻译。
+- 存入数据库的内容（站内消息、操作日志标题、任务执行结果、自动生成的摘要和备注、推送到第三方平台的消息）保持中文，行内写 `// i18n-ignore`；需要复用资源包中的名称时用 `Messages.get(Messages.DEFAULT_LOCALE, 键)`。
+- 定时任务、异步线程中没有请求语言，`Messages.get` 返回中文。
+- 提交前运行 `python3 scripts/check_i18n.py`，确保「后端国际化检查通过」。详见 [国际化](./i18n)。
 
 ## 其他约定
 

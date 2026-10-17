@@ -49,7 +49,7 @@ public interface ImClient {
 }
 ```
 
-接口出错时抛 `BizException`，消息带平台名称和原因（`ImHttp.error`：「钉钉返回错误（errcode）：errmsg」）。`ImContacts.depts` 必须按「上级在前」排列，根部门（企业本身）的 `parentId` 为 null，同步部门时依赖这个顺序。
+接口出错时抛 `BizException`，消息带平台名称和原因（`ImHttp.error`：`system.error.returnedError`「{0}返回错误（{1}）：{2}」，平台名称取 `ImPlatform.text()`，按请求语言显示，平台返回的 errmsg 原样输出）。`ImContacts.depts` 必须按「上级在前」排列，根部门（企业本身）的 `parentId` 为 null，同步部门时依赖这个顺序。
 
 三个实现的差异：
 
@@ -69,7 +69,7 @@ public interface ImClient {
 ## ImHttp
 
 - 使用 JDK HttpClient 的 `RestClient`，连接超时 5 秒、读取超时 15 秒；
-- 不论 HTTP 状态码都把响应体按 JSON 读取（平台的错误码在响应体中），网络或解析错误转为 `BizException`（「钉钉接口调用失败，请检查网络：…」）；
+- 不论 HTTP 状态码都把响应体按 JSON 读取（平台的错误码在响应体中），网络或解析错误转为 `BizException("system.error.apiCallFailedCheckNetwork", 平台名称, 原因)`（「钉钉接口调用失败，请检查网络：…」）；
 - `uri(base, path, k1, v1, ...)` 拼接地址并对查询参数编码，值为空的参数忽略；
 - **access_token 缓存**：`accessToken(config, refresh, loader)` 以 `im:token:{租户ID}:{平台}` 缓存，过期时间为平台返回的有效期减 5 分钟；`refresh = true`（测试连接）时忽略缓存重新获取；保存配置时 `evictToken` 清理当前租户该平台的令牌。
 
@@ -112,7 +112,7 @@ OAuth 授权码方式，前端两个免登录页面（`router/index.js` 的 `WHI
 1. 生成授权页地址时创建 `State(tenantId, platform, bind, userId, redirect)`，以 `SecureRandom` 的 16 字节十六进制作为 `state`，存入缓存 `im:state:{state}`，10 分钟有效；`redirect` 只接受以 `/` 开头、不以 `//` 开头、不含 `\`、不超过 255 个字符的站内路由，否则丢弃。回调地址固定为 `{homeUrl}/im-callback`，`homeUrl` 为空时提示「请先在第三方集成中填写系统访问地址」。
 2. 平台授权后跳回 `/im-callback`。`callback` 读取并**立即删除** state（一次有效，不存在时提示「授权已过期，请重新操作」），按 state 中的租户设置 `TenantContext`，再用授权码换取成员 userid。
 3. 绑定：`bind(userId, platform, imUserId, imName)`——该成员已绑定其他用户时报错，用户已绑定其他成员时改为新成员。
-4. 登录：按 `sys_im_user` 找到用户，调用 `AuthService.loginAs(user, "钉钉登录")`：停用账号、门户账号（`supplierId` / `customerId` 不为空）拒绝，之后与密码登录相同地 `createToken`、记录登录日志（「钉钉登录成功」）、返回 `passwordExpired`。未绑定时调用 `recordLoginFailure("钉钉:userid", ...)` 记入登录日志并提示先绑定。
+4. 登录：按 `sys_im_user` 找到用户，调用 `AuthService.loginAs(user, platform.loginLabel())`（第二个参数是登录方式的消息键，如 `system.label.dingtalkLogin`，登录日志按中文记录）：停用账号、门户账号（`supplierId` / `customerId` 不为空）拒绝，之后与密码登录相同地 `createToken`、记录登录日志（「钉钉登录成功」）、返回 `passwordExpired`。未绑定时调用 `recordLoginFailure("钉钉:userid", ...)` 记入登录日志并提示先绑定。
 
 `AuthService.login` 和 `loginAs` 共用 `issue()` 签发令牌，第三方登录不经过密码错误锁定和验证码。
 
@@ -128,7 +128,8 @@ publisher.publishEvent(new MessageSentEvent(List.copyOf(targets), message));
 - `messageEnabled` 时，查出接收人中已绑定该平台的成员，调用 `client.send`；
 - `robotWebhook` 不为空且消息的 `category` 在 `robotCategories` 中时，调用 `client.robot`（每个事件一次，与接收人数无关）；
 - 卡片链接为 `entryUrl(config, message.link())`，即 `{homeUrl}/im-login?platform=&tenant=&redirect={站内路由}`，消息没有链接时为 `/`；没有 `homeUrl` 时只发文字；
-- 异常只 `log.warn`，不重试、不影响站内消息。
+- 异常只 `log.warn`，不重试、不影响站内消息；
+- 推送的标题、内容来自站内消息（存库内容，中文），卡片按钮「查看详情」（企业微信「详情」）也固定为中文，不按接收人的界面语言变化（源码中这些字面量带 `// i18n-ignore`）。
 
 去重键（`dedupKey`）过滤后没有接收人时 `send` 直接返回，不发布事件，所以定时提醒在平台中同样每天只推一次。业务模块继续只依赖 `framework/message/MessageSender`，不需要知道推送的存在。
 
@@ -185,11 +186,11 @@ lemon:
 
 以接入某个新的 IM 平台为例：
 
-1. **枚举与字典**：在 `ImPlatform` 中增加枚举值和中文名，并在 `sql/init.sql` 和升级脚本中给字典 `sys_im_platform` 增加同名的值（`sys_im_config.platform` 等列为 `VARCHAR(16)`）。
+1. **枚举与字典**：在 `ImPlatform` 中增加枚举值，参数为名称和登录方式（如「钉钉登录」）的消息键，在 `system.properties`、`system_en.properties` 中登记（`text()` 按请求语言取名称，`defaultText()` 取中文写入登录日志等存库内容），并在 `sql/init.sql` 和升级脚本中给字典 `sys_im_platform` 增加同名的值（`sys_im_config.platform` 等列为 `VARCHAR(16)`）。
 2. **实现 `ImClient`**：新建 `XxxClient implements ImClient`，标注 `@Component`，注入 `ImHttp` 和 `ImProperties`（在 `ImProperties` 中增加该平台的接口地址）。access_token 用 `http.accessToken(config, refresh, loader)` 获取，错误用 `ImHttp.error` 转换；`contacts` 返回的部门要上级在前、根部门 `parentId` 为 null。`SysImConfigService` 按 `platform()` 自动收集，不需要登记。
 3. **凭证字段**：优先复用 `corpId`、`appKey`、`appSecret`、`agentId`；在 `SysImConfigService.save` 的必填校验中加入新平台的分支。
 4. **回调参数**：平台回调的授权码参数名不是 `code` 时，在 `ImCallback.vue` 中读取；平台客户端的 UA 加到 `utils/im.js` 的 `detectImApp`。
-5. **前端**：`utils/im.js` 的 `IM_PLATFORMS`（名称、简称、颜色，`ImPlatformIcon` 使用），`views/system/im/index.vue` 的 `FIELDS`（凭证字段）、`ROBOT_PREFIX`、`USERID_HELP`、`GUIDES`（接入步骤）；平台卡片布局是三列网格，平台增多时调整样式。
+5. **前端**：`utils/im.js` 的 `IM_PLATFORMS`（名称、简称用 `t('components.im.xxx')`，在两个语言包的 `components.js` 中加译文；颜色，`ImPlatformIcon` 使用），`views/system/im/index.vue` 的 `FIELDS`（凭证字段）、`ROBOT_PREFIX`、`USERID_HELP`、`GUIDES`（接入步骤）；平台卡片布局是三列网格，平台增多时调整样式。
 6. **测试**：`lemon-admin` 的 `ImIntegrationTests` 用 JDK `HttpServer` 在本地模拟三个平台的接口（测试中把注入的 `ImProperties` 各地址改为本地服务，结束后恢复），新平台按同样方式补充授权、消息、通讯录、群机器人的用例。
 
 ::: warning 不要

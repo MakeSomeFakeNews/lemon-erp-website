@@ -82,7 +82,7 @@ public R<QmsSupplierClaim> detail(@PathVariable Long id) {
 public QmsSupplierClaim detailForSupplier(Long id, Long supplierId) {
     QmsSupplierClaim claim = id == null ? null : claimMapper.selectDetail(id);
     if (claim == null || !supplierId.equals(claim.getSupplierId()) || claim.getStatus() == ClaimStatus.DRAFT) {
-        throw new BizException("索赔单不存在");
+        throw new BizException("mes.error.claimDoesNotExist");
     }
     return claim;
 }

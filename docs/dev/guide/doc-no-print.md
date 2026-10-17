@@ -45,13 +45,14 @@ public class ScmDocNos {
     @Order(1)
     public DocNoCatalog scmDocNoCatalog() {
         List<DocNoCatalog.Type> types = new ArrayList<>();
-        types.add(doc("QG", "请购单"));
-        types.add(doc("XJ", "询价单"));
-        types.add(doc(ScmTenderService.DOC_NO, "招标"));
+        // 模块名、单据名写消息键（登记在 scm.properties / scm_en.properties），编码规则页面按请求语言显示
+        types.add(doc("QG", "scm.label.purchaseRequisition"));
+        types.add(doc("XJ", "scm.label.rfq"));
+        types.add(doc(ScmTenderService.DOC_NO, "scm.label.tender"));
         // ...
-        types.add(master(SUPPLIER, "供应商编码"));
-        types.add(master(CUSTOMER, "客户编码"));
-        return new DocNoCatalog("供应链管理", types);
+        types.add(master(SUPPLIER, "scm.label.supplierCode"));
+        types.add(master(CUSTOMER, "scm.label.customerCode"));
+        return new DocNoCatalog("scm.label.supplyChainManagement", types);
     }
 }
 ```
@@ -110,37 +111,46 @@ printDocs(doc, '打印任务标题', '模板标识')
 | `note` | string | 备注，显示在明细之后 |
 | `slip` | boolean | 条状单据（工资条）：一页连续打印多条，之间用虚线分隔，每条不跨页拆开 |
 
-表头字段、明细列（有 `id` 时为 `id`）、签字栏的**名称就是它们的标识**：打印模板按名称匹配配置，套打按名称定位，上传的 JRXML 按名称取值（`$P{FIELDS}.get("供应商")`、`$F{物料名称}`）。因此同一张单据中的名称不要重复，也不要随意修改已有单据的名称，否则用户保存过的模板会对应不上。
+表头字段、明细列（有 `id` 时为 `id`）、签字栏的**中文名称就是它们的标识（匹配键）**：打印模板按名称匹配配置，套打按名称定位，上传的 JRXML 按名称取值（`$P{FIELDS}.get("供应商")`、`$F{物料名称}`）。因此同一张单据中的名称不要重复，也不要随意修改已有单据的名称，否则用户保存过的模板会对应不上。
+
+**多语言**：匹配键始终是中文名称（`locales/zh-CN/print.js` 的 `name`），与界面语言无关，同一个模板、同一个 JRXML 在中英文界面下都能用；显示和打印出来的名称按界面语言。页面中组装单据时，名称直接写 `t()` 翻译后的文字即可：`toPrintDoc` 先按 `print.name` 的译文、再按全部语言包反查回中文匹配键（只接受该单据在 `PRINT_TYPES` 中登记过的名称）。反查不唯一或不是登记的名称时，用显式匹配键：字段 `[显示名称, 值, 是否整行, 匹配键]`、签字栏 `[显示名称, 值, 匹配键]`、明细列 `{ title, id: 匹配键 }`。详见 [国际化 → 打印](./i18n#打印)。
 
 真实示例（`components/fin/VoucherDetail.vue`）：
 
 ```js
 printDocs({
-  title: '记账凭证',
+  // 打印模板按中文名称匹配，非中文界面下按译文名称打印
+  title: t('fin.voucherDetail.title'),
   no: d.voucherNo,
   fields: [
-    ['日期', d.voucherDate],
-    ['期间', periodText(d.period)],
-    ['附单据', `${d.attachmentCount ?? 0} 张`]
+    [t('common.field.date'), d.voucherDate],
+    [t('fin.voucherDetail.printPeriod'), periodText(d.period)],
+    [t('fin.voucherDetail.printAttachment'), t('fin.voucherDetail.attachmentN', { n: d.attachmentCount ?? 0 })]
   ],
   columns: [
-    { title: '摘要', key: 'summary' },
-    { title: '会计科目', value: (e) => `${e.accountCode} ${e.accountName}` },
-    { title: '部门 / 辅助', key: 'deptName', value: auxText },
-    { title: '借方金额', key: 'debit', value: (e) => moneyOrBlank(e.debit), align: 'right' },
-    { title: '贷方金额', key: 'credit', value: (e) => moneyOrBlank(e.credit), align: 'right' }
+    { title: t('fin.voucherDetail.summary'), key: 'summary' },
+    { title: t('fin.voucherDetail.account'), value: (e) => `${e.accountCode} ${e.accountName}` },
+    { title: t('fin.voucherDetail.deptAux'), key: 'deptName', value: auxText },
+    { title: t('fin.voucherDetail.debit'), key: 'debit', value: (e) => moneyOrBlank(e.debit), align: 'right' },
+    { title: t('fin.voucherDetail.credit'), key: 'credit', value: (e) => moneyOrBlank(e.credit), align: 'right' }
   ],
   rows: d.entries,
-  totals: { summary: '合计', deptName: moneyUpper(d.totalDebit), debit: formatMoney(d.totalDebit), credit: formatMoney(d.totalCredit) },
-  signs: [['制单', d.createByName], ['审核', d.auditByName], ['记账', d.postByName], '财务主管']
-}, `记账凭证 ${d.voucherNo}`, 'fin.voucher')
+  // 大写金额只在中文界面打印
+  totals: { summary: t('common.field.total'), deptName: isZh() ? moneyUpper(d.totalDebit) : '', debit: formatMoney(d.totalDebit), credit: formatMoney(d.totalCredit) },
+  signs: [
+    [t('fin.voucherDetail.signPrepared'), d.createByName],
+    [t('fin.voucherDetail.signApproved'), d.auditByName],
+    [t('fin.voucherDetail.signPosted'), d.postByName],
+    t('fin.voucherDetail.signManager')
+  ]
+}, `${t('fin.voucherDetail.title')} ${d.voucherNo}`, 'fin.voucher')
 ```
 
 「部门 / 辅助」列同时写了 `key` 和 `value`：明细行的值由 `value` 计算，`key` 只用于让合计行的大写金额对应到这一列。
 
-物料明细的通用列可以用 `materialColumns()`（序号、物料编码、物料名称、规格型号、单位）。
+物料明细的通用列可以用 `materialColumns()`（序号、物料编码、物料名称、规格型号、单位，标题按界面语言、匹配键为中文名称）。
 
-公司名称显示在标题上方，优先级：打印模板通用设置中的公司名称 → SaaS 模式下的租户名称 → 构建时的环境变量 `VITE_COMPANY_NAME` → 「柠檬ERP」；单据模板中关闭「显示公司名称」时不显示。
+公司名称显示在标题上方，优先级：打印模板通用设置中的公司名称 → SaaS 模式下的租户名称 → 构建时的环境变量 `VITE_COMPANY_NAME` → 默认名称（`print.common.defaultCompany`：中文「柠檬ERP」、英文「Lemon ERP」）；单据模板中关闭「显示公司名称」时不显示。
 
 ### 默认版式
 
@@ -223,28 +233,66 @@ JRXML 中可用的参数与字段：
 
 ### 登记打印模板：PRINT_TYPES
 
-要让新单据出现在「系统管理 → 打印模板」中、可以配置版式和套打，在 `utils/printTemplates.js` 的 `PRINT_TYPES` 中登记：
+要让新单据出现在「系统管理 → 打印模板」中、可以配置版式和套打，先把用到的名称加到两个语言包的 `print.name` 中（中文名称即匹配键）：
+
+```js
+// locales/zh-CN/print.js
+export default {
+  name: {
+    // ...
+    modOa: '行政',
+    carRequest: '用车申请单',
+    useDate: '用车日期',
+    destination: '目的地',
+    passengers: '乘车人数',
+    applicant: '申请人',
+    purpose: '事由',
+    deptHead: '部门主管',
+    adminOffice: '行政'
+  }
+}
+
+// locales/en-US/print.js（键一致，值为显示的英文名称）
+export default {
+  name: {
+    // ...
+    modOa: 'Office',
+    carRequest: 'Car Request',
+    useDate: 'Use Date',
+    destination: 'Destination',
+    passengers: 'Passengers',
+    applicant: 'Applicant',
+    purpose: 'Purpose',
+    deptHead: 'Dept. Head',
+    adminOffice: 'Admin Office'
+  }
+}
+```
+
+再在 `utils/printTemplates.js` 的 `PRINT_TYPES` 中用 `n.xxx`（`n` 即 `zh-CN/print.js` 的 `name`，值为中文匹配键）登记：
 
 ```js
 export const PRINT_TYPES = [
   // ...
   {
     key: 'oa.carRequest',
-    module: '行政',
-    name: '用车申请单',
-    fields: ['用车日期', '目的地', '乘车人数', '申请人', '状态', '事由'],
-    signs: ['申请人', '部门主管', '行政'],
+    module: n.modOa,
+    name: n.carRequest,
+    fields: [n.useDate, n.destination, n.passengers, n.applicant, n.status, n.purpose],
+    signs: [n.applicant, n.deptHead, n.adminOffice],
     note: true
   }
 ]
 ```
 
+`n.status` 等已有的通用名称直接复用，没有的再新增。
+
 | 属性 | 说明 |
 | --- | --- |
 | `key` | 模板标识，`printDocs` 的第三个参数，建议「模块.单据」（只能包含字母、数字、下划线和点，最长 64 个字符） |
-| `module` / `name` | 模板列表中的分组和名称 |
-| `fields` | 表头字段名称，**与 doc.fields 中的标签一致** |
-| `columns` | 明细列标题，**与 doc.columns 中的 title 一致**（列有 `id` 时与 `id` 一致）；数字列可写 `{ title: '数量', align: 'right' }`（文件内的 `num('数量')`） |
+| `module` / `name` | 模板列表中的分组和名称（中文匹配键，显示时按界面语言翻译） |
+| `fields` | 表头字段名称，**与 doc.fields 中的标签一致**（doc 中可以是 `t()` 后的译文，会反查回中文） |
+| `columns` | 明细列标题，**与 doc.columns 中的 title 一致**（列有 `id` 时与 `id` 一致）；数字列可写 `{ title: n.quantity, align: 'right' }`（文件内的 `num(n.quantity)`） |
 | `signs` | 签字栏名称，**与 doc.signs 中的名称一致** |
 | `note` | 是否有备注 |
 | `slip` | 是否条状单据 |
@@ -256,26 +304,29 @@ export const PRINT_TYPES = [
 ### 示例：打印用车申请
 
 ```js
+import { useI18n } from 'vue-i18n'
 import { printDocs } from '@/utils/print'
 import { findDict } from '@/utils/dict'
 
+const { t } = useI18n()
 const dict = useDict('oa_car_status')
+const p = (id) => t(`print.name.${id}`)   // 打印名称的译文，打印时反查回中文匹配键
 
 function print(r) {
   printDocs({
-    title: '用车申请单',
+    title: p('carRequest'),
     no: r.requestNo,
     fields: [
-      ['用车日期', r.useDate],
-      ['目的地', r.destination],
-      ['乘车人数', r.passengers],
-      ['申请人', r.createByName],
-      ['状态', findDict(dict.oa_car_status, r.status)?.label],
-      ['事由', r.purpose, true]
+      [p('useDate'), r.useDate],
+      [p('destination'), r.destination],
+      [p('passengers'), r.passengers],
+      [p('applicant'), r.createByName],
+      [p('status'), findDict(dict.oa_car_status, r.status)?.label],
+      [p('purpose'), r.purpose, true]
     ],
-    signs: [['申请人', r.createByName], '部门主管', '行政'],
+    signs: [[p('applicant'), r.createByName], p('deptHead'), p('adminOffice')],
     note: r.remark
-  }, `用车申请单 ${r.requestNo}`, 'oa.carRequest')
+  }, `${p('carRequest')} ${r.requestNo}`, 'oa.carRequest')
 }
 ```
 
@@ -284,11 +335,11 @@ function print(r) {
 ### 新增单据打印的步骤
 
 1. 在页面或详情组件中按上面的结构组装单据，调用 `printDocs(doc, 标题, 模板标识)`；
-2. 在 `PRINT_TYPES` 中登记模板标识，`fields`、`columns`、`signs` 的名称与 doc 中完全一致；
-3. 在「系统管理 → 打印模板」中选择新单据，确认右侧 PDF 预览正常，再到页面上实际打印一次；
+2. 在 `locales/zh-CN/print.js`、`en-US/print.js` 的 `name` 中加名称，在 `PRINT_TYPES` 中登记模板标识，`fields`、`columns`、`signs` 的名称与 doc 中一致（doc 中写中文名称或其译文均可）；
+3. 在「系统管理 → 打印模板」中选择新单据，确认右侧 PDF 预览正常，再分别在中文、英文界面下到页面上实际打印一次，确认字段都能匹配到模板；
 4. 已有单据新增字段时，在 doc 和 `PRINT_TYPES` 中同时加上；用户保存过的模板会把新字段显示在末尾，可以再调整。
 
-后端不需要任何改动：`PrintService` 和 `PrintDesigner` 按单据结构通用处理。
+后端不需要任何改动：`PrintService` 和 `PrintDesigner` 按单据结构通用处理（默认版式中「合计」「备注」等固定文字由后端按请求语言输出）。
 
 ::: tip 演示模式
 `POST /system/print/pdf`、`/system/print/jrxml` 只生成文件、不修改数据，已在演示模式的白名单中，见 [搭建演示环境](../deploy/demo)。

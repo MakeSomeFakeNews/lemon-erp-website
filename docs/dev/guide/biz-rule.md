@@ -52,7 +52,7 @@ order: 12
 
 ### 1. 下拉选项的枚举
 
-下拉类参数的取值用枚举表示，实现 `framework/setting/OptionEnum`，按枚举名称保存，`label()` 显示在页面上：
+下拉类参数的取值用枚举表示，实现 `framework/setting/OptionEnum`，按枚举名称保存；`label()` 返回显示名称的**消息键**，页面上按请求语言显示：
 
 ```java
 package com.lemon.erp.modules.oa.model;
@@ -64,9 +64,9 @@ import com.lemon.erp.framework.setting.OptionEnum;
  */
 public enum CarApprovalMode implements OptionEnum {
     /** 提交后走审批流程 */
-    FLOW("走审批流程"),
+    FLOW("oa.enum.CarApprovalMode.flow"),
     /** 提交即通过 */
-    AUTO("提交即通过");
+    AUTO("oa.enum.CarApprovalMode.auto");
 
     private final String label;
 
@@ -101,7 +101,8 @@ import java.util.List;
 @Component
 public class OaBizRules implements BizRuleProvider {
 
-    private static final String MODULE = "行政办公";
+    /** 模块、名称、说明都是消息键，登记在 oa.properties / oa_en.properties */
+    private static final String MODULE = "oa.label.oa";
 
     /** 用车最多提前预约的天数 */
     public static final String CAR_MAX_ADVANCE_DAYS = "oa.car.maxAdvanceDays";
@@ -111,12 +112,24 @@ public class OaBizRules implements BizRuleProvider {
     @Override
     public List<BizRule> rules() {
         return List.of(
-                BizRule.number(CAR_MAX_ADVANCE_DAYS, MODULE, "用车最多提前预约天数", 30, 1, 365,
-                        "用车日期最多可以选择今天之后多少天"),
-                BizRule.select(CAR_APPROVAL, MODULE, "用车申请审批方式", CarApprovalMode.FLOW, CarApprovalMode.class,
-                        "选择「提交即通过」时不发起审批流程"));
+                BizRule.number(CAR_MAX_ADVANCE_DAYS, MODULE, "oa.label.carMaxAdvanceDays", 30, 1, 365,
+                        "oa.label.carMaxAdvanceDaysRemark"),
+                BizRule.select(CAR_APPROVAL, MODULE, "oa.label.carApprovalMode", CarApprovalMode.FLOW, CarApprovalMode.class,
+                        "oa.label.carApprovalModeRemark"));
     }
 }
+```
+
+```properties
+# oa.properties（oa_en.properties 中登记同样的键）
+oa.label.oa=行政办公
+oa.label.carMaxAdvanceDays=用车最多提前预约天数
+oa.label.carMaxAdvanceDaysRemark=用车日期最多可以选择今天之后多少天
+oa.label.carApprovalMode=用车申请审批方式
+oa.label.carApprovalModeRemark=选择「提交即通过」时不发起审批流程
+oa.enum.CarApprovalMode.flow=走审批流程
+oa.enum.CarApprovalMode.auto=提交即通过
+oa.error.carUseDateTooFar=用车日期最多只能提前 {0} 天预约
 ```
 
 `BizRule` 的工厂方法：
@@ -128,7 +141,8 @@ public class OaBizRules implements BizRuleProvider {
 | `BizRule.select(key, module, label, 默认枚举值, 枚举类, 说明)` | `SELECT` | 单选按钮组 | 值为枚举名称，保存时校验必须是枚举中的值 |
 
 - `key`：全局唯一，建议「模块.对象.属性」，最长 64 个字符（`sys_biz_rule.rule_key`）；
-- `module`：页面上的页签名称，同一模块的参数写同一个值；页签和参数按登记顺序显示；
+- `module`、`label`、`remark` 和选项枚举的 `label()` 都是消息键（登记在声明模块的资源包中），「业务参数」页面按请求语言显示，见 [国际化](./i18n)；
+- `module`：页面上的页签名称，同一模块的参数写同一个键；页签和参数按登记顺序显示；
 - `remark`：显示在参数下方，页面会在后面加上「默认：xxx」；
 - 不支持文本类型（`SettingType.TEXT`），值最长 255 个字符。
 
@@ -149,7 +163,7 @@ public class OaCarRequestService {
     public Long create(CarRequestForm form) {
         int maxDays = bizRules.number(OaBizRules.CAR_MAX_ADVANCE_DAYS);
         if (form.useDate().isAfter(LocalDate.now().plusDays(maxDays))) {
-            throw new BizException("用车日期最多只能提前 " + maxDays + " 天预约");
+            throw new BizException("oa.error.carUseDateTooFar", maxDays);
         }
         ...
     }
@@ -157,7 +171,7 @@ public class OaCarRequestService {
     /** 提交：流程未发布或设置为「提交即通过」时直接生效（提交审批见「接入审批流」） */
     @Transactional
     public boolean submit(Long id) {
-        OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "提交");
+        OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "oa.label.submit");
         if (bizRules.option(OaBizRules.CAR_APPROVAL, CarApprovalMode.class) == CarApprovalMode.AUTO
                 || !flowApi.isAvailable(PROCESS_KEY)) {
             transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVED);

@@ -37,10 +37,11 @@ public class OaFlowBusinesses {
 
     @Bean
     public FlowBusiness carRequestFlow() {
-        return FlowBusiness.of(OaCarRequestService.PROCESS_KEY, "用车申请审批",
-                number("passengers", "乘车人数"),
-                text("destination", "目的地"),
-                text("requestNo", "申请单号"));
+        // 业务名称和变量 label 写消息键（登记在 oa.properties / oa_en.properties），设计器和流程详情按请求语言显示
+        return FlowBusiness.of(OaCarRequestService.PROCESS_KEY, "oa.label.carRequestApproval",
+                number("passengers", "oa.label.passengers"),
+                text("destination", "oa.label.destination"),
+                text("requestNo", "oa.label.requestNo"));
     }
 }
 ```
@@ -60,6 +61,8 @@ public class OaFlowBusinesses {
 | 字典 | `Variable.dict(field, label, dictType)` | 下拉选择，可选值来自字典（值为字典值） |
 | 固定选项 | `Variable.select(field, label, options...)` | 下拉选择，可选值为给定的字符串 |
 
+本例用到的消息键（`oa.label.carRequestApproval`、`oa.label.passengers`、`oa.label.destination`、`oa.label.requestNo`，以及下文的 `oa.label.submit`、`oa.label.withdraw`、`oa.error.carRequestStatusChanged`）要在 `oa.properties` 和 `oa_en.properties` 中登记，写法见 [新增业务模块](./new-module) 的「消息资源包」。
+
 变量名不能使用保留字：`initiator`、`assignee`、`loopCounter`、`execution`、`task`、以 `nrOf` 或 `wf` 开头的名称。
 
 ## 2. 提交审批
@@ -78,7 +81,7 @@ private final FlowApi flowApi;
  */
 @Transactional
 public boolean submit(Long id) {
-    OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "提交");
+    OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "oa.label.submit");
     if (!flowApi.isAvailable(PROCESS_KEY)) {
         transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVED);
         return false;
@@ -96,7 +99,7 @@ public boolean submit(Long id) {
 
 private void transit(Long id, CarRequestStatus from, CarRequestStatus to) {
     if (requestMapper.transit(id, from, to) == 0) {
-        throw new BizException("用车申请状态已变化，请刷新后重试");
+        throw new BizException("oa.error.carRequestStatusChanged");
     }
 }
 ```
@@ -143,9 +146,9 @@ public void onFlowFinished(FlowFinishedEvent e) {
 /** 撤回审批：撤销流程，单据回到草稿 */
 @Transactional
 public void withdraw(Long id) {
-    OaCarRequest request = requireStatus(id, CarRequestStatus.APPROVING, "撤回");
+    OaCarRequest request = requireStatus(id, CarRequestStatus.APPROVING, "oa.label.withdraw");
     if (request.getFlowInstanceId() != null && flowApi.getStatus(request.getFlowInstanceId()) == FlowStatus.RUNNING) {
-        flowApi.cancel(request.getFlowInstanceId(), "撤回用车申请");
+        flowApi.cancel(request.getFlowInstanceId(), "撤回用车申请"); // i18n-ignore 撤销原因存入流程记录，保持中文
     }
     // 流程撤销事件已把单据改回草稿时，这里更新 0 行
     requestMapper.transit(id, CarRequestStatus.APPROVING, CarRequestStatus.DRAFT);
@@ -160,14 +163,14 @@ public void withdraw(Long id) {
 /** 提交：data 为 true 表示已进入审批 */
 @PostMapping("/{id}/submit")
 @PreAuthorize("@ss.hasPerm('oa:car:submit')")
-@OperLog(title = "用车申请-提交", type = OperType.UPDATE)
+@OperLog(title = "用车申请-提交", type = OperType.UPDATE) // i18n-ignore
 public R<Boolean> submit(@PathVariable Long id) {
     return R.ok(requestService.submit(id));
 }
 
 @PostMapping("/{id}/withdraw")
 @PreAuthorize("@ss.hasPerm('oa:car:submit')")
-@OperLog(title = "用车申请-撤回", type = OperType.UPDATE)
+@OperLog(title = "用车申请-撤回", type = OperType.UPDATE) // i18n-ignore
 public R<Void> withdraw(@PathVariable Long id) {
     requestService.withdraw(id);
     return R.ok();

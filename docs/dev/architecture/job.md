@@ -11,7 +11,7 @@ order: 9
 ```java
 public interface JobHandler {
     String key();                         // 唯一标识，如 wms.batchExpiry
-    String name();                        // 任务名称
+    String name();                        // 任务名称的消息键（页面按请求语言显示）
     String defaultCron();                 // 默认 Cron（Spring 6 段格式：秒 分 时 日 月 周）
     default boolean defaultEnabled() { return true; }   // 首次登记时是否启用
     default String defaultParams() { return null; }     // 默认参数，如 days=30

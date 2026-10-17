@@ -21,6 +21,7 @@
 | 前端 | 框架 | Vue、Vue Router、Pinia | 3.5、4.5、3.0 |
 | 前端 | 构建 | Vite | 7 |
 | 前端 | UI 组件 | Ant Design Vue、@ant-design/icons-vue | 4.2、7.0 |
+| 前端 | 国际化 | vue-i18n（Composition API 模式；后端为 Spring `MessageSource` 资源包） | 11.4 |
 | 前端 | 其他 | Axios、ECharts、Day.js、ExcelJS、JsBarcode、qrcode | - |
 
 后端依赖版本统一维护在 `gradle/libs.versions.toml`，前端依赖见 `lemon-web/package.json`。

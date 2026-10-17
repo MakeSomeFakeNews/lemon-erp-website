@@ -68,10 +68,66 @@ lemon-modules/lemon-oa
     │   ├── mapper/OaCarRequestMapper.java
     │   ├── model/CarRequestStatus.java
     │   └── service/OaCarRequestService.java、OaDocNos.java
-    └── resources/mapper/oa/OaCarRequestMapper.xml
+    └── resources
+        ├── mapper/oa/OaCarRequestMapper.xml
+        └── i18n/oa.properties、oa_en.properties   # 消息资源包：中文（默认）、英文
 ```
 
-包名必须是 `com.lemon.erp.modules.<模块>`：启动类在 `com.lemon.erp` 包，组件扫描自动覆盖；Mapper 由 `@MapperScan("com.lemon.erp.modules.*.mapper")` 扫描；mapper XML 由 `classpath*:mapper/**/*.xml` 加载。
+前端对应新增：
+
+```
+lemon-web/src
+├── api/oa/car.js
+├── views/oa/car/index.vue
+└── locales
+    ├── zh-CN/oa.js        # 页面文字（中文）
+    └── en-US/oa.js、以及 menu.js / dict.js 中的菜单和字典译文
+```
+
+包名必须是 `com.lemon.erp.modules.<模块>`：启动类在 `com.lemon.erp` 包，组件扫描自动覆盖；Mapper 由 `@MapperScan("com.lemon.erp.modules.*.mapper")` 扫描；mapper XML 由 `classpath*:mapper/**/*.xml` 加载；资源包由 `Messages` 扫描 `classpath*:i18n/*.properties` 自动注册，不需要额外配置。
+
+## 1.1 消息资源包
+
+返回前端的提示（业务异常、校验信息、登记给框架的名称）都写成消息键，登记在本模块的两个资源包中，文件为 UTF-8，键为 `oa.<分类>.<名称>`：
+
+```properties
+# lemon-modules/lemon-oa/src/main/resources/i18n/oa.properties（默认，简体中文）
+# 分类：error 业务异常、valid 校验、text 返回前端的文字、label 名称；参数写作 {0}，单引号写成两个
+oa.label.oa=行政办公
+oa.label.carRequest=用车申请
+oa.label.modify=修改
+oa.label.delete=删除
+oa.error.carRequestNotFound=用车申请不存在或没有权限
+oa.error.carRequestStatusCannot=用车申请当前状态不能{0}
+oa.valid.useDateRequired=用车日期不能为空
+oa.valid.destinationRequired=目的地不能为空
+oa.valid.destinationTooLong=目的地不能超过100个字符
+oa.valid.purposeTooLong=事由不能超过255个字符
+oa.valid.passengersRequired=乘车人数不能为空
+oa.valid.passengersMin=乘车人数至少为1
+oa.valid.passengersMax=乘车人数不能超过60
+oa.valid.remarkTooLong=备注不能超过255个字符
+```
+
+```properties
+# oa_en.properties（英文，键和 {0} 占位符与中文一致）
+oa.label.oa=Office
+oa.label.carRequest=Car Request
+oa.label.modify=modify
+oa.label.delete=delete
+oa.error.carRequestNotFound=Car request does not exist or access denied
+oa.error.carRequestStatusCannot=Cannot {0} the car request in its current status
+oa.valid.useDateRequired=Use date is required
+oa.valid.destinationRequired=Destination is required
+oa.valid.destinationTooLong=Destination cannot exceed 100 characters
+oa.valid.purposeTooLong=Purpose cannot exceed 255 characters
+oa.valid.passengersRequired=Number of passengers is required
+oa.valid.passengersMin=Number of passengers must be at least 1
+oa.valid.passengersMax=Number of passengers cannot exceed 60
+oa.valid.remarkTooLong=Remark cannot exceed 255 characters
+```
+
+规则详见 [国际化](./i18n#资源包)。
 
 ## 2. 建表与字典
 
@@ -117,6 +173,17 @@ INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, tag_color, sort, s
 ('oa_car_status', '草稿', 'DRAFT', 'default', 1, 1, NOW(), NOW()),
 ('oa_car_status', '审批中', 'APPROVING', 'processing', 2, 1, NOW(), NOW()),
 ('oa_car_status', '已批准', 'APPROVED', 'green', 3, 1, NOW(), NOW());
+```
+
+字典标签在数据库中保存中文，英文译文加到前端 `lemon-web/src/locales/en-US/dict.js`：
+
+```js
+  // 用车申请状态
+  oa_car_status: {
+    DRAFT: 'Draft', // 草稿
+    APPROVING: 'In Approval', // 审批中
+    APPROVED: 'Approved' // 已批准
+  },
 ```
 
 ::: warning 已有数据库
@@ -191,7 +258,7 @@ public class OaCarRequest extends BaseEntity {
 - 非表字段加 `@TableField(exist = false)`；
 - MyBatis-Plus 的 `updateById` 默认跳过值为 null 的字段，允许用户清空的可选字段加 `@TableField(updateStrategy = FieldStrategy.ALWAYS)`。
 
-请求体用 record，校验信息写中文：
+请求体用 record，校验信息写消息键 `{键}`（由 Bean Validation 按请求语言插值）：
 
 ```java
 package com.lemon.erp.modules.oa.dto;
@@ -205,11 +272,11 @@ import jakarta.validation.constraints.Size;
 import java.time.LocalDate;
 
 public record CarRequestForm(
-        @NotNull(message = "用车日期不能为空") LocalDate useDate,
-        @NotBlank(message = "目的地不能为空") @Size(max = 100, message = "目的地不能超过100个字符") String destination,
-        @Size(max = 255, message = "事由不能超过255个字符") String purpose,
-        @NotNull(message = "乘车人数不能为空") @Min(value = 1, message = "乘车人数至少为1") @Max(value = 60, message = "乘车人数不能超过60") Integer passengers,
-        @Size(max = 255, message = "备注不能超过255个字符") String remark) {
+        @NotNull(message = "{oa.valid.useDateRequired}") LocalDate useDate,
+        @NotBlank(message = "{oa.valid.destinationRequired}") @Size(max = 100, message = "{oa.valid.destinationTooLong}") String destination,
+        @Size(max = 255, message = "{oa.valid.purposeTooLong}") String purpose,
+        @NotNull(message = "{oa.valid.passengersRequired}") @Min(value = 1, message = "{oa.valid.passengersMin}") @Max(value = 60, message = "{oa.valid.passengersMax}") Integer passengers,
+        @Size(max = 255, message = "{oa.valid.remarkTooLong}") String remark) {
 }
 ```
 
@@ -274,6 +341,7 @@ package com.lemon.erp.modules.oa.service;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lemon.erp.common.exception.BizException;
+import com.lemon.erp.common.i18n.Messages;
 import com.lemon.erp.common.result.PageResult;
 import com.lemon.erp.framework.security.LoginUser;
 import com.lemon.erp.framework.security.SecurityUtils;
@@ -332,14 +400,14 @@ public class OaCarRequestService {
 
     @Transactional
     public void update(Long id, CarRequestForm form) {
-        OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "修改");
+        OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "oa.label.modify");
         apply(request, form);
         requestMapper.updateById(request);
     }
 
     @Transactional
     public void delete(Long id) {
-        requireStatus(id, CarRequestStatus.DRAFT, "删除");
+        requireStatus(id, CarRequestStatus.DRAFT, "oa.label.delete");
         requestMapper.deleteById(id);
     }
 
@@ -358,15 +426,16 @@ public class OaCarRequestService {
         Supplier<OaCarRequest> loader = () -> requestMapper.selectById(id);
         OaCarRequest request = SecurityUtils.getDataScope().all() ? loader.get() : DataPermissionContext.execute(RULE, loader);
         if (request == null) {
-            throw new BizException("用车申请不存在或没有权限");
+            throw new BizException("oa.error.carRequestNotFound");
         }
         return request;
     }
 
+    /** @param action 动作名称的消息键，填入提示的 {0} */
     OaCarRequest requireStatus(Long id, CarRequestStatus status, String action) {
         OaCarRequest request = getAccessible(id);
         if (request.getStatus() != status) {
-            throw new BizException("用车申请当前状态不能" + action);
+            throw new BizException("oa.error.carRequestStatusCannot", Messages.get(action));
         }
         return request;
     }
@@ -378,7 +447,8 @@ public class OaCarRequestService {
 - 列表方法加 `@DataPermission`；详情、修改、删除先用 `getAccessible` 校验数据权限，防止通过构造 ID 越权；
 - 写方法加 `@Transactional`；`docNoService.next` 必须在事务中调用；
 - 新增时写入 `dept_id`、`create_by`；
-- 状态比较用枚举 `!=`，不写字符串字面量。
+- 状态比较用枚举 `!=`，不写字符串字面量；
+- 提示一律用消息键，不拼接中文；参数本身需要翻译时先 `Messages.get` 再传入。
 
 ## 6. Controller
 
@@ -433,14 +503,14 @@ public class OaCarRequestController {
 
     @PostMapping
     @PreAuthorize("@ss.hasPerm('oa:car:add')")
-    @OperLog(title = "用车申请", type = OperType.INSERT)
+    @OperLog(title = "用车申请", type = OperType.INSERT) // i18n-ignore 操作日志存库，保持中文
     public R<Long> create(@Valid @RequestBody CarRequestForm form) {
         return R.ok(requestService.create(form));
     }
 
     @PutMapping("/{id}")
     @PreAuthorize("@ss.hasPerm('oa:car:edit')")
-    @OperLog(title = "用车申请", type = OperType.UPDATE)
+    @OperLog(title = "用车申请", type = OperType.UPDATE) // i18n-ignore 操作日志存库，保持中文
     public R<Void> update(@PathVariable Long id, @Valid @RequestBody CarRequestForm form) {
         requestService.update(id, form);
         return R.ok();
@@ -448,7 +518,7 @@ public class OaCarRequestController {
 
     @DeleteMapping("/{id}")
     @PreAuthorize("@ss.hasPerm('oa:car:remove')")
-    @OperLog(title = "用车申请", type = OperType.DELETE)
+    @OperLog(title = "用车申请", type = OperType.DELETE) // i18n-ignore 操作日志存库，保持中文
     public R<Void> delete(@PathVariable Long id) {
         requestService.delete(id);
         return R.ok();
@@ -456,7 +526,7 @@ public class OaCarRequestController {
 }
 ```
 
-接口路径以模块名开头；每个接口声明权限；增删改加 `@OperLog`。接口最终地址为 `/api/oa/car`。
+接口路径以模块名开头；每个接口声明权限；增删改加 `@OperLog`（标题存入操作日志，保持中文，行尾写 `// i18n-ignore`）。接口最终地址为 `/api/oa/car`。
 
 ## 7. 单据编号声明
 
@@ -478,7 +548,8 @@ public class OaDocNos {
     @Bean
     @Order(20)
     public DocNoCatalog oaDocNoCatalog() {
-        return DocNoCatalog.of("行政办公", doc(OaCarRequestService.DOC_NO, "用车申请"));
+        // 模块名、单据名写消息键，编码规则页面按请求语言显示
+        return DocNoCatalog.of("oa.label.oa", doc(OaCarRequestService.DOC_NO, "oa.label.carRequest"));
     }
 }
 ```
@@ -499,6 +570,54 @@ export const updateCarRequest = (id, data) => request.put(`/oa/car/${id}`, data)
 export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
 ```
 
+页面文字放在语言包中，`lemon-web/src/locales/zh-CN/oa.js`：
+
+```js
+/** 行政办公（oa.xxx） */
+export default {
+  car: {
+    title: '用车申请',
+    detailTitle: '用车申请 {no}',
+    keyword: '申请',
+    keywordPh: '单号或目的地',
+    create: '新增用车申请',
+    edit: '编辑用车申请',
+    confirmDelete: '确定删除用车申请「{no}」？',
+    requestNo: '申请单号',
+    useDate: '用车日期',
+    destination: '目的地',
+    passengers: '乘车人数',
+    purpose: '事由',
+    applicant: '申请人'
+  }
+}
+```
+
+`lemon-web/src/locales/en-US/oa.js`（键与中文完全一致）：
+
+```js
+/** 行政办公（oa.xxx） */
+export default {
+  car: {
+    title: 'Car Request',
+    detailTitle: 'Car Request {no}',
+    keyword: 'Request',
+    keywordPh: 'Request No. or destination',
+    create: 'New Car Request',
+    edit: 'Edit Car Request',
+    confirmDelete: 'Delete car request "{no}"?',
+    requestNo: 'Request No.',
+    useDate: 'Use Date',
+    destination: 'Destination',
+    passengers: 'Passengers',
+    purpose: 'Purpose',
+    applicant: 'Applicant'
+  }
+}
+```
+
+语言包文件放在 `locales/<语言>/` 下即自动加载，文件名 `oa` 就是键的第一段。
+
 `lemon-web/src/views/oa/car/index.vue`（字段少，表单用抽屉）：
 
 ```vue
@@ -506,11 +625,11 @@ export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
   <div class="table-page">
     <a-card v-show="showSearch" :bordered="false" class="page-card">
       <SearchForm :model="query" @search="search" @reset="resetQuery">
-        <a-form-item label="申请" name="keyword">
-          <a-input v-model:value="query.keyword" placeholder="单号或目的地" allow-clear />
+        <a-form-item :label="$t('oa.car.keyword')" name="keyword">
+          <a-input v-model:value="query.keyword" :placeholder="$t('oa.car.keywordPh')" allow-clear />
         </a-form-item>
-        <a-form-item label="状态" name="status">
-          <a-select v-model:value="query.status" placeholder="全部" allow-clear :options="toOptions(dict.oa_car_status)" />
+        <a-form-item :label="$t('common.field.status')" name="status">
+          <a-select v-model:value="query.status" :placeholder="$t('common.placeholder.all')" allow-clear :options="toOptions(dict.oa_car_status)" />
         </a-form-item>
       </SearchForm>
     </a-card>
@@ -525,7 +644,7 @@ export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
         @refresh="load"
       >
         <a-button v-perm="'oa:car:add'" type="primary" @click="drawer.openCreate()">
-          <template #icon><PlusOutlined /></template>新增用车申请
+          <template #icon><PlusOutlined /></template>{{ $t('oa.car.create') }}
         </a-button>
       </TableToolbar>
 
@@ -546,12 +665,12 @@ export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
           <template v-else-if="column.key === 'action'">
             <span v-if="record.status === 'DRAFT'" class="table-actions">
               <a-button v-perm="'oa:car:edit'" type="link" size="small" @click="drawer.openEdit(record)">
-                <template #icon><EditOutlined /></template>编辑
+                <template #icon><EditOutlined /></template>{{ $t('common.action.edit') }}
               </a-button>
               <span v-perm="'oa:car:remove'">
-                <a-popconfirm :title="`确定删除用车申请「${record.requestNo}」？`" @confirm="remove(record.id)">
+                <a-popconfirm :title="$t('oa.car.confirmDelete', { no: record.requestNo })" @confirm="remove(record.id)">
                   <a-button type="link" danger size="small">
-                    <template #icon><DeleteOutlined /></template>删除
+                    <template #icon><DeleteOutlined /></template>{{ $t('common.action.delete') }}
                   </a-button>
                 </a-popconfirm>
               </span>
@@ -561,31 +680,31 @@ export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
       </a-table>
     </a-card>
 
-    <FormDrawer :drawer="drawer" create-title="新增用车申请" edit-title="编辑用车申请">
+    <FormDrawer :drawer="drawer" :create-title="$t('oa.car.create')" :edit-title="$t('oa.car.edit')">
       <a-form ref="formRef" :model="form" :rules="rules" layout="vertical">
         <a-row :gutter="16">
           <a-col :xs="24" :sm="12">
-            <a-form-item label="用车日期" name="useDate">
+            <a-form-item :label="$t('oa.car.useDate')" name="useDate">
               <a-date-picker v-model:value="form.useDate" value-format="YYYY-MM-DD" class="full" />
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12">
-            <a-form-item label="乘车人数" name="passengers">
+            <a-form-item :label="$t('oa.car.passengers')" name="passengers">
               <a-input-number v-model:value="form.passengers" :min="1" :max="60" :precision="0" class="full" />
             </a-form-item>
           </a-col>
           <a-col :span="24">
-            <a-form-item label="目的地" name="destination">
+            <a-form-item :label="$t('oa.car.destination')" name="destination">
               <a-input v-model:value="form.destination" :maxlength="100" />
             </a-form-item>
           </a-col>
           <a-col :span="24">
-            <a-form-item label="事由" name="purpose">
+            <a-form-item :label="$t('oa.car.purpose')" name="purpose">
               <a-textarea v-model:value="form.purpose" :rows="3" :maxlength="255" show-count />
             </a-form-item>
           </a-col>
           <a-col :span="24">
-            <a-form-item label="备注" name="remark">
+            <a-form-item :label="$t('common.field.remark')" name="remark">
               <a-input v-model:value="form.remark" :maxlength="255" />
             </a-form-item>
           </a-col>
@@ -597,6 +716,7 @@ export const deleteCarRequest = (id) => request.delete(`/oa/car/${id}`)
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { message } from 'ant-design-vue'
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import DictTag from '@/components/DictTag.vue'
@@ -610,17 +730,18 @@ import { useFormDrawer } from '@/composables/useFormDrawer'
 import { useTable } from '@/composables/useTable'
 import { toOptions } from '@/utils/dict'
 
+const { t } = useI18n()
 const dict = useDict('oa_car_status')
 
 const columns = [
-  { title: '申请单号', dataIndex: 'requestNo', width: 160 },
-  { title: '用车日期', dataIndex: 'useDate', width: 120 },
-  { title: '目的地', dataIndex: 'destination', width: 200, ellipsis: true },
-  { title: '乘车人数', dataIndex: 'passengers', width: 90 },
-  { title: '状态', key: 'status', width: 100, dict: 'oa_car_status' },
-  { title: '申请人', dataIndex: 'createByName', width: 110 },
-  { title: '创建时间', dataIndex: 'createTime', width: 170 },
-  { title: '操作', key: 'action', width: 160, fixed: 'right' }
+  { title: t('oa.car.requestNo'), dataIndex: 'requestNo', width: 160 },
+  { title: t('oa.car.useDate'), dataIndex: 'useDate', width: 120 },
+  { title: t('oa.car.destination'), dataIndex: 'destination', width: 200, ellipsis: true },
+  { title: t('oa.car.passengers'), dataIndex: 'passengers', width: 100 },
+  { title: t('common.field.status'), key: 'status', width: 100, dict: 'oa_car_status' },
+  { title: t('oa.car.applicant'), dataIndex: 'createByName', width: 110 },
+  { title: t('common.field.createTime'), dataIndex: 'createTime', width: 170 },
+  { title: t('common.action.operation'), key: 'action', width: 160, fixed: 'right' }
 ]
 const { checked, visibleColumns } = useColumns(columns, 'oa-car')
 const showSearch = ref(true)
@@ -636,9 +757,9 @@ function resetQuery() {
 onMounted(load)
 
 const rules = {
-  useDate: [{ required: true, message: '请选择用车日期' }],
-  destination: [{ required: true, whitespace: true, message: '请输入目的地' }],
-  passengers: [{ required: true, message: '请输入乘车人数' }]
+  useDate: [{ required: true, message: t('common.rule.requiredSelect', { name: t('oa.car.useDate') }) }],
+  destination: [{ required: true, whitespace: true, message: t('common.rule.required', { name: t('oa.car.destination') }) }],
+  passengers: [{ required: true, message: t('common.rule.required', { name: t('oa.car.passengers') }) }]
 }
 const drawer = useFormDrawer({
   emptyForm: () => ({ id: undefined, useDate: undefined, destination: '', purpose: '', passengers: 1, remark: '' }),
@@ -652,7 +773,7 @@ const { formRef, form } = drawer
 
 async function remove(id) {
   await deleteCarRequest(id)
-  message.success('删除成功')
+  message.success(t('common.msg.deleteSuccess'))
   load()
 }
 </script>
@@ -683,6 +804,13 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 (13, 5000), (13, 5001), (13, 5002), (13, 5003), (13, 5004);
 ```
 
+菜单名称在数据库中保存中文，英文译文按菜单 ID 加到 `lemon-web/src/locales/en-US/menu.js`（没有译文时英文界面也显示中文名称）：
+
+```js
+  5000: 'Office', // 行政办公
+  5001: 'Car Requests', // 用车申请
+```
+
 页面地址为模块路径 + 页面路径：`/oa/car`。超级管理员不需要授权。也可以不改 `init.sql`，直接在「系统管理 → 菜单管理」中新增，再到「角色管理」中给角色勾选。菜单字段、分组目录、开启 SaaS 时的租户套餐等细节见 [新增菜单与授权](./menu)。
 
 ## 10. 验证
@@ -692,7 +820,8 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 3. 用 admin 登录，顶部导航出现「行政办公」，新增、修改、删除用车申请，单号按 `YC` + 日期 + 流水生成；
 4. 用只有 staff 角色的账号登录，验证按钮和数据权限（仅本人数据）；
 5. 在「系统监控 → 操作日志」中确认增删改都有记录；
-6. 开启 `LEMON_TENANT_ENABLED=true` 后用另一个租户登录，确认数据互相隔离（新租户需要在租户套餐中加入该菜单）。
+6. 运行 `python3 scripts/check_i18n.py lemon-modules/lemon-oa` 和 `cd lemon-web && npm run i18n:check`，确认两个检查都通过；在顶栏切换为 English，确认菜单、页面文字、字典标签、校验和业务提示都是英文；
+7. 开启 `LEMON_TENANT_ENABLED=true` 后用另一个租户登录，确认数据互相隔离（新租户需要在租户套餐中加入该菜单）。
 
 ## 其他可选的扩展
 

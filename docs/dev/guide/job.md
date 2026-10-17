@@ -43,8 +43,9 @@ public class OaCarRemindJob implements JobHandler {
     }
 
     @Override
+    /** 名称的消息键：写入任务表时取中文，「定时任务」页面按请求语言显示 */
     public String name() {
-        return "用车提醒";
+        return "oa.label.carRemindJob";
     }
 
     @Override
@@ -67,11 +68,12 @@ public class OaCarRemindJob implements JobHandler {
             if (r.getCreateBy() == null) {
                 continue;
             }
+            // 站内消息、执行结果存入数据库，保持中文（定时任务中没有请求语言）
             messageSender.send(List.of(r.getCreateBy()), Message.of("REMIND",
-                    "用车提醒：" + r.getRequestNo(), useDate + " 前往 " + r.getDestination(), "/oa/car")
+                    "用车提醒：" + r.getRequestNo(), useDate + " 前往 " + r.getDestination(), "/oa/car") // i18n-ignore 站内消息存库
                     .dedup("oa-car-remind:" + r.getId()));
         }
-        return "提醒 " + list.size() + " 条用车申请";
+        return "提醒 " + list.size() + " 条用车申请"; // i18n-ignore 任务日志存库
     }
 }
 ```
@@ -83,7 +85,7 @@ public class OaCarRemindJob implements JobHandler {
 | 方法 | 必须实现 | 说明 |
 | --- | --- | --- |
 | `key()` | 是 | 唯一标识，建议「模块.功能」，如 `oa.carRemind`；登记到 `sys_job.job_key`，之后不要修改 |
-| `name()` | 是 | 任务名称，显示在页面上 |
+| `name()` | 是 | 任务名称的消息键（登记在本模块的资源包中）。首次启动写入任务表时取中文，「定时任务」页面按请求语言显示 |
 | `defaultCron()` | 是 | 默认 Cron，Spring 6 段格式：秒 分 时 日 月 周，如 `0 30 1 * * *` 为每天 01:30 |
 | `defaultEnabled()` | 否 | 首次登记时是否启用，默认 true |
 | `defaultParams()` | 否 | 默认参数，`key=value`，多个用逗号分隔 |

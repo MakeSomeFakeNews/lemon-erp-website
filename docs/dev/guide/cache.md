@@ -102,13 +102,13 @@ private static void afterCommit(Runnable action) {
 
 ```java
 private static final List<CacheName> CACHES = List.of(
-        new CacheName(TokenService.TOKEN_KEY, "登录会话", "在线用户的登录会话，清空后所有用户需重新登录", 0),
-        new CacheName(TokenService.PERMS_KEY, "用户权限", "登录用户的角色与权限，清空后下次请求自动重新加载", 0),
+        new CacheName(TokenService.TOKEN_KEY, "monitor.label.loginSessions", "monitor.label.sessionsOnlineUsersAfterClearingAll", 0),
+        new CacheName(TokenService.PERMS_KEY, "monitor.label.userPermissions", "monitor.label.rolesPermissionsSignedUsersReloadedAutomatic", 0),
         // ...
-        new CacheName(OaCarStatService.CACHE_KEY, "用车统计", "本月用车统计，按租户缓存 10 分钟", 0));
+        new CacheName(OaCarStatService.CACHE_KEY, "monitor.label.oaCarStat", "monitor.label.oaCarStatRemark", 0));
 ```
 
-`CacheName` 的参数依次为前缀、名称、说明、数量（登记时填 0，页面上实时统计）。缓存监控只开放登记过的前缀，不能通过接口查看或删除任意 key。
+`CacheName` 的参数依次为前缀、名称、说明、数量（登记时填 0，页面上实时统计）。名称和说明是消息键，登记在 monitor 模块的 `monitor.properties`、`monitor_en.properties` 中（如 `monitor.label.oaCarStat=用车统计`），页面按请求语言显示。缓存监控只开放登记过的前缀，不能通过接口查看或删除任意 key。
 
 ::: warning 模块依赖
 `CacheMonitorService` 在 monitor 模块中，monitor 只依赖 system。如果新缓存的常量定义在其他业务模块（如上例的 oa），monitor 无法引用该类：可以在 `CACHES` 中直接写前缀字符串，或把前缀常量定义在 framework 中。
