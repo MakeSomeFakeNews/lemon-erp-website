@@ -18,7 +18,7 @@ lemon-erp
 ├── lemon-common                通用层：与业务无关，可被任何模块引用
 ├── lemon-framework             框架层：基础设施与模块间契约，不依赖任何业务模块
 ├── lemon-modules               业务模块
-│   ├── lemon-system            系统管理：登录认证、用户、部门、角色、菜单、字典、租户、参数、编码规则、打印模板、消息、附件
+│   ├── lemon-system            系统管理：登录认证、用户、部门、角色、菜单、字典、租户、参数、业务参数、自定义字段、编码规则、打印（JasperReports）、消息、附件
 │   ├── lemon-monitor           系统监控：在线用户、操作日志、登录日志、服务监控、缓存监控
 │   ├── lemon-workflow          流程中心：Flowable 集成、流程模型、发起与审批、抄送
 │   ├── lemon-dashboard         首页工作台
@@ -67,6 +67,7 @@ com.lemon.erp.framework
 ├── cache         CacheService 及 Redis / 内存两种实现
 ├── code          DocNoCatalog：模块声明的单据编号类型
 ├── config        MyBatis-Plus、Security、JWT、Jackson、异步 / 定时 / 重试、上传目录、静态资源映射
+├── demo          演示模式：DemoProperties、DemoModeInterceptor（只读拦截）
 ├── excel         Excel 导入：ImportExecutor、ImportRequest、ImportResult
 ├── file          FileStorageService：头像等公开文件、业务附件的本地存储
 ├── finance       ExchangeRateProvider、PartnerBalanceProvider（由财务模块实现）
@@ -80,6 +81,7 @@ com.lemon.erp.framework
 ├── quality       SupplierQualityProvider：供应商质量统计
 ├── record        RecordTypeProvider、ChangeLogger：附件与字段变更历史
 ├── ref           ReferenceChecker、ReferenceGuard：主数据删除前的引用检查
+├── rule          BizRule、BizRuleProvider、BizRules：按租户的业务参数
 ├── security      JWT 过滤器、TokenService 会话、LoginUser、@ss 权限判断
 │   └── datascope @DataPermission 数据权限
 ├── setting       Setting 系统参数定义、SettingService
@@ -134,12 +136,13 @@ lemon-web
     ├── views/<模块>/<页面>/index.vue   页面，菜单的「组件路径」即相对 views 的路径（不含 .vue）
     ├── components              通用组件（TableToolbar、SearchForm、FormDrawer、SubPage、DictTag、
     │                           AttachmentPanel、ChangeLogPanel、ImportModal 等）与各模块的单据表单、详情
-    ├── composables             useTable、useColumns、useFormDrawer、useDict
+    │                           print/ 打印预览与套打设计器，common/ 自定义字段的表单与显示
+    ├── composables             useTable、useColumns、useFormDrawer、useDict、useCustomFields
     ├── directives/perm.js      按钮权限指令 v-perm
     ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）
     ├── router/index.js         静态路由 + 按菜单动态注册路由
     ├── store                   user（用户、权限、菜单）、config（公开配置）、dict（字典缓存）、app（主题等）
-    └── utils                   request、print、printTemplates、excel、dict、format 等工具
+    └── utils                   request、print（提交后端生成 PDF）、printTemplates（打印模板目录与套用）、labels（条码标签）、excel、dict、format 等工具
 ```
 
 ## 数据库脚本

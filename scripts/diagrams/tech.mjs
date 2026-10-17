@@ -34,7 +34,7 @@ const MODULES = [
 ]
 
 const FRAMEWORK = [
-  ['SafetyCertificateOutlined', '认证与会话', 'JWT + 服务端会话，可强制下线'],
+  ['SafetyCertificateOutlined', '认证与会话', 'JWT + 服务端会话'],
   ['LockOutlined', '权限控制', '菜单 / 按钮 / 接口三级'],
   ['ApartmentOutlined', '数据权限', '按部门 / 本人过滤数据'],
   ['ClusterOutlined', 'SaaS 多租户', '共享库按租户隔离'],
@@ -44,10 +44,12 @@ const FRAMEWORK = [
   ['ScheduleOutlined', '定时任务', 'Cron、按租户执行'],
   ['HistoryOutlined', '日志审计', '操作日志、登录日志'],
   ['NumberOutlined', '单据编号', '可配置编码规则'],
-  ['PrinterOutlined', '单据打印', 'JasperReports 生成 PDF'],
+  ['PrinterOutlined', '单据打印', 'PDF、JRXML、套打'],
   ['PaperClipOutlined', '文件与附件', '按单据权限下载'],
   ['EyeOutlined', '演示模式', '只读访问'],
-  ['GlobalOutlined', 'IP 归属地', 'ip2region 离线库']
+  ['GlobalOutlined', 'IP 归属地', 'ip2region 离线库'],
+  ['ControlOutlined', '业务参数', '按租户配置业务规则'],
+  ['FileExcelOutlined', 'Excel 导入导出', '模板、校验、批量导入']
 ]
 
 const html = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -104,7 +106,7 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
     </div>
     <div class="group">
       <div class="group-title"><b>框架层</b><span>lemon-framework，安全、数据隔离与各模块共用的基础能力</span></div>
-      <div class="row" style="grid-template-columns: repeat(7, 1fr)">
+      <div class="row" style="grid-template-columns: repeat(8, 1fr)">
         ${FRAMEWORK.map(([ic, t, d]) => card(ic, t, d)).join('')}
       </div>
     </div>

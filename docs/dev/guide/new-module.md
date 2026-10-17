@@ -702,6 +702,8 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 | 打印 | [单据编号与打印](./doc-no-print) |
 | 首页待办 | 实现 `TodoProvider`，数量在 mapper XML 中一次查询 |
 | 附件、字段变更历史 | 实现 `RecordTypeProvider` 登记业务类型，前端放 `AttachmentPanel` / `ChangeLogPanel`，见 [文件与附件](../architecture/file) |
+| 自定义字段 | 登记业务类型后前端接入 `useCustomFields`，见 [业务实体接入自定义字段](./custom-field) |
+| 可配置的业务规则（比例、开关、方式） | 实现 `BizRuleProvider` 登记业务参数，见 [新增业务参数](./biz-rule) |
 | 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除 |
 | 定时提醒 | [新增定时任务](./job) |
 | 新租户需要的基础数据 | [新租户初始化](./tenant-init) |

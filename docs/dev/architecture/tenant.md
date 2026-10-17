@@ -57,6 +57,7 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 - 不受套餐限制，可以管理租户和套餐；
 - 超级管理员 = 平台租户中的 `admin` 角色；
 - 菜单、字典、参数设置、租户与套餐、服务监控、缓存监控、定时任务是平台专属功能（`PlatformFeatures`，按权限前缀 `sys:menu:`、`sys:dict:`、`sys:config:`、`sys:tenant`、`monitor:server:`、`monitor:cache:`、`monitor:job:` 判断），不能加入套餐，其他租户的用户即使被分配也不生效。
+- 编码规则、打印模板（含上传的 JRXML、套打底图）、业务参数、自定义字段、凭证科目设置按租户保存，新租户没有保存过时使用默认值，不需要初始化；其中**上传 JRXML 只允许平台租户**（JRXML 中的表达式在服务器上执行），其他租户只能用可视化配置调整打印版式。
 
 ## 租户套餐与租户管理员
 
@@ -64,7 +65,7 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 - **新建租户**（`SysTenantService.create`，在新租户的上下文中执行）：
   1. 开通根部门、租户管理员账号（首次登录需修改密码）；
   2. 从平台复制内置岗位角色，菜单取与套餐的交集；
-  3. 按 `@Order` 顺序调用各模块的 `TenantInitializer`，从平台复制基础数据：会计科目和币种（fin）、班次（hr）、预警规则（bi）、流程模型（workflow，复制为未发布的草稿，审批角色换成新租户中对应的角色）。
+  3. 按 `@Order` 顺序调用各模块的 `TenantInitializer`，从平台复制基础数据：规格属性及属性值（wms）、会计科目和币种（fin）、班次（hr）、预警规则（bi）、流程模型（workflow，复制为未发布的草稿，审批角色换成新租户中对应的角色）。
 - **租户生命周期**：停用或到期后无法登录，已登录的会话立即失效；删除只删除租户记录，业务数据保留；账号数量达到上限后不能再新增用户或录用开通账号。
 
 新模块需要为新租户准备基础数据时，实现 `TenantInitializer`，见 [新租户初始化](../guide/tenant-init)。

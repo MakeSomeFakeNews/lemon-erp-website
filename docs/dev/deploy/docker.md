@@ -33,6 +33,10 @@ COPY . .
 RUN ./gradlew :lemon-admin:bootJar --no-daemon
 
 FROM eclipse-temurin:17-jre
+# 中文字体：单据打印（JasperReports）排版时用来测量文字宽度
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fontconfig fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
 ENV TZ=Asia/Shanghai \
     SPRING_PROFILES_ACTIVE=prod \
     UPLOAD_PATH=/data/uploads \
@@ -47,7 +51,8 @@ ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/lemon-erp.jar"]
 
 - 构建阶段使用项目自带的 Gradle Wrapper，需要能访问 Gradle 发行版下载地址和 Maven Central；网络受限时可以在宿主机先执行 `./gradlew :lemon-admin:bootJar`，Dockerfile 只保留运行阶段并 `COPY lemon-admin/build/libs/lemon-erp.jar`；
 - 建议在项目根目录加 `.dockerignore`，排除 `**/build`、`lemon-web/node_modules`、`lemon-web/dist`、`.gradle`、`.idea`、`uploads`、`attachments`，减小构建上下文；
-- `/data` 下的上传目录和附件目录必须挂载卷持久化。
+- `/data` 下的上传目录和附件目录必须挂载卷持久化；
+- 运行镜像中安装了中文字体 `fonts-noto-cjk`（会让镜像增大不少），单据打印排版时需要，见 [生产环境配置](./production#中文字体)。改用 Alpine 基础镜像时改为 `apk add --no-cache fontconfig font-noto-cjk`；使用其他精简镜像时同样要确认镜像中有 fontconfig 和中文字体（容器内执行 `fc-list :lang=zh` 有输出）。
 
 ## 前端镜像
 

@@ -58,7 +58,7 @@ server {
 - **`try_files ... /index.html`**：前端是 History 路由，直接访问或刷新 `/wms/stock` 时由前端路由处理；
 - **`client_max_body_size`**：附件大小上限在「参数设置」中配置（默认 20MB，最大 100MB），Nginx 的上限要不小于它，否则上传时返回 413；
 - **`X-Forwarded-For`**：后端据此记录真实的客户端 IP（操作日志、登录日志、在线用户的 IP 和归属地），见下文；
-- 前端请求超时为 15 秒，`proxy_read_timeout` 保持默认或适当调大即可。
+- 前端请求的默认超时为 15 秒，单据打印（生成 PDF）为 120 秒、下载默认 JRXML 为 60 秒；一次打印大量单据时生成 PDF 可能超过 Nginx 默认的 60 秒，因此示例中把 `proxy_read_timeout` 设为 120 秒。
 
 ## HTTPS
 

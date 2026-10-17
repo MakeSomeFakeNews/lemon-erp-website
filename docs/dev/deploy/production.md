@@ -139,12 +139,38 @@ journalctl -u lemon-erp -f
 
 | 参数 | 建议 |
 | --- | --- |
-| `-Xms` / `-Xmx` | 一般 1~2GB；MRP 运算、数据仓库同步、大批量导出时内存占用较高，按数据量调整 |
+| `-Xms` / `-Xmx` | 一般 1~2GB；MRP 运算、数据仓库同步、大批量导出、批量打印（一次最多 1000 张单据、2 万行明细）时内存占用较高，按数据量调整 |
 | `-XX:+UseG1GC` | Java 17 默认即为 G1，可省略 |
 | `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/lemon-erp/` | 便于排查内存溢出 |
 | `-Duser.timezone=Asia/Shanghai` | 不方便设置 `TZ` 环境变量时使用 |
 
 IP 归属地库（约 11MB）在启动时加载到内存。
+
+## 中文字体
+
+单据打印由后端用 JasperReports 生成 PDF。PDF 中的文字使用 PDF 阅读器内置的宋体（不嵌入字体文件），但后端排版时要用服务器上的字体测量文字宽度、决定在哪里换行，因此**服务器需要安装至少一种中文字体**。没有中文字体时应用启动日志中会出现警告「服务器没有能显示中文的字体，打印单据时中文换行可能不准确」，打印仍然可以进行，但中文按西文字体测量，表格中的长文字可能超出单元格或换行位置不对。
+
+```bash
+# Debian / Ubuntu
+sudo apt-get install -y fontconfig fonts-noto-cjk
+
+# RHEL / Rocky / AlmaLinux
+sudo dnf install -y fontconfig google-noto-sans-cjk-ttc-fonts
+
+# Alpine（容器）
+apk add --no-cache fontconfig font-noto-cjk
+
+# 确认已安装中文字体
+fc-list :lang=zh
+```
+
+安装后重启后端生效（字体在启动时检测一次）。Windows、macOS 自带中文字体，不需要处理。
+
+其他说明：
+
+- 打印依赖 JasperReports、OpenPDF 和 Eclipse ECJ，都已打包在 `lemon-erp.jar` 中；报表表达式由 ECJ 编译，运行环境只需要 JRE 17，不需要 JDK；
+- Java 的图形环境需要以无头模式运行，Spring Boot 默认已设置 `java.awt.headless=true`，不要在启动参数中改为 `false`；
+- 编译后的报表缓存在进程内存中（最多 256 个），重启后首次打印每种单据会慢一些。
 
 ## 日志
 

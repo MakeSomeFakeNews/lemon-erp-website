@@ -64,8 +64,12 @@ public void onTradeDocConfirmed(TradeDocConfirmedEvent e) {
                        └─▶ 应收单 ─▶ 收款核销 ─▶ 凭证
 销售订单 ─▶ 生产计划 ─▶ MRP ─▶ 生产工单（领料 / 退料 / 补料 / 完工入库 ─▶ 仓库单据）
                             └▶ 采购订单（按默认供应商合并）
-仓库流水 + 采购金额 + 工单料工费 ─▶ 成本核算 ─▶ 成本结转凭证
-考勤 + 请假 + 绩效 + 报工计件 ─▶ 工资表 ─▶ 计提凭证 / 发放凭证
+组装拆卸单 ─确认─▶ 仓库出库单（子件 / 成套件）+ 入库单（成套件 / 子件）
+期初库存导入 ─▶ 期初入库单 ─▶ 存货期初数量；期初往来导入 ─▶ 手工应收 / 应付单
+仓库流水 + 采购金额 + 工单料工费 ─▶ 成本核算（按物料的计价方法）─▶ 成本结转凭证
+销售出库 / 退货 + 当期成本 + 收款核销 ─▶ 销售提成（fin）─确认─▶ 工资表的「销售提成」
+考勤 + 请假 + 绩效 + 报工计件 + 销售提成 ─▶ 工资表 ─▶ 计提凭证 / 发放凭证
+发票（手工登记 / 导入数电票 XML、发票清单）─勾稽─▶ 应收 / 应付单
 线索 ─▶ 客户 + 商机 ─赢单─▶ 销售订单
 项目工时 + 项目领料 + 费用 ─▶ 项目成本；项目开票 ─▶ 应收单
 全部业务表 ─ETL─▶ 数据仓库（bi_fact_*）─▶ 多维分析 / 报表 / 仪表盘
@@ -76,6 +80,39 @@ public void onTradeDocConfirmed(TradeDocConfirmedEvent e) {
 - 由业务单据生成的仓库单据**保存即确认**，`wms_stock_doc.source_no` 记录来源单号；库存不足、序列号不在库等错误会让整张业务单据回滚。
 - 仓库的手工出入库只能选「其他入库 / 其他出库」，采购、销售、生产、项目、委外等类型只由对应的业务单据生成（`WmsConstants.MANUAL_TYPES`），否则会绕过应收应付和成本归集。
 - 采购入库 / 退货、销售出库 / 退货、工单领料 / 退料 / 完工入库都是保存即确认，不能修改删除，错误通过退货、退料冲回。
+- 多规格物料的款式（`is_template = 1`）只用于生成 SKU 和按规格矩阵录入订单，`StockService.apply` 拒绝款式的库存变动，所有出入库都落在具体的 SKU 上。
+
+- 组装拆卸单在仓库模块内完成：确认时在同一事务中生成并确认出入库单（出入库类型 `ASSEMBLY`，来源单号为组装拆卸单号），成本核算按子件成本结转成套件。
+- 销售提成的代码在 fin（统计销售出库、成本、收款核销），工资表由 hr 直接调用 `FinCommissionService.confirmedAmounts(期间)` 取已确认的提成（hr 依赖 fin，属于「下游调用上游」）。
+
+## 自动凭证的科目
+
+业务单据生成凭证（应收应付、收付款、预收预付、票据、费用报销、借款、资产折旧、工资、成本结转、期末结转、项目月结等）时，科目不写死编码，一律由「凭证科目设置」决定：
+
+```java
+// pm 项目月结：合同履约成本、工资费用（按职位类别）
+Long contractCost = accountRules.accountId(AccountRole.CONTRACT_COST);
+Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCategory);
+```
+
+- `fin/model/AccountRole` 枚举列出全部用途（分组：往来、存货与成本、收入与费用、税费、资产、薪酬、期末），每个用途带默认科目编码（`init.sql` 预置的科目）；存货（`INVENTORY`）、主营业务收入（`REVENUE`）、主营业务成本（`COST_OF_SALES`）可按物料分类，工资费用（`SALARY_EXPENSE`）可按职位类别分别设置；
+- `FinAccountRuleService.accountId(用途[, 维度取值])` 的取值顺序：用途 + 维度取值的设置 → 用途的设置 → 默认科目编码（带维度的用途还可以按维度给默认值，如半成品、成品的存货默认为库存商品 1405，低值易耗品为周转材料 1411；生产岗位的工资费用为制造费用 5101，销售岗位为销售费用 6601）；
+- 设置保存在 `fin_account_rule`（按租户），设置的科目必须是启用的末级科目，被设置引用的科目不能删除、不能增加下级；修改只影响之后生成的凭证；
+- 其他模块（hr 工资、pm 项目月结等）同样注入 `FinAccountRuleService` 取科目；新增自动凭证的用途时在 `AccountRole` 中登记，「凭证科目设置」页面自动列出。
+
+凭证分录的辅助核算（部门、客户、供应商、项目、存货）在「会计科目」上设置（`fin_account.aux_items`，可多选，下级默认沿用上级），分录上各占一列（`dept_id`、`customer_id`、`supplier_id`、`project_id`、`material_id`），可同时填写。手工凭证使用设置了辅助核算的科目时对应项目必填；业务生成的凭证按单据自动带出客户、供应商等，不受科目设置约束。
+
+## 存货计价
+
+成本核算（`FinCostService`）按物料上设置的计价方法（`wms/model/CostMethod`）计算出库成本：
+
+| 计价方法 | 说明 |
+| --- | --- |
+| `WEIGHTED` 月末一次加权平均（默认） | 本期出库按（期初 + 本期入库）的平均单价计价 |
+| `MOVING` 移动加权平均 | 按出入库发生顺序逐笔计价（`MovingValuation`），每次入库后重算平均单价 |
+| `FIFO` 先进先出 | 按发生顺序逐笔计价（`FifoValuation`），出库先消耗最早的批次；期末结存批次保存在 `fin_cost_layer`，作为下一期的期初批次 |
+
+逐笔计价的两种方法共用 `Valuation` 接口（按金额入库、按当前成本入库、出库、采购退货冲减、期末结存）。逐笔计价得到期末结存后，本期出库总成本 = 期初 + 本期入库 − 期末结存，再按数量分摊到生产领用、销售、其他出库，因此凭证、工单材料成本与月末加权的处理方式一致。修改计价方法从下一次核算生效；撤销核算时一并删除当期的先进先出批次。
 
 ## 多实现的扩展接口
 
@@ -85,9 +122,10 @@ public void onTradeDocConfirmed(TradeDocConfirmedEvent e) {
 | --- | --- | --- | --- |
 | `todo.TodoProvider` | dashboard（首页待办） | 按当前用户权限返回待处理事项，数量为 0 的不显示 | `WmsTodoProvider`（数量在 `WmsTodoMapper.xml` 中一次查询） |
 | `job.JobHandler` | system（`SysJobService`） | 定时任务 | `WmsBatchExpiryJob` |
-| `record.RecordTypeProvider` | system（附件、变更历史） | 登记可挂附件、记录变更历史的业务类型 | `WmsRecordTypes` |
+| `record.RecordTypeProvider` | system（附件、变更历史、自定义字段） | 登记可挂附件、记录变更历史、扩展自定义字段的业务类型 | `WmsRecordTypes` |
 | `ref.ReferenceChecker` | `ReferenceGuard` | 删除物料、仓库、客户、供应商、用户、部门前检查本模块单据是否引用 | 每个模块一个 `XxxReferenceChecker` + `XxxRefMapper.xml` |
 | `tenant.TenantInitializer` | system（新建租户） | 新租户基础数据 | `FinTenantInitializer` |
+| `rule.BizRuleProvider` | system（`SysBizRuleService`，「业务参数」页面） | 登记本模块按租户配置的业务控制规则 | `ScmBizRules`、`FinBizRules` |
 | `DocNoCatalog`（Bean） | 编码规则页面 | 声明本模块的单据编号类型 | `ScmDocNos` |
 | `FlowBusiness`（Bean） | workflow | 声明本模块接入审批的流程及流程变量 | `ScmFlowBusinesses` |
 

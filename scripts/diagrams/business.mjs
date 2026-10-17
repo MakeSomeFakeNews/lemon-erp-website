@@ -12,11 +12,13 @@ const WIDTH = LEFT + COL * COLS + PAD
 
 /** 泳道：rows 为行数，nodes 为 [列, 行, 名称, 图标] */
 const LANES = [
-  { key: 'base', name: '基础配置', icon: 'SettingOutlined', rows: 1, nodes: [
+  { key: 'base', name: '基础配置', icon: 'SettingOutlined', rows: 2, nodes: [
     [0, 0, '部门管理', 'ApartmentOutlined'], [1, 0, '角色管理', 'TeamOutlined'], [2, 0, '用户管理', 'UserOutlined'],
     [3, 0, '往来单位', 'ContactsOutlined'], [4, 0, '物料管理', 'AppstoreOutlined'], [5, 0, '物料清单', 'PartitionOutlined'],
     [6, 0, '工作中心', 'ClusterOutlined'], [7, 0, '仓库库位', 'HomeOutlined'], [8, 0, '会计科目', 'AccountBookOutlined'],
-    [9, 0, '编码规则', 'NumberOutlined'], [10, 0, '打印模板', 'PrinterOutlined']
+    [9, 0, '编码规则', 'NumberOutlined'], [10, 0, '打印模板', 'PrinterOutlined'],
+    [0, 1, '业务参数', 'ControlOutlined'], [1, 1, '自定义字段', 'FormOutlined'], [2, 1, '字典管理', 'BookOutlined'],
+    [4, 1, '规格属性', 'TagsOutlined'], [8, 1, '凭证科目设置', 'SettingOutlined'], [10, 1, '套打设计', 'LayoutOutlined']
   ] },
   { key: 'sales', name: '销售与客户', icon: 'RiseOutlined', rows: 1, nodes: [
     [0, 0, '线索', 'BulbOutlined'], [1, 0, '客户', 'IdcardOutlined'], [2, 0, '销售机会', 'FunnelPlotOutlined'],
@@ -45,7 +47,8 @@ const LANES = [
   { key: 'wms', name: '仓储', icon: 'InboxOutlined', rows: 1, nodes: [
     [0, 0, '库存查询', 'DatabaseOutlined'], [1, 0, '调拨单', 'SwapOutlined'], [2, 0, '盘点单', 'OrderedListOutlined'],
     [3, 0, '库存预留', 'LockOutlined'], [4, 0, '库存冻结', 'StopOutlined'], [5, 0, '批次序列号', 'BarcodeOutlined'],
-    [7, 0, '出库单', 'ExportOutlined'], [8, 0, '库存流水', 'HistoryOutlined'], [9, 0, '入库单', 'ImportOutlined']
+    [6, 0, '组装拆卸', 'BlockOutlined'], [7, 0, '出库单', 'ExportOutlined'], [8, 0, '库存流水', 'HistoryOutlined'], [9, 0, '入库单', 'ImportOutlined'],
+    [10, 0, '收发存汇总', 'BarChartOutlined']
   ] },
   { key: 'fin', name: '财务', icon: 'PayCircleOutlined', rows: 2, nodes: [
     [0, 0, '费用报销', 'TransactionOutlined'], [1, 0, '员工借款', 'CreditCardOutlined'], [2, 0, '固定资产', 'GoldOutlined'],
@@ -53,11 +56,11 @@ const LANES = [
     [8, 0, '成本核算', 'CalculatorOutlined'], [9, 0, '应付管理', 'ReconciliationOutlined'], [10, 0, '付款单', 'DollarOutlined'],
     [0, 1, '银行对账', 'BankOutlined'], [1, 1, '票据管理', 'ContainerOutlined'], [2, 1, '资金计划', 'FundOutlined'],
     [5, 1, '凭证管理', 'BookOutlined'], [6, 1, '账簿查询', 'ReadOutlined'], [7, 1, '财务报表', 'PieChartOutlined'],
-    [8, 1, '期末结账', 'LockOutlined']
+    [3, 1, '出纳管理', 'WalletOutlined'], [8, 1, '期末结账', 'LockOutlined'], [9, 1, '往来对账单', 'SnippetsOutlined'], [10, 1, '发票管理', 'FileProtectOutlined']
   ] },
   { key: 'hr', name: '人力与项目', icon: 'SolutionOutlined', rows: 1, nodes: [
     [0, 0, '招聘管理', 'UsergroupAddOutlined'], [1, 0, '员工档案', 'IdcardOutlined'], [2, 0, '考勤管理', 'ClockCircleOutlined'],
-    [3, 0, '薪酬核算', 'CalculatorOutlined'], [5, 0, '项目列表', 'ProjectOutlined'], [6, 0, '计划进度', 'ScheduleOutlined'],
+    [3, 0, '薪酬核算', 'CalculatorOutlined'], [4, 0, '销售提成', 'RiseOutlined'], [5, 0, '项目列表', 'ProjectOutlined'], [6, 0, '计划进度', 'ScheduleOutlined'],
     [7, 0, '工时管理', 'FieldTimeOutlined'], [8, 0, '项目核算', 'AccountBookOutlined']
   ] },
   { key: 'bi', name: '商务智能', icon: 'PieChartOutlined', rows: 1, nodes: [
@@ -107,9 +110,10 @@ const FLOWS = [
   ['scm', '供应商', '供应商评估'], ['scm', '补货建议', '请购单'], ['scm', '请购单', '询价比价'], ['scm', '询价比价', '采购订单'],
   ['scm', '采购订单', '送货通知'], ['scm', '送货通知', '采购入库'],
   ['qms', '首件检验', '不合格品处理'], ['qms', '不合格品处理', '供应商索赔'], ['qms', '供应商索赔', '纠正预防'],
-  ['wms', '出库单', '库存流水'], ['wms', '入库单', '库存流水'],
+  ['wms', '出库单', '库存流水'], ['wms', '入库单', '库存流水'], ['wms', '组装拆卸', '出库单'],
+  ['base', '规格属性', '物料管理'], ['base', '会计科目', '凭证科目设置'], ['base', '打印模板', '套打设计'], ['fin', '应付管理', '往来对账单'],
   ['fin', '应收管理', '收款单'], ['fin', '应付管理', '付款单'], ['fin', '凭证管理', '账簿查询'], ['fin', '账簿查询', '财务报表'], ['fin', '财务报表', '期末结账'],
-  ['hr', '招聘管理', '员工档案'], ['hr', '员工档案', '考勤管理'], ['hr', '考勤管理', '薪酬核算'],
+  ['hr', '招聘管理', '员工档案'], ['hr', '员工档案', '考勤管理'], ['hr', '考勤管理', '薪酬核算'], ['hr', '销售提成', '薪酬核算'],
   ['hr', '项目列表', '计划进度'], ['hr', '计划进度', '工时管理'], ['hr', '工时管理', '项目核算'],
   ['bi', '数据仓库', '多维分析'], ['bi', '多维分析', '自定义报表'], ['bi', '自定义报表', '自定义仪表盘'], ['bi', '自定义仪表盘', '经营驾驶舱'], ['bi', '经营驾驶舱', '决策支持'], ['bi', '决策支持', '预警规则']
 ]
@@ -161,11 +165,6 @@ link(...down('wms.库存流水', 'fin.成本核算'))
 // 收款单 → 凭证管理；成本核算 → 期末结账
 link(...down('fin.收款单', 'fin.凭证管理'))
 link(...down('fin.成本核算', 'fin.期末结账'))
-// 付款单 → 凭证（经两行之间的通道）
-{
-  const p = N('fin.付款单'), v = N('fin.凭证管理'), mid = lane('fin').top + ROW + 2
-  link([p.cx, p.bottom], [p.cx, mid], [gapX(6, -2), mid], [gapX(6, -2), v.cy + 12], [v.right, v.cy + 12])
-}
 // 薪酬核算 → 凭证管理（计提、发放凭证）；项目核算 → 应收管理（开票）
 {
   const s = N('hr.薪酬核算'), v = N('fin.凭证管理')
@@ -178,6 +177,10 @@ link(...down('fin.成本核算', 'fin.期末结账'))
 const path = (pts) => 'M' + pts.map(([x, yy]) => `${x} ${yy}`).join(' L')
 const arrows = FLOWS.map(([k, a, b]) => {
   const s = N(`${k}.${a}`), t = N(`${k}.${b}`)
+  if (s.cx === t.cx) {
+    const down = t.tileTop > s.tileTop
+    return `<path d="${path([[s.cx, down ? s.bottom : s.top], [t.cx, down ? t.top - 4 : t.bottom + 4]])}" class="flow" marker-end="url(#blue)"/>`
+  }
   if (s.tileTop !== t.tileTop) throw new Error(`不在同一行：${a} → ${b}`)
   const dir = t.cx > s.cx ? 1 : -1
   return `<path d="${path([[dir > 0 ? s.right : s.left, s.cy], [dir > 0 ? t.left - 4 : t.right + 4, t.cy]])}" class="flow" marker-end="url(#blue)"/>`

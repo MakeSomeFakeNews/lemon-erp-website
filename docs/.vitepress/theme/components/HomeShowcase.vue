@@ -4,7 +4,7 @@ import { withBase } from 'vitepress'
 
 const STATS = [
   { value: '13', label: '大业务模块' },
-  { value: '140+', label: '功能页面' },
+  { value: '150+', label: '功能页面' },
   { value: '20+', label: '可接入审批的业务单据' },
   { value: '100%', label: '开源，可免费商用' }
 ]
@@ -13,12 +13,12 @@ const MODULES = [
   {
     key: 'scm', name: '供应链', image: 'scm-purchase-detail', link: '/manual/scm/',
     title: '采购、销售与往来单位全流程',
-    points: ['请购、询价比价、招标采购、采购合同、采购订单到入库退货', '报价、价目表、促销返利、销售订单、发货拣货、出库退货与物流发运', '订单审核接入审批，入出库自动生成仓库单据并回写进度', '供应商门户与经销商门户，在线确认订单、送货、对账']
+    points: ['请购、询价比价、招标采购、采购合同、采购订单到入库退货', '报价、客户专属价与价格控制、促销返利、销售提成、销售订单到发货出库', '订单审核接入审批，入出库自动生成仓库单据并回写进度', '供应商门户与经销商门户，在线确认订单、送货、对账']
   },
   {
     key: 'wms', name: '仓库', image: 'wms-stock', link: '/manual/wms/',
     title: '批次、序列号与库位精细化管理',
-    points: ['入库、出库、调拨、盘点，确认后实时更新库存', '批次与序列号全程追踪，临期与安全库存预警', '库位区域与上架策略、库存预留与冻结', '手机 / PDA 扫码收货、上架、拣货、盘点']
+    points: ['入库、出库、调拨、盘点、组装拆卸，确认后实时更新库存', '批次与序列号全程追踪，临期与安全库存预警', '多规格物料（SKU 与尺码矩阵）、收发存汇总、库存预留与冻结', '手机 / PDA 扫码收货、上架、拣货、盘点']
   },
   {
     key: 'mes', name: '生产', image: 'mes-mrp', link: '/manual/mes/',
@@ -33,7 +33,7 @@ const MODULES = [
   {
     key: 'fin', name: '财务', image: 'fin-report', link: '/manual/fin/',
     title: '业财一体化，账实一致',
-    points: ['凭证、账簿、资产负债表、利润表、现金流量表、期末结账', '应收应付由出入库自动生成，收付款核销与账龄分析', '固定资产与折旧、成本核算、标准成本与差异分析', '费用报销、资金计划、预算编制与执行分析、多币种']
+    points: ['凭证、账簿、三大报表、期末结账，自动凭证科目可配置', '应收应付由出入库自动生成，收付款核销与账龄分析', '成本核算支持月末加权、移动加权、先进先出，标准成本与差异分析', '出纳日记账与资金日报、数电票导入勾稽、往来对账单、库龄分析']
   },
   {
     key: 'crm', name: '客户', image: 'crm-opportunity', link: '/manual/crm/',
@@ -126,7 +126,7 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 
     <section class="block">
       <h2>业务全景</h2>
-      <p class="sub">九大业务域、近百个功能节点，单据在模块之间自动流转，一次录入、处处可用</p>
+      <p class="sub">九大业务域、百余个功能节点，单据在模块之间自动流转，一次录入、处处可用</p>
       <a class="arch" :href="withBase('/images/arch/business.png')" target="_blank" rel="noreferrer">
         <img :src="withBase('/images/arch/business.png')" alt="柠檬ERP 业务架构图" />
       </a>

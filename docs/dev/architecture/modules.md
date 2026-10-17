@@ -62,6 +62,7 @@ order: 1
 | `workflow.identity.FlowIdentityProvider` | 工作流查询用户、角色、部门链 | system（`SysFlowIdentityProvider`） |
 | `workflow.FlowApi` | 业务单据发起、撤销流程，查询状态 | workflow（`FlowApiImpl`） |
 | `setting.SettingService` | 读取系统参数 | system（`SysConfigService`） |
+| `rule.BizRules` | 读取当前租户的业务参数 | system（`SysBizRuleService`） |
 | `message.MessageSender` | 发送站内消息 | system（`SysMessageService`） |
 | `record.ChangeLogger` | 记录字段变更历史 | system（`SysChangeLogService`） |
 | `portal.PortalAccounts` | 管理供应商 / 经销商门户账号 | system（`SysPortalAccountService`） |
@@ -72,7 +73,7 @@ order: 1
 | `quality.SupplierQualityProvider` | 供应商来料合格率、索赔统计 | mes（`MesSupplierQualityProvider`） |
 | `org.LaborCostProvider` | 生产岗位平均小时人工成本 | hr（`HrSalaryService`） |
 
-另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`TenantInitializer`（新租户基础数据）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
+另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`TenantInitializer`（新租户基础数据）、`BizRuleProvider`（业务参数定义）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
 
 ## 新增模块
 

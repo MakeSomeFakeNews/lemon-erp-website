@@ -14,7 +14,9 @@ order: 2
 | `src/views/<模块>/<页面>/index.vue` | 菜单页面，路径即菜单的「组件路径」（`wms/warehouse/index`） |
 | `src/components/<模块>/` | 本模块的单据表单（`XxxForm.vue`）、详情（`XxxDetail.vue`）等组件 |
 | `src/components/` | 通用组件：`TableToolbar`、`SearchForm`、`FormDrawer`、`SubPage`、`DictTag`、`StatusSwitch`、`AttachmentPanel`、`ChangeLogPanel`、`ImportModal` |
-| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict` |
+| `src/components/common/` | `CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
+| `src/components/print/` | `PrintPreview`（全局打印预览窗口）、`OverlayDesigner`（套打设计器） |
+| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useCustomFields` |
 
 ## 接口封装
 
@@ -343,5 +345,6 @@ html[data-theme='dark'] .workbench .hero {
 
 - 不使用 `alert`、`confirm`，确认用 `Modal.confirm` 或 `a-popconfirm`，提示用 `message`。
 - 复用已有的格式化函数保持全站一致：数字 `utils/format.js` 的 `formatNumber`，金额 `components/scm/scm.js` 的 `formatMoney`，金额大写 `components/fin/fin.js` 的 `moneyUpper`。
-- 打印使用 `utils/print.js` 的 `printDocs`，见 [单据编号与打印](./doc-no-print)。
+- 打印使用 `utils/print.js` 的 `printDocs`（后端生成 PDF，在全局的打印预览窗口中打印或下载），见 [单据编号与打印](./doc-no-print)。
+- 需要支持自定义字段的表单、列表、详情使用 `useCustomFields`、`CustomFieldsForm`、`useCustomColumns`、`CustomFieldsView`，见 [业务实体接入自定义字段](./custom-field)。
 - 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题和窄屏显示。

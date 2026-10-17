@@ -23,7 +23,7 @@ Docker 部署时在 `environment` 中加上 `LEMON_DEMO_ENABLED: "true"`。
 - 查询、导出、打印、查看详情、登录、退出不受影响
 - 定时任务照常执行（例如数据仓库同步、到期提醒），它们不经过 HTTP 请求
 
-建议同时在「系统管理 → 参数设置」中打开「登录页显示演示账号」，方便访客登录。
+建议同时在「系统管理 → 参数设置」中打开「登录页显示演示账号」，方便访客登录：登录页列出 `admin`（超级管理员）、`test`（只读）两个账号（SaaS 模式下注明租户「柠檬科技」），点击即自动填入账号、密码和租户。演示模式下打开登录页时会默认填好超级管理员（浏览器记住的用户名是 `test` 时填 `test`），访客直接点「登录」即可。登录页填入的密码固定为 `admin123`（`views/login/index.vue` 中的常量），演示环境不要修改这两个账号的密码。
 
 ## 实现原理
 
@@ -42,6 +42,8 @@ Docker 部署时在 `environment` 中加上 `LEMON_DEMO_ENABLED: "true"`。
 | `/bi/olap/pivot` | 多维分析查询 |
 | `/scm/promotion/preview` | 销售订单的促销预览 |
 | `/wms/location/putaway` | 上架库位建议 |
+| `/system/print/pdf` | 单据打印：生成 PDF |
+| `/system/print/jrxml` | 打印模板：下载按当前配置生成的默认 JRXML |
 
 ::: warning 新增接口时注意
 如果新增了用 `POST` 传参、但不修改数据的查询接口，要把它的路径加到 `DemoProperties.allowedPaths` 的默认值中，否则演示模式下无法使用。会修改数据的接口一律不要加入白名单。

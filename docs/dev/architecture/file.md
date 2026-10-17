@@ -75,6 +75,8 @@ public class WmsRecordTypes implements RecordTypeProvider {
 | `rule` | 业务记录的数据权限规则（`DataPermissionRule`），为 null 不按数据权限过滤 |
 | `loader` | 按 ID 读取业务记录，在数据权限规则下执行；返回 null 表示不存在或无权访问 |
 
+登记的业务类型同时用于附件、字段变更历史和 [自定义字段](../guide/custom-field)：三者都由系统模块的 `SysRecordAccessService` 按 `viewPerm` / `editPerm` 和数据权限规则校验访问。
+
 按部门隔离的单据要传入数据权限规则，例如采购合同 `new RecordType("scm_contract", "采购合同", "scm:contract:list", "scm:contract:edit", ScmConstants.CONTRACT_RULE, contractMapper::selectById)`，这样其他部门的用户即使知道 ID 也无法下载附件。
 
 ### 前端
@@ -103,7 +105,7 @@ public R<ImportResult> importRows(@Valid @RequestBody ImportRequest<WmsMaterial>
 
 ## 单据打印
 
-单据打印在前端生成 A4 打印页面放入隐藏 iframe 后调用浏览器打印（可另存为 PDF），版式可在「系统管理 → 打印模板」中配置。开发方法见 [单据编号与打印](../guide/doc-no-print)。
+单据打印由后端用 JasperReports 生成 PDF（`modules/system/print`）：页面组装单据并按「系统管理 → 打印模板」的配置调整后提交 `POST /system/print/pdf`，`PrintService` 按上传的 JRXML、套打定位或 `PrintDesigner` 生成的默认版式排版、分页，返回 PDF 在预览窗口中打印或下载。PDF 使用阅读器内置的宋体、不嵌入字库，服务器需要安装中文字体用于排版时测量文字宽度。打印模板的配置、上传的 JRXML、套打底图都按租户保存在 `sys_print_template` 中，不占用文件目录。条码标签仍由前端生成 HTML 后调用浏览器打印。开发方法见 [单据编号与打印](../guide/doc-no-print)。
 
 ## 部署注意
 

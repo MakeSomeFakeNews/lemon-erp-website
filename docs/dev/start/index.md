@@ -15,6 +15,7 @@
 | 后端 | 认证 | JJWT | 0.12.6 |
 | 后端 | 缓存 | Redis（可切换为进程内缓存） | 6.2 及以上 |
 | 后端 | 数据库 | MySQL | 8.0 及以上 |
+| 后端 | 单据打印 | JasperReports（生成 PDF；PDF 导出使用 OpenPDF，报表表达式用 Eclipse ECJ 编译） | 7.0.8（OpenPDF 1.3.43、ECJ 3.40.0） |
 | 后端 | 其他 | ip2region（IP 归属地离线库）、OSHI（服务器监控） | 3.3.7、6.12.0 |
 | 后端 | 构建 | Gradle（项目自带 Wrapper） | 9.7.1 |
 | 前端 | 框架 | Vue、Vue Router、Pinia | 3.5、4.5、3.0 |
@@ -37,7 +38,7 @@ Spring Boot 4 默认使用 Jackson 3，`ObjectMapper` 等类位于 `tools.jackso
 | 前端 `lemon-web` | 登录后按菜单动态注册路由；请求统一走 `/api`，由拦截器处理统一返回结构 |
 | 启动模块 `lemon-admin` | 启动类 `LemonErpApplication`、`application*.yml`，组装全部业务模块并打包为 `lemon-erp.jar` |
 | 业务模块 `lemon-modules/*` | system、monitor、workflow、dashboard、wms、scm、mes、fin、hr、crm、pm、bi，每个模块包含自己的 Controller、Service、Mapper 和 mapper XML |
-| 框架层 `lemon-framework` | 安全认证、数据权限、多租户、缓存、日志、文件、Excel 导入、定时任务契约，以及业务模块之间的契约接口和事件 |
+| 框架层 `lemon-framework` | 安全认证、数据权限、多租户、缓存、日志、文件、Excel 导入、定时任务契约、演示模式、业务参数契约，以及业务模块之间的契约接口和事件 |
 | 通用层 `lemon-common` | 统一返回 `R`、业务异常、全局异常处理、实体基类、校验分组、工具类 |
 | 基础设施 | MySQL（业务表 + Flowable 的 `ACT_*` 表）、Redis（会话、权限、字典、参数缓存）、本地磁盘（头像、业务附件） |
 

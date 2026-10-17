@@ -20,6 +20,7 @@
 | --- | --- |
 | 操作系统 | Linux（推荐）、Windows、macOS |
 | Java | JRE 17 |
+| 字体 | 至少一种中文字体（如 `fonts-noto-cjk`），单据打印排版时使用，见 [生产环境配置](./production#中文字体) |
 | MySQL | 8.0 及以上，字符集 utf8mb4 |
 | Redis | 6.2 及以上 |
 | Nginx | 1.20 及以上 |
@@ -36,6 +37,7 @@
 | 文件目录 | `UPLOAD_PATH` 和附件目录使用绝对路径，持久化并纳入备份 |
 | Nginx | `/api/` 转发并设置 `X-Forwarded-For`；`client_max_body_size` 调大；启用 HTTPS |
 | 时区 | 服务器、JVM、MySQL 时区一致（如 `Asia/Shanghai`），影响单据日期、定时任务执行时间 |
+| 中文字体 | 服务器已安装中文字体（`fc-list :lang=zh` 有输出），启动日志中没有「服务器没有能显示中文的字体」的警告；打印一张单据确认 PDF 正常 |
 | 默认账号 | 修改 admin 密码，停用 test 账号 |
 | 参数设置 | 关闭「登录页显示演示账号」；按需开启登录验证码、密码策略、页面水印 |
 | 多实例 | 只在一个实例上开启定时任务，上传目录使用共享存储，缓存使用 Redis |

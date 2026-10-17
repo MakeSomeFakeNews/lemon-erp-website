@@ -57,7 +57,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `lemon.demo.enabled` | `false`（环境变量 `LEMON_DEMO_ENABLED`） | 开启后所有用户只能查看，不能新增、修改、删除数据 |
-| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、标记消息已读，以及用 POST 传参的只读查询 |
+| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway`、`/system/print/pdf`、`/system/print/jrxml` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、标记消息已读，以及用 POST 传参的只读查询（多维分析、促销预览、上架建议、单据打印） |
 
 ### lemon.tenant：SaaS 多租户
 
@@ -152,6 +152,8 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 
 prod 中额外设置了 `logging.level.root: info`。
 
+单据打印（JasperReports）没有配置项：纸张、字号、版式都在「系统管理 → 打印模板」中按租户设置，字体与表达式编译器在代码中（`PrintContext`）固定。部署的服务器需要安装中文字体用于排版时测量文字宽度，见 [生产环境配置](../deploy/production#中文字体)。
+
 ## 系统参数与配置文件的关系
 
 「系统管理 → 参数设置」中的参数定义在 `framework/setting/Setting` 枚举中，读取顺序为：
@@ -178,3 +180,5 @@ prod 中额外设置了 `logging.level.root: info`。
 | 附件大小上限（MB） | `upload.attachmentMaxMb` | 20 |
 
 业务代码通过注入 `SettingService` 读取参数，例如 `settings.getInt(Setting.SESSION_EXPIRE_HOURS)`。新增参数时在 `Setting` 中声明即可自动出现在参数设置页面。
+
+「系统管理 → 业务参数」是另一套按租户保存的业务控制规则（超收比例、信用额度控制方式等），不读取配置文件，默认值写在各模块的 `BizRuleProvider` 中，见 [新增业务参数](../guide/biz-rule)。
