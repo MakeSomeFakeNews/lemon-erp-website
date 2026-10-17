@@ -10,14 +10,25 @@ order: 1
 
 | 层 | 包 | 约定 |
 | --- | --- | --- |
-| Controller | `modules.<模块>.controller` | 类名 `<模块前缀><功能>Controller`，路径以模块名开头（`/wms/warehouse`）；只做参数接收、权限、日志，返回 `R` |
-| Service | `modules.<模块>.service` | 业务逻辑、事务、数据权限、状态校验；可以继承 MyBatis-Plus 的 `ServiceImpl`，也可以直接注入 Mapper |
+| Controller | `modules.<模块>.controller` | 类名 `<模块前缀><功能>Controller`，路径以模块名开头（`/wms/warehouse`）；只做参数接收与校验、权限、操作日志，调用一个 Service 方法并返回 `R`，见下文 [Controller 的职责](#controller-的职责) |
+| Service | `modules.<模块>.service` | 业务逻辑、事务、数据权限、状态校验；只注入本模块的 Mapper，其他模块的数据通过所属模块的 Service 读写 |
 | Mapper | `modules.<模块>.mapper` | 继承 `BaseMapper<实体>`；自定义 SQL 写在 `resources/mapper/<模块>/<Mapper名>.xml` |
 | Entity | `modules.<模块>.entity` | 继承 `BaseEntity`（树形用 `TreeEntity`），`@TableName`，Lombok `@Data` + `@EqualsAndHashCode(callSuper = true)` |
-| DTO | `modules.<模块>.dto` | 请求体、视图对象，优先用 record |
+| DTO | `modules.<模块>.dto` | 请求体、查询结果、接口返回结构，用 record 或带 setter 的类，不用 `Map`，见 [接口类型化](#接口类型化) |
 | Model | `modules.<模块>.model` | 枚举、常量、本模块的数据权限规则 |
 
 类名、表名都以模块前缀开头（`WmsWarehouse` → `wms_warehouse`、`ScmOrderService`），质量管理类以 `Qms` 开头、表以 `qms_` 开头。
+
+一个 Service 超过约 500 行、承担多种职责时按职责拆开，原 Service 只做编排。现有的拆分可以参考：
+
+| 原 Service | 拆出的类 | 说明 |
+| --- | --- | --- |
+| `FinCostService`（成本核算） | `fin/service/cost` 包：`CostSourceLoader` 取数、`CostCalculator` 计算、`CostVoucherWriter` 生成凭证，`Valuation` / `MovingValuation` / `FifoValuation` 逐笔计价 | `FinCostService` 只做期间校验、编排和保存；`CostCalculator` 是不依赖 Spring 的纯计算，入参、结果都是强类型的 record（`CostSource`、`CostRows`） |
+| `ScmOrderService`（采购 / 销售订单） | `ScmOrderAssembler` 订单组装、`ScmOrderPricingService` 定价（合同价、促销、返利、限价）、`ScmOrderCreditChecker` 信用检查、`ScmOrderNotifier` 门户通知，`PromotionCalculator` 促销计算、`CreditRules` 信用规则 | |
+| `WmsStockDocService`（出入库单） | `StockDocValidator` 校验、`StockDocReverser` 红字冲销、`StockDocRules` 纯规则 | |
+| `MesWorkOrderService`（生产工单） | `WoLineService` 用料与工序、`WoReportService` 报工、`WoChangeService` 改量与拆分、`WoBomExpander` 虚拟件展开；MRP 的净需求计算 `MrpCalculator` | |
+
+不访问数据库、只根据参数计算结果的规则（如 `StockDocRules`、`CreditRules`、`CostCalculator`、`MrpCalculator`）写成 `final` 类的静态方法或普通类，不注册为 Bean，便于单独验证。
 
 ## 统一返回 R
 
@@ -65,8 +76,9 @@ public R<PageResult<WmsWarehouse>> page(@RequestParam(defaultValue = "1") long c
 if (contract == null) {
     throw new BizException("scm.error.purchaseContractDoesNotExistAccess");
 }
-if (!Integer.valueOf(1).equals(supplier.getStatus())) {
-    throw new BizException("scm.error.supplierDisabled", supplier.getName());   // 参数填入 {0}
+if (contract.getStatus() != ContractStatus.DRAFT) {
+    // 参数填入 {0}；参数本身需要翻译时先 Messages.get 再传入
+    throw new BizException("scm.error.operationNotAllowedContractSCurrent", Messages.get("scm.label.edit"));
 }
 // 指定错误码
 throw new BizException(R.FORBIDDEN, "framework.error.supplierPortalOnlySupplierAccounts");
@@ -75,11 +87,11 @@ throw new BizException(R.FORBIDDEN, "framework.error.supplierPortalOnlySupplierA
 ```properties
 # lemon-scm/src/main/resources/i18n/scm.properties（默认，简体中文）
 scm.error.purchaseContractDoesNotExistAccess=采购合同不存在或没有权限
-scm.error.supplierDisabled=供应商「{0}」已停用
+scm.error.operationNotAllowedContractSCurrent=合同当前状态不能{0}
 
-# scm_en.properties（英文，键与占位符必须一致）
+# scm_en.properties（英文，键与占位符必须一致；单引号写成两个）
 scm.error.purchaseContractDoesNotExistAccess=Purchase contract does not exist or access denied
-scm.error.supplierDisabled=Supplier "{0}" is disabled
+scm.error.operationNotAllowedContractSCurrent=Operation "{0}" is not allowed in the contract''s current status
 ```
 
 返回给前端时按请求头 `Accept-Language` 取对应语言的消息，`getMessage()` 为中文（用于日志）。**不要在 Java 中硬编码返回前端的中文提示**，也不要拼接句子（`"合同当前状态不能" + action`），写成带 `{0}` 参数的完整消息。资源包、参数、单引号转义等规则见 [国际化](./i18n)。
@@ -91,7 +103,7 @@ scm.error.supplierDisabled=Supplier "{0}" is disabled
 | `BizException` | `R.fail(code, 按请求语言取的消息)` |
 | `AccessDeniedException` / `AuthorizationDeniedException` | 403「没有权限，请联系管理员」 |
 | `BindException`（校验失败） | 各字段错误信息用「; 」连接 |
-| `HttpMessageNotReadableException` | 「请求参数格式不正确」 |
+| `HttpMessageNotReadableException` | 枚举、数字等字段取值不合法时「字段 xxx 的取值“yyy”不正确」，其他情况「请求参数格式不正确」 |
 | `MethodArgumentTypeMismatchException` | 「参数「xxx」格式不正确」 |
 | `MissingServletRequestParameterException` | 「缺少参数「xxx」」 |
 | `DuplicateKeyException` | 「数据已存在，请刷新后重试」（并发写入时唯一索引兜底） |
@@ -146,7 +158,7 @@ Excel 导入同样复用新增的校验：`importExecutor.run(req, service::crea
 
 ## 枚举约定
 
-状态、种类、方式等取值一律用枚举，并与字典对应：
+状态、种类、来源、方式等取值一律用枚举。有字典的枚举与**系统字典**一一对应（字典值 = 枚举名称），没有字典的内部取值（如工单来源、费用来源、面试方式）同样定义枚举。枚举放在本模块的 `model` 包，文件名与枚举同名：
 
 ```java
 /** 采购合同状态，与字典 scm_contract_status 对应 */
@@ -159,11 +171,42 @@ public enum ContractStatus {
 }
 ```
 
-- 实体字段直接用枚举类型（`private ContractStatus status;`），MyBatis 按枚举名称（`name()`）存储为字符串，数据库列为 `VARCHAR`；
-- Controller 的查询参数也可以直接用枚举（`@RequestParam(required = false) ContractStatus status`），Spring 按名称转换；
-- 比较用 `==`：`if (contract.getStatus() != ContractStatus.DRAFT)`；
-- **不要写 `"DRAFT".equals(order.getStatus())` 这样的字符串字面量比较**。只能用字面量的地方（mapper XML 中的 SQL）除外；修改到老代码中已有的字符串比较时顺手改为枚举或常量；
-- 字典 `sys_dict_data.dict_value` 与枚举名称一致，前端用 `DictTag` 显示标签。
+- 实体和请求 DTO 的字段直接用枚举类型（`private ContractStatus status;`），MyBatis-Plus 按枚举名称（`name()`）存储为字符串，数据库列为 `VARCHAR`，JSON 中也是名称；
+- Controller 的查询参数也直接用枚举（`@RequestParam(required = false) ContractStatus status`），Spring 按名称转换；请求体中的取值不合法时，全局异常处理返回「字段 status 的取值“XXX”不正确」；
+- 比较用 `==`：`if (contract.getStatus() != ContractStatus.DRAFT)`；条件构造器中也传枚举：`.eq(ScmOrder::getStatus, OrderStatus.APPROVED)`；
+- **不要写 `"DRAFT".equals(order.getStatus())` 这样的字符串字面量比较**，也不要在 `Set.of("A", "B")`、`case "A" ->` 中写字面量。只能用字面量的地方（mapper XML 中的 SQL）除外；修改到老代码中已有的字符串比较时顺手改为枚举或常量。
+
+**状态判断封装在枚举中**。多个状态的组合、允许的流转、等级分数线等写成枚举的常量集合和方法，业务代码不再维护以字符串为键的映射表：
+
+```java
+public enum OrderStatus {
+    DRAFT, APPROVING, APPROVED, PARTIAL, COMPLETED, CLOSED;
+
+    /** 可以入库 / 出库的状态 */
+    public static final Set<OrderStatus> EXECUTABLE = Collections.unmodifiableSet(EnumSet.of(APPROVED, PARTIAL));
+
+    /** 可以入库 / 出库 */
+    public boolean isExecutable() {
+        return EXECUTABLE.contains(this);
+    }
+
+    /** 未审核（草稿、审批中） */
+    public boolean isUnaudited() {
+        return this == DRAFT || this == APPROVING;
+    }
+}
+
+// 使用
+if (!order.getStatus().isExecutable()) { ... }
+orderMapper.update(Wrappers.<ScmOrder>lambdaUpdate().set(ScmOrder::getStatus, OrderStatus.CLOSED)
+        .eq(ScmOrder::getId, id).in(ScmOrder::getStatus, OrderStatus.EXECUTABLE));
+```
+
+**跨模块共用的取值放在 framework**：审批状态 `framework/workflow/ApproveStatus`（字典 `sys_approve_status`）、站内消息类别 `framework/message/MessageCategory`（字典 `sys_message_category`）、流程变量类型 `FlowBusiness.VariableType`。
+
+**业务字典的字段保持字符串**。业务字典（客户等级、物料分类、假期类型等，见 [字典](../architecture/tenant#字典)）的取值由租户维护、可以新增，不能定义为枚举；字段用 `String`，保存时用 `DictLookup.check` 按当前租户的字典校验。程序依赖的内置取值集中定义为常量（如 `hr/model/HrDictValues.LEAVE_ANNUAL`），并在 `init.sql` 中标记为内置（`builtin = 1`），租户不能删除、不能改键值。
+
+**前端同步**：前端比较状态时使用由后端枚举生成的 `@/constants/enums`。新增或修改枚举后在 `lemon-web` 中运行 `npm run gen:enums` 重新生成，`npm run i18n:check` 会检查生成的文件是否与后端一致，见 [前端开发规范](./frontend#状态与类型常量)。只有「文件名与枚举同名的顶层枚举」会被生成，类内部的嵌套枚举不会。
 
 ## SQL 约定
 
@@ -179,21 +222,28 @@ public enum ContractStatus {
 | 不写 `INSERT ... SELECT`、不用 `TRUNCATE` | 多租户拦截器处理不完整，见 [SaaS 多租户](../architecture/tenant) |
 | 兼容 MySQL 8 | `init.sql` 和 mapper XML 中的 SQL 使用 MySQL 8 语法；增量脚本要可重复执行（`NOT EXISTS`、按编码关联，不依赖自增 ID） |
 
-状态流转用带原状态条件的 UPDATE，防止并发重复操作：
-
-```xml
-<update id="transit">
-    UPDATE scm_purchase_contract SET status = #{to}, update_time = NOW() WHERE id = #{id} AND status = #{from}
-</update>
-```
+状态流转用带原状态条件的 UPDATE（`UPDATE ... SET status = 目标 WHERE id = ? AND status = 原状态`），并发操作时只有一个请求成功，另一个更新 0 行并提示刷新。不需要为每张单据在 mapper XML 中写 `transit`，直接用 `framework/data/StatusTransitions`：
 
 ```java
-private void transit(Long id, ContractStatus from, ContractStatus to) {
-    if (contractMapper.transit(id, from, to) == 0) {
-        throw new BizException("scm.error.contractStatusHasChangedRefreshTry");
-    }
-}
+// 失败（状态已被他人改变）时抛出 BizException(消息键)
+StatusTransitions.change(loanMapper, FinLoan::getId, id, FinLoan::getStatus,
+        LoanStatus.DRAFT, LoanStatus.APPROVING, "fin.error.loanStatusHasChangedRefresh");
+
+// 同时设置其他字段；返回是否成功，不抛异常
+boolean ok = StatusTransitions.tryChange(contractMapper, ScmPurchaseContract::getId, id, ScmPurchaseContract::getStatus,
+        ContractStatus.APPROVING, ContractStatus.ACTIVE, w -> w.set(ScmPurchaseContract::getApproveTime, LocalDateTime.now()));
 ```
+
+`StatusTransitions` 等单据开发的公共组件见 [单据开发公共组件](./doc-components)。
+
+只取前几条时用 `framework/data/Queries`（由分页插件按数据库方言生成 LIMIT，不查总数），不要在 Java 中写 `.last("LIMIT 1")`：
+
+```java
+FinCostRun run = Queries.first(costRunMapper, Wrappers.<FinCostRun>lambdaQuery().eq(FinCostRun::getPeriod, period));
+List<ScmOrder> recent = Queries.limit(orderMapper, Wrappers.<ScmOrder>lambdaQuery().orderByDesc(ScmOrder::getId), 10);
+```
+
+需要 `SELECT ... FOR UPDATE` 行锁时写在 mapper XML 中（示例 `WmsMaterialMapper.xml`）。
 
 ## 分页上限与防全表操作
 
@@ -226,23 +276,116 @@ private void transit(Long id, ContractStatus from, ContractStatus to) {
 
 `title` 用「功能」或「功能-动作」；上传文件等参数无意义的接口设 `saveParams = false`。操作日志标题存入数据库，**保持中文、不使用消息键**，源码中在行尾写 `// i18n-ignore`（国际化检查脚本跳过该行）。密码、薪资、证件号、手机号等字段会自动脱敏，见 [日志与审计](../architecture/log)。
 
+## Controller 的职责
+
+Controller 只做这几件事：
+
+1. 接收参数（路径、查询参数、请求体），用 `@Validated` / `@Valid` 校验；
+2. 声明权限 `@PreAuthorize`，增删改加 `@OperLog`；
+3. 调用**一个** Service 方法，把结果包装为 `R` 返回。
+
+不要在 Controller 中写业务逻辑：不注入 Mapper、不拼装查询条件、不做状态判断、不在多个 Service 之间编排、不解析上传的文件（Excel、XML、图片的读取和校验放在 Service 中，Controller 只把 `MultipartFile` 传进去）。一个功能的逻辑需要放在多个 Controller 中复用时，说明它应该在 Service 里。
+
+```java
+@PostMapping("/{id}/submit")
+@PreAuthorize("@ss.hasPerm('fin:loan:add')")
+@OperLog(title = "员工借款提交", type = OperType.UPDATE) // i18n-ignore
+public R<Boolean> submitLoan(@PathVariable Long id) {
+    return R.ok(loanService.submit(id));   // 是否走审批、状态流转都在 Service 中
+}
+```
+
+一个 Controller 只对应一组相关的接口，过大时按业务拆开（例如财务的借款、报销、发票、银行对账、期末结账各有自己的 Controller），拆分时接口地址、权限标识和操作日志标题保持不变。
+
+## 接口类型化
+
+接口的返回值和 Service 的公共方法不使用 `Map<String, Object>`，定义明确的类型：
+
+| 场景 | 写法 | 示例 |
+| --- | --- | --- |
+| 在 Java 中组装的返回结构 | record | `ScmPriceViews.PromotionPreview`、`BiScreen.Factory` |
+| mapper XML 查询的结果 | 带 setter 的类（Lombok `@Data`），MyBatis 按列名映射；加 `@JsonInclude(JsonInclude.Include.NON_NULL)` 时为空的列不输出 | `ScmPriceViews.OrderPriceHistory` |
+| 一个功能的多个返回结构 | 放在同一个 `XxxViews`（或功能名）的 `final` 类中作为嵌套类型 | `ScmPriceViews`、`BankViews`、`CashierViews`、`BiScreen` |
+| 请求体 | record，校验注解写在组件上；多个请求体可以放在 `XxxRequests` 中 | `SrmRequests.Contract`、`QmsRequests` |
+
+mapper XML 中引用嵌套类型时用 `$` 分隔：
+
+```xml
+<select id="selectHistory" resultType="com.lemon.erp.modules.scm.dto.ScmPriceViews$OrderPriceHistory">
+```
+
+```java
+@GetMapping("/history")
+@PreAuthorize("@ss.hasAnyPerm('scm:price:list', 'scm:sales:list', 'scm:purchase:list')")
+public R<List<ScmPriceViews.OrderPriceHistory>> history(...) { ... }
+```
+
+字段名与原先 Map 中的键一致，返回给前端的 JSON 结构不变。定时任务、内部统计中只在方法内部使用的查询结果可以继续用 `Map`。
+
 ## 事务
 
-- 写操作的 Service 方法加 `@Transactional`；一个业务动作涉及多张表、多个模块（如出入库 + 生成应付单）时在同一事务中完成。
+**事务边界放在 Service 层**：
+
+- 修改数据的 Service 公共方法加 `@Transactional`。只要一个操作会写两次及以上（多张表，或「先插入 / 更新、再补一次更新」，如保存单据后回写流程实例 ID、生成凭证后回写凭证 ID），就必须在事务中，否则中途失败会留下不完整的数据。Controller、`JobHandler`、事件发布方不加事务。
+- 一个业务动作涉及多个模块（如出入库 + 生成应付单）时在同一事务中完成：上游在事务中发布同步事件，下游的 `@EventListener` 在同一事务中执行，抛异常会回滚整个操作；只需提交后执行的（发消息、调用外部系统）用 `@TransactionalEventListener`。
 - `DocNoService.next` 声明为 `Propagation.MANDATORY`，**必须在事务中调用**，流水号与单据一起提交或回滚，不会跳号。
-- 同步事件的监听器与发布方在同一事务中，抛异常会回滚整个操作；只需提交后执行的用 `@TransactionalEventListener`。
-- 清理缓存等必须在提交后执行的动作，参照 `TokenService.afterCommit` 注册 `TransactionSynchronization`。
-- 可安全重试的失败（如流程引擎乐观锁冲突）用 Spring 的 `@Retryable`（`org.springframework.resilience.annotation`），重试必须在事务之外。
+- 校验放在写入之前：先校验再插入，不要插入后才发现数据不合法再抛异常。
+- **批量处理每条单独提交**：定时任务、批量导入等逐条处理的场景，用 `TransactionTemplate` 让每条记录各自一个事务，一条失败不影响其他，最后汇总失败的记录（示例 `MesEcnService.effectDue`：到期的工程变更逐张生效，失败的记入结果，任务记为失败）：
+
+  ```java
+  for (MesEcn ecn : ecnMapper.selectDue(today)) {
+      try {
+          transactionTemplate.executeWithoutResult(s -> effect(ecn));
+          effected++;
+      } catch (RuntimeException e) {
+          failures.add(ecn.getEcnNo() + "：" + e.getMessage());
+      }
+  }
+  ```
+
+- **缓存在提交后清理**：修改字典、业务参数等缓存数据时，立即清理一次，并在事务提交后再清理一次，避免并发请求在提交前把旧值重新加载进缓存（`TransactionSynchronizationManager.registerSynchronization` 的 `afterCommit`，参照 `SysDictService`、`SysBizRuleService`、`TokenService` 中的 `afterCommit`）。
+- 同一个类内部调用带 `@Transactional` 的方法时注解不生效（Spring AOP），需要独立事务时放到另一个 Bean 中或用 `TransactionTemplate`。
+- 可安全重试的失败（如流程引擎乐观锁冲突）用 Spring 的 `@Retryable`（`org.springframework.resilience.annotation`），重试必须在事务之外（审批接口的重试注解加在 Controller 方法上，示例 `WfTaskController`）。
+
+## 跨模块访问数据
+
+- **只注入本模块的 Mapper**。读写其他模块的表一律调用所属模块 Service 提供的方法，不要注入其他模块的 Mapper，也不要在本模块的 mapper XML 中 `UPDATE` / `DELETE` 其他模块的表。
+- **下游回写上游**：例如物流发运单发货后 scm 发布 `ShipmentShippedEvent`，fin 监听生成运费应付单，再调用 `ScmShipmentService.bindFreightBill(发运单ID, 应付单ID)` 回写发运单（与发货在同一事务）；同样的还有 `QmsClaimService.bindBill`、`ScmRebateService.bindBill`、`MesEquipmentService.bindVoucher` / `unbindVouchers`。被调用的方法写在数据所属的模块中，注释说明由谁、在什么时机调用。
+- **上游需要下游的能力**：由 `lemon-framework` 定义接口或事件，下游模块实现（如客户关系、项目校验负责人用 `framework/org/UserLookup`，由系统模块的 `SysUserLookup` 实现，客户关系模块因此不再依赖系统模块；业务字典校验用 `framework/dict/DictLookup`）。
+- **只读的跨模块 JOIN 可以保留**：报表、商务智能、首页统计等只读查询可以在 mapper XML 中直接 JOIN 上游模块的表，不必为此在上游增加接口。
+
+契约接口与事件的完整清单见 [模块划分与依赖规则](../architecture/modules) 和 [业务联动](../architecture/integration)。
 
 ## 获取当前用户
 
 ```java
 LoginUser user = SecurityUtils.getLoginUser();
 entity.setDeptId(user.deptId());
-entity.setCreateBy(user.userId());
 ```
 
-需要按部门隔离的数据在新增时写入 `dept_id`、`create_by`。异步线程、定时任务中没有登录用户，用 `SecurityUtils.getUserIdOrNull()`。
+需要按部门隔离的数据在新增时写入 `dept_id`。**制单人 `create_by` 不需要手工赋值**：`MybatisPlusConfig` 中的 `CreateByInnerInterceptor` 在插入实体时，`createBy` 为空则自动填当前登录用户（定时任务等没有登录用户时保持为空）。实体的 `createBy` 字段加 `@JsonProperty(access = JsonProperty.Access.READ_ONLY)`，前端传入的值不会被接收。用 mapper XML 多值 `INSERT` 插入的数据不经过实体，仍需自己赋值。
+
+异步线程、定时任务中没有登录用户，用 `SecurityUtils.getUserIdOrNull()`。
+
+## 金额与数量
+
+金额、数量的计算用 `common/util/Decimals`，精度与数据库一致：金额 2 位、数量和单价 4 位，四舍五入（HALF_UP）：
+
+| 方法 | 说明 |
+| --- | --- |
+| `nz(v)` | null 视为 0 |
+| `sum(items, Item::getAmount)` / `sum(values)` | 求和，null 视为 0 |
+| `money(v)` / `qty(v)` | 保留 2 位 / 4 位 |
+| `percent(part, whole, scale)` | part / whole × 100，whole 为 0 或 null 时返回 null |
+| `positive(v)` | 是否大于 0 |
+| `HUNDRED`、`MONEY_SCALE`、`QTY_SCALE`、`PRICE_SCALE`、`ROUNDING` | 常量 |
+
+```java
+BigDecimal total = Decimals.money(Decimals.sum(items, ScmOrderItem::getAmount));
+BigDecimal yield = Decimals.percent(good, good.add(scrap), 2);
+```
+
+税率、比例类数值统一按**百分数**存储（`DECIMAL(5, 2)`，13 表示 13%，包括发票明细的 `fin_invoice_line.tax_rate`），计算时除以 `Decimals.HUNDRED`；导入外部数据（如数电票 XML 中的 0.13、13%）时先换算为百分数再保存。成本、工资、个税等精度要求不同的计算保持各自的写法。
 
 ## 日期时间
 

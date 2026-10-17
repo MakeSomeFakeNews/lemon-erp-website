@@ -13,7 +13,10 @@ order: 6
 ```
 framework/workflow              业务模块接入工作流的契约（不依赖流程引擎）
 ├── FlowApi                     发起 / 撤销流程、查询状态、判断流程是否可发起
-├── FlowBusiness                业务模块声明的审批流程及其流程变量
+├── FlowBusiness                业务模块声明的审批流程及其流程变量（VariableType：NUMBER / INPUT / SELECT）
+├── ApprovalFlow                单据的流程声明：流程标识 + 业务标识前缀，onFinished 处理审批结果
+├── ApprovalSupport             单据提交审批的统一流程：未发布时直接审核，已发布时改为审批中 → 发起 → 记录实例 ID；撤回
+├── ApproveStatus               需审批生效的业务记录的状态（字典 sys_approve_status），人事异动、付款、项目费用共用
 ├── FlowStatus                  RUNNING / APPROVED / REJECTED / CANCELED（字典 wf_status）
 ├── FlowFinishedEvent           流程结束事件（通过、拒绝、撤回、终止）
 ├── FlowTaskAssignedEvent       任务分配事件（待办提醒）
@@ -151,14 +154,14 @@ public record ConditionRule(String field, ConditionOperator operator, String val
 - 变量为 null（未填写）时只有 `NE` 成立；
 - **条件在 Java 中计算，不拼接 UEL 表达式**，避免表达式注入。
 
-条件中可以引用的变量：流程表单字段（「发起申请」中直接发起的流程），或业务模块在 `FlowBusiness` 中声明、发起时通过 `flowApi.start` 传入的变量。
+条件中可以引用的变量：流程表单字段（「发起申请」中直接发起的流程），或业务模块在 `FlowBusiness` 中声明、发起时传入的变量（`approvalSupport.submit` / `start` 的变量参数，底层为 `flowApi.start`）。
 
 ## 流程变量
 
 | 变量 | 说明 |
 | --- | --- |
 | 表单字段 | 「发起申请」时按 `FormFieldType` 校验并转换后保存为同名变量（数字整数存为 Long、小数存为 Double） |
-| 业务变量 | `flowApi.start` 传入的 `variables` |
+| 业务变量 | `approvalSupport.submit` / `start`（底层 `flowApi.start`）传入的 `variables` |
 | `initiator` | 发起人用户 ID（字符串） |
 | `assignee` | 多实例审批任务的当前审批人 |
 | `wfRejected` | 是否已被拒绝 |

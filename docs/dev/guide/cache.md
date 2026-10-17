@@ -1,5 +1,5 @@
 ---
-order: 9
+order: 10
 ---
 
 # 新增缓存
@@ -94,6 +94,7 @@ private static void afterCommit(Runnable action) {
 }
 ```
 
+- 读多写少、并发读取频繁的缓存（字典、业务参数），用「立即删除一次 + 提交后再删除一次」：立即删除让本事务内后续的读取不再命中旧值，提交后再删除清掉其他请求在提交前加载的旧值（`SysDictService`、`SysBizRuleService` 中的 `evictNowAndAfterCommit`）；
 - 按前缀批量删除用 `cache.deleteByPrefix(prefix)`（Redis 实现基于 `SCAN`，不会阻塞 Redis）。
 
 ## 登记到缓存监控
@@ -103,7 +104,7 @@ private static void afterCommit(Runnable action) {
 ```java
 private static final List<CacheName> CACHES = List.of(
         new CacheName(TokenService.TOKEN_KEY, "monitor.label.loginSessions", "monitor.label.sessionsOnlineUsersAfterClearingAll", 0),
-        new CacheName(TokenService.PERMS_KEY, "monitor.label.userPermissions", "monitor.label.rolesPermissionsSignedUsersReloadedAutomatic", 0),
+        new CacheName(TokenService.PERMS_KEY, "monitor.label.userPermissions", "monitor.label.rolesPermissionsSignedUsersReloadedAutomatically", 0),
         // ...
         new CacheName(OaCarStatService.CACHE_KEY, "monitor.label.oaCarStat", "monitor.label.oaCarStatRemark", 0));
 ```

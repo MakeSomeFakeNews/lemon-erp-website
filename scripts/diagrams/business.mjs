@@ -17,7 +17,7 @@ const LANES = [
     [3, 0, '往来单位', 'ContactsOutlined'], [4, 0, '物料管理', 'AppstoreOutlined'], [5, 0, '物料清单', 'PartitionOutlined'],
     [6, 0, '工作中心', 'ClusterOutlined'], [7, 0, '仓库库位', 'HomeOutlined'], [8, 0, '会计科目', 'AccountBookOutlined'],
     [9, 0, '编码规则', 'NumberOutlined'], [10, 0, '打印模板', 'PrinterOutlined'],
-    [0, 1, '业务参数', 'ControlOutlined'], [1, 1, '自定义字段', 'FormOutlined'], [2, 1, '字典管理', 'BookOutlined'],
+    [0, 1, '业务参数', 'ControlOutlined'], [1, 1, '自定义字段', 'FormOutlined'], [2, 1, '字典管理', 'BookOutlined'], [3, 1, '业务字典', 'ProfileOutlined'],
     [4, 1, '规格属性', 'TagsOutlined'], [6, 1, '第三方集成', 'ApiOutlined'], [8, 1, '凭证科目设置', 'SettingOutlined'], [10, 1, '套打设计', 'LayoutOutlined']
   ] },
   { key: 'sales', name: '销售与客户', icon: 'RiseOutlined', rows: 1, nodes: [
@@ -26,11 +26,12 @@ const LANES = [
     [6, 0, '波次拣货', 'CarryOutOutlined'], [7, 0, '销售出库', 'ExportOutlined'], [8, 0, '物流发运', 'CarOutlined'],
     [9, 0, '销售退货', 'RollbackOutlined'], [10, 0, '服务工单', 'CustomerServiceOutlined']
   ] },
-  { key: 'mes', name: '生产制造', icon: 'BuildOutlined', rows: 1, nodes: [
+  { key: 'mes', name: '生产制造', icon: 'BuildOutlined', rows: 2, nodes: [
     [0, 0, '设备台账', 'DesktopOutlined'], [1, 0, '设备维护', 'ControlOutlined'], [2, 0, '设备 OEE', 'DashboardOutlined'],
     [3, 0, '产能排程', 'FieldTimeOutlined'], [4, 0, '生产计划', 'ScheduleOutlined'], [5, 0, 'MRP 运算', 'CalculatorOutlined'],
     [6, 0, '生产工单', 'FileDoneOutlined'], [7, 0, '生产领料', 'ContainerOutlined'], [8, 0, '生产报工', 'CheckSquareOutlined'],
-    [9, 0, '完工入库', 'ImportOutlined'], [10, 0, '齐套分析', 'AimOutlined']
+    [9, 0, '完工入库', 'ImportOutlined'], [10, 0, '齐套分析', 'AimOutlined'],
+    [3, 1, '生产看板', 'FundProjectionScreenOutlined']
   ] },
   { key: 'scm', name: '采购', icon: 'ShoppingCartOutlined', rows: 1, nodes: [
     [0, 0, '供应商', 'ShopOutlined'], [1, 0, '供应商评估', 'AuditOutlined'], [2, 0, '招标采购', 'TrophyOutlined'],

@@ -1,5 +1,5 @@
 ---
-order: 10
+order: 11
 ---
 
 # 新租户初始化
@@ -21,6 +21,7 @@ order: 10
 
 | 实现 | 模块 | 复制的数据 |
 | --- | --- | --- |
+| `SysDictTenantInitializer` | system | 业务字典的取值（`SysDictService.copyBusinessData`：平台中全部业务字典的数据复制一份到新租户，之后由租户在「业务字典」中维护） |
 | `WmsTenantInitializer` | wms | 规格属性及属性值（颜色、尺码，多规格物料生成 SKU 时使用） |
 | `FinTenantInitializer` | fin | 币种、会计科目表（按编码层级复制，上级科目 ID 换成新租户中的） |
 | `HrTenantInitializer` | hr | 班次（考勤、请假折算工时依赖默认班次） |
@@ -104,7 +105,7 @@ for (FinAccount a : accounts) {
 - **数据量控制**：只复制必要的基础数据和模板，不复制业务单据、示例数据；
 - **批量插入**：数据较多时在 mapper XML 中写单条多值 `INSERT ... VALUES`，不要写 `INSERT ... SELECT`（多租户拦截器处理不完整，且跨租户读取需要先切换上下文）；
 - **单据编号、编码规则**不需要初始化：编码规则未配置时使用 `DocNoCatalog` 中的默认规则，流水号按租户独立；
-- **字典、菜单**是平台共享的，不需要初始化；
+- **菜单、系统字典**是平台共享的，不需要初始化；**业务字典**由 `SysDictTenantInitializer` 统一复制，模块新增业务字典时只需在 `init.sql` 中插入平台（`tenant_id = 1`）的数据，不需要自己写初始化器；
 - **可重复执行**：初始化只在开通时执行一次，但建议写成先检查再插入，便于为已存在的租户手工补数据。
 
 ## 为已有租户补数据

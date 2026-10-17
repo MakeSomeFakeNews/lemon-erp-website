@@ -1,5 +1,5 @@
 ---
-order: 4
+order: 5
 ---
 
 # 单据编号与打印
@@ -41,14 +41,21 @@ public class ScmDocNos {
     public static final String SUPPLIER = "GYS";
     public static final String CUSTOMER = "KH";
 
+    /** 单据编号规则标识 */
+    public static final String REQUISITION = "QG";
+    public static final String INQUIRY = "XJ";
+    // ...
+
     @Bean
     @Order(1)
     public DocNoCatalog scmDocNoCatalog() {
         List<DocNoCatalog.Type> types = new ArrayList<>();
         // 模块名、单据名写消息键（登记在 scm.properties / scm_en.properties），编码规则页面按请求语言显示
-        types.add(doc("QG", "scm.label.purchaseRequisition"));
-        types.add(doc("XJ", "scm.label.rfq"));
+        types.add(doc(REQUISITION, "scm.label.purchaseRequisition"));
+        types.add(doc(INQUIRY, "scm.label.rfq"));
         types.add(doc(ScmTenderService.DOC_NO, "scm.label.tender"));
+        // 订单、出入库按种类枚举逐个登记，前缀和名称定义在枚举中
+        Arrays.stream(OrderKind.values()).forEach(k -> types.add(doc(k.getPrefix(), k.getLabelKey())));
         // ...
         types.add(master(SUPPLIER, "scm.label.supplierCode"));
         types.add(master(CUSTOMER, "scm.label.customerCode"));
@@ -63,7 +70,7 @@ public class ScmDocNos {
 | `Type.master(key, name)` | 前缀 + 6 位流水，不重置 | 主数据（物料、供应商、客户）：新增时编码留空则自动生成 |
 | `new Type(key, name, dateFormat, seqLength, resetCycle)` | 自定义 | 其他 |
 
-`key` 既是规则标识，也是默认前缀，与 `docNoService.next(key)` 的参数一致，建议定义为常量。已使用的模块顺序：scm 1、wms 2、mes 3 和 4、fin 5、crm 6、hr 7，新模块取更大的值。
+`key` 既是规则标识，也是默认前缀，与 `docNoService.next(key)` 的参数一致，**定义为常量**，取号时引用常量（如 `docNoService.next(FinDocNos.LOAN)`、`docNoService.next(ScmPurchaseContractService.DOC_NO)`），不在调用处写字符串；常量放在本模块的 `XxxDocNos` 或单据的 Service 中，按种类区分前缀的单据（订单、出入库）把前缀定义在种类枚举中。已使用的模块顺序：scm 1、wms 2、mes 3 和 4、fin 5、crm 6、hr 7，新模块取更大的值。
 
 页面上可以修改：前缀、日期格式（`yyyyMMdd`、`yyMMdd`、`yyyyMM`、`yyMM`、`yyyy`、不含日期）、流水位数、重置周期（每天、每月、每年、不重置）。校验规则：日期部分至少要精确到重置周期（如按天重置时日期不能只到月，否则编号会重复）、前缀不能与其他单据重复。修改只影响之后的新编号；编码规则按租户保存。
 
@@ -305,6 +312,7 @@ export const PRINT_TYPES = [
 
 ```js
 import { useI18n } from 'vue-i18n'
+import { useDict } from '@/composables/useDict'
 import { printDocs } from '@/utils/print'
 import { findDict } from '@/utils/dict'
 

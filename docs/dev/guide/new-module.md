@@ -6,7 +6,7 @@ order: 3
 
 本页以新增「行政办公」模块（`lemon-oa`）中的「用车申请」为例，演示从 Gradle 模块到前端页面、菜单的完整步骤。后续的 [单据编号与打印](./doc-no-print)、[接入审批流](./approval) 会在这个示例上继续扩展。
 
-示例的需求：员工填写用车申请（用车日期、目的地、事由、乘车人数），保存为草稿，草稿可以修改、删除；申请按制单人部门做数据权限；单号自动生成。
+示例的需求：员工填写用车申请（用车日期、用车类型、目的地、事由、乘车人数），保存为草稿，草稿可以修改、删除；申请按制单人部门做数据权限；单号自动生成。用车申请的状态是程序内置的取值（系统字典 + 枚举），用车类型是各企业可以自行增加的分类（业务字典）。
 
 ::: tip 只是新增一个页面时
 如果只是在已有模块中新增功能，跳过第 1 步，直接在对应模块中新增类和 mapper XML 即可。
@@ -66,7 +66,7 @@ lemon-modules/lemon-oa
     │   ├── dto/CarRequestForm.java
     │   ├── entity/OaCarRequest.java
     │   ├── mapper/OaCarRequestMapper.java
-    │   ├── model/CarRequestStatus.java
+    │   ├── model/CarRequestStatus.java    # 文件名与枚举同名，前端常量据此生成
     │   └── service/OaCarRequestService.java、OaDocNos.java
     └── resources
         ├── mapper/oa/OaCarRequestMapper.xml
@@ -79,6 +79,7 @@ lemon-modules/lemon-oa
 lemon-web/src
 ├── api/oa/car.js
 ├── views/oa/car/index.vue
+├── constants/enums.js     # 由 npm run gen:enums 重新生成，加入 CarRequestStatus
 └── locales
     ├── zh-CN/oa.js        # 页面文字（中文）
     └── en-US/oa.js、以及 menu.js / dict.js 中的菜单和字典译文
@@ -97,8 +98,10 @@ oa.label.oa=行政办公
 oa.label.carRequest=用车申请
 oa.label.modify=修改
 oa.label.delete=删除
+oa.label.carType=用车类型
 oa.error.carRequestNotFound=用车申请不存在或没有权限
 oa.error.carRequestStatusCannot=用车申请当前状态不能{0}
+oa.error.carRequestStatusChanged=用车申请的状态已变化，请刷新后重试
 oa.valid.useDateRequired=用车日期不能为空
 oa.valid.destinationRequired=目的地不能为空
 oa.valid.destinationTooLong=目的地不能超过100个字符
@@ -106,6 +109,7 @@ oa.valid.purposeTooLong=事由不能超过255个字符
 oa.valid.passengersRequired=乘车人数不能为空
 oa.valid.passengersMin=乘车人数至少为1
 oa.valid.passengersMax=乘车人数不能超过60
+oa.valid.carTypeTooLong=用车类型不能超过16个字符
 oa.valid.remarkTooLong=备注不能超过255个字符
 ```
 
@@ -115,8 +119,10 @@ oa.label.oa=Office
 oa.label.carRequest=Car Request
 oa.label.modify=modify
 oa.label.delete=delete
+oa.label.carType=Car type
 oa.error.carRequestNotFound=Car request does not exist or access denied
 oa.error.carRequestStatusCannot=Cannot {0} the car request in its current status
+oa.error.carRequestStatusChanged=The car request status has changed, please refresh and try again
 oa.valid.useDateRequired=Use date is required
 oa.valid.destinationRequired=Destination is required
 oa.valid.destinationTooLong=Destination cannot exceed 100 characters
@@ -124,6 +130,7 @@ oa.valid.purposeTooLong=Purpose cannot exceed 255 characters
 oa.valid.passengersRequired=Number of passengers is required
 oa.valid.passengersMin=Number of passengers must be at least 1
 oa.valid.passengersMax=Number of passengers cannot exceed 60
+oa.valid.carTypeTooLong=Car type cannot exceed 16 characters
 oa.valid.remarkTooLong=Remark cannot exceed 255 characters
 ```
 
@@ -139,6 +146,7 @@ CREATE TABLE oa_car_request (
     tenant_id        BIGINT       NOT NULL DEFAULT 1 COMMENT '租户ID',
     request_no       VARCHAR(32)  NOT NULL COMMENT '申请单号',
     use_date         DATE         NOT NULL COMMENT '用车日期',
+    car_type         VARCHAR(16)           DEFAULT NULL COMMENT '用车类型(业务字典 oa_car_type)',
     destination      VARCHAR(100) NOT NULL COMMENT '目的地',
     purpose          VARCHAR(255)          DEFAULT NULL COMMENT '事由',
     passengers       INT          NOT NULL DEFAULT 1 COMMENT '乘车人数',
@@ -161,21 +169,41 @@ CREATE TABLE oa_car_request (
 - 主键 `id BIGINT AUTO_INCREMENT`，带 `create_time`、`update_time`（由 MyBatis-Plus 自动填充）；
 - 业务表都加 `tenant_id BIGINT NOT NULL DEFAULT 1`，唯一约束末尾加 `tenant_id`；
 - 需要数据权限的表加 `dept_id`、`create_by`（或负责人列）并建索引；
-- 状态等枚举列为 `VARCHAR`，存枚举名称，注释中写明字典类型和取值；
+- 状态等枚举列为 `VARCHAR`，存枚举名称，注释中写明字典类型和取值；业务字典的列至少 `VARCHAR(16)`（业务字典的键值最长 16 位）；
 - 每列写 `COMMENT`，SQL 保持 MySQL 8 可执行。
 
-字典：
+字典分为两种（见 [字典](../architecture/tenant#字典)），按取值是否由程序决定来选择：
+
+| | 系统字典（`kind = 'SYSTEM'`，默认） | 业务字典（`kind = 'BUSINESS'`） |
+| --- | --- | --- |
+| 适用 | 状态、单据类型等代码按取值判断的值 | 纯分类：客户等级、物料分类、用车类型等 |
+| 数据 | 全平台一份（`sys_dict_data.tenant_id = 1`），取值全部为内置 | 每个租户一份，新租户开通时从平台复制 |
+| 维护 | 平台在「字典管理」中只能改名称、颜色、排序、备注 | 租户管理员在「系统管理 → 业务字典」中新增、改名、停用；内置取值不能删除、不能改键值 |
+| 后端 | 定义同名枚举，字段用枚举类型 | 字段用 `String`，保存时 `DictLookup.check` 校验 |
+| 前端判断取值 | `@/constants/enums` 中的常量 | 不判断具体取值（选项全部来自字典） |
+
+用车申请状态是系统字典，用车类型是业务字典：
 
 ```sql
-INSERT INTO sys_dict_type (name, type, status, remark, create_time, update_time) VALUES
-('用车申请状态', 'oa_car_status', 1, '用车申请的状态', NOW(), NOW());
-INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, tag_color, sort, status, create_time, update_time) VALUES
-('oa_car_status', '草稿', 'DRAFT', 'default', 1, 1, NOW(), NOW()),
-('oa_car_status', '审批中', 'APPROVING', 'processing', 2, 1, NOW(), NOW()),
-('oa_car_status', '已批准', 'APPROVED', 'green', 3, 1, NOW(), NOW());
+INSERT INTO sys_dict_type (name, type, kind, status, remark, create_time, update_time) VALUES
+('用车申请状态', 'oa_car_status', 'SYSTEM', 1, '用车申请的状态', NOW(), NOW()),
+('用车类型', 'oa_car_type', 'BUSINESS', 1, '用车申请的用途分类，租户可在「业务字典」中增加', NOW(), NOW());
+-- 系统字典的取值全部内置（builtin = 1）；业务字典只把程序依赖的取值标记为内置，这里没有
+INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, tag_color, sort, status, builtin, create_time, update_time) VALUES
+('oa_car_status', '草稿', 'DRAFT', 'default', 1, 1, 1, NOW(), NOW()),
+('oa_car_status', '审批中', 'APPROVING', 'processing', 2, 1, 1, NOW(), NOW()),
+('oa_car_status', '已批准', 'APPROVED', 'green', 3, 1, 1, NOW(), NOW()),
+('oa_car_type', '公务接待', 'RECEPTION', 'blue', 1, 1, 0, NOW(), NOW()),
+('oa_car_type', '外出办事', 'ERRAND', 'cyan', 2, 1, 0, NOW(), NOW()),
+('oa_car_type', '物资运送', 'DELIVERY', 'orange', 3, 1, 0, NOW(), NOW()),
+('oa_car_type', '其他', 'OTHER', 'default', 9, 1, 0, NOW(), NOW());
 ```
 
-字典标签在数据库中保存中文，英文译文加到前端 `lemon-web/src/locales/en-US/dict.js`：
+- `sys_dict_data.tenant_id` 默认为 1（平台）。业务字典在平台中的这一份是新租户的模板，已开通的租户需要另写脚本按租户插入；
+- 业务字典的键值必须以大写字母开头，只含大写字母、数字、下划线，不超过 16 位（租户在页面上新增时同样校验）；
+- 字典类型的编码和种类保存后不能修改。
+
+字典标签在数据库中保存中文，英文译文加到前端 `lemon-web/src/locales/en-US/dict.js`（`npm run i18n:check` 会检查 `init.sql` 中的内置字典是否都有英文）：
 
 ```js
   // 用车申请状态
@@ -183,6 +211,13 @@ INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, tag_color, sort, s
     DRAFT: 'Draft', // 草稿
     APPROVING: 'In Approval', // 审批中
     APPROVED: 'Approved' // 已批准
+  },
+  // 用车类型
+  oa_car_type: {
+    RECEPTION: 'Reception', // 公务接待
+    ERRAND: 'Errand', // 外出办事
+    DELIVERY: 'Delivery', // 物资运送
+    OTHER: 'Other' // 其他
   },
 ```
 
@@ -199,11 +234,16 @@ package com.lemon.erp.modules.oa.model;
  * 用车申请状态，与字典 oa_car_status 对应
  */
 public enum CarRequestStatus {
+    /** 草稿 */
     DRAFT,
+    /** 审批中 */
     APPROVING,
+    /** 已批准 */
     APPROVED
 }
 ```
+
+枚举放在 `model` 包、文件名与枚举同名（不要写成其他类的嵌套枚举），前端常量 `@/constants/enums` 才会生成它。
 
 ```java
 package com.lemon.erp.modules.oa.entity;
@@ -211,6 +251,7 @@ package com.lemon.erp.modules.oa.entity;
 import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.lemon.erp.common.base.BaseEntity;
 import com.lemon.erp.modules.oa.model.CarRequestStatus;
 import lombok.Data;
@@ -227,6 +268,10 @@ public class OaCarRequest extends BaseEntity {
 
     private LocalDate useDate;
 
+    /** 用车类型（业务字典 oa_car_type，租户可以新增取值，所以是 String） */
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
+    private String carType;
+
     private String destination;
 
     /** 可以清空的字段：更新时 null 也写入（默认策略会跳过 null） */
@@ -239,6 +284,8 @@ public class OaCarRequest extends BaseEntity {
 
     private Long deptId;
 
+    /** 制单人：插入时自动填当前用户，JSON 中只读（前端传入的值不会被接收） */
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     private Long createBy;
 
     private String flowInstanceId;
@@ -254,7 +301,8 @@ public class OaCarRequest extends BaseEntity {
 
 - 继承 `BaseEntity` 获得 `id`、`createTime`、`updateTime`（插入、更新时自动填充，JSON 只读）；
 - 实体中**不需要** `tenantId` 字段，由多租户拦截器自动处理；
-- 状态字段直接用枚举类型，MyBatis 按名称存储；
+- 状态字段直接用枚举类型，MyBatis 按名称存储；业务字典字段用 `String`；
+- `createBy` 不需要在 Service 中赋值：插入实体时为空则由 `CreateByInnerInterceptor` 自动填当前登录用户；
 - 非表字段加 `@TableField(exist = false)`；
 - MyBatis-Plus 的 `updateById` 默认跳过值为 null 的字段，允许用户清空的可选字段加 `@TableField(updateStrategy = FieldStrategy.ALWAYS)`。
 
@@ -273,6 +321,7 @@ import java.time.LocalDate;
 
 public record CarRequestForm(
         @NotNull(message = "{oa.valid.useDateRequired}") LocalDate useDate,
+        @Size(max = 16, message = "{oa.valid.carTypeTooLong}") String carType,
         @NotBlank(message = "{oa.valid.destinationRequired}") @Size(max = 100, message = "{oa.valid.destinationTooLong}") String destination,
         @Size(max = 255, message = "{oa.valid.purposeTooLong}") String purpose,
         @NotNull(message = "{oa.valid.passengersRequired}") @Min(value = 1, message = "{oa.valid.passengersMin}") @Max(value = 60, message = "{oa.valid.passengersMax}") Integer passengers,
@@ -295,9 +344,6 @@ public interface OaCarRequestMapper extends BaseMapper<OaCarRequest> {
 
     IPage<OaCarRequest> selectPageList(IPage<OaCarRequest> page, @Param("status") CarRequestStatus status,
                                        @Param("keyword") String keyword);
-
-    /** 状态流转：只有当前状态为 from 时才更新，返回更新行数 */
-    int transit(@Param("id") Long id, @Param("from") CarRequestStatus from, @Param("to") CarRequestStatus to);
 }
 ```
 
@@ -309,8 +355,8 @@ public interface OaCarRequestMapper extends BaseMapper<OaCarRequest> {
 <mapper namespace="com.lemon.erp.modules.oa.mapper.OaCarRequestMapper">
 
     <select id="selectPageList" resultType="com.lemon.erp.modules.oa.entity.OaCarRequest">
-        SELECT r.id, r.request_no, r.use_date, r.destination, r.purpose, r.passengers, r.status,
-               r.dept_id, r.create_by, r.create_time, u.nickname AS create_by_name
+        SELECT r.id, r.request_no, r.use_date, r.car_type, r.destination, r.purpose, r.passengers, r.status,
+               r.dept_id, r.create_by, r.flow_instance_id, r.create_time, u.nickname AS create_by_name
         FROM oa_car_request r
         LEFT JOIN sys_user u ON u.id = r.create_by
         <where>
@@ -322,17 +368,14 @@ public interface OaCarRequestMapper extends BaseMapper<OaCarRequest> {
         ORDER BY r.id DESC
     </select>
 
-    <update id="transit">
-        UPDATE oa_car_request SET status = #{to}, update_time = NOW() WHERE id = #{id} AND status = #{from}
-    </update>
-
 </mapper>
 ```
 
 - 第一个参数为 `IPage` 时，MyBatis-Plus 自动分页并执行 count；
 - 关联查询用 JOIN 一次查出制单人姓名，避免 N+1；
 - 开启 SaaS 时两张表都会自动追加租户条件，不需要在 XML 中写 `tenant_id`；
-- 开启了 `map-underscore-to-camel-case`，`create_by_name` 自动映射到 `createByName`。
+- 开启了 `map-underscore-to-camel-case`，`create_by_name` 自动映射到 `createByName`；
+- 状态流转（`UPDATE ... WHERE status = 原状态`）不需要在 XML 中写，Service 中用 `StatusTransitions`。
 
 ## 5. Service
 
@@ -343,11 +386,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lemon.erp.common.exception.BizException;
 import com.lemon.erp.common.i18n.Messages;
 import com.lemon.erp.common.result.PageResult;
-import com.lemon.erp.framework.security.LoginUser;
+import com.lemon.erp.framework.data.StatusTransitions;
+import com.lemon.erp.framework.dict.DictLookup;
 import com.lemon.erp.framework.security.SecurityUtils;
 import com.lemon.erp.framework.security.datascope.DataPermission;
-import com.lemon.erp.framework.security.datascope.DataPermissionContext;
 import com.lemon.erp.framework.security.datascope.DataPermissionRule;
+import com.lemon.erp.framework.security.datascope.DataScopes;
 import com.lemon.erp.modules.oa.dto.CarRequestForm;
 import com.lemon.erp.modules.oa.entity.OaCarRequest;
 import com.lemon.erp.modules.oa.mapper.OaCarRequestMapper;
@@ -356,8 +400,6 @@ import com.lemon.erp.modules.wms.service.DocNoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.function.Supplier;
 
 /**
  * 用车申请：草稿 → （提交审批）→ 已批准
@@ -370,9 +412,12 @@ public class OaCarRequestService {
     public static final String DOC_NO = "YC";
     /** 数据权限：按制单人部门、制单人 */
     public static final DataPermissionRule RULE = new DataPermissionRule("oa_car_request", "dept_id", "create_by");
+    /** 用车类型的业务字典 */
+    private static final String CAR_TYPE_DICT = "oa_car_type";
 
     private final OaCarRequestMapper requestMapper;
     private final DocNoService docNoService;
+    private final DictLookup dictLookup;
 
     @DataPermission(table = "oa_car_request", deptColumn = "dept_id", userColumn = "create_by")
     public PageResult<OaCarRequest> page(long current, long size, CarRequestStatus status, String keyword) {
@@ -387,13 +432,13 @@ public class OaCarRequestService {
 
     @Transactional
     public Long create(CarRequestForm form) {
-        LoginUser user = SecurityUtils.getLoginUser();
+        validate(form);
         OaCarRequest request = new OaCarRequest();
         request.setRequestNo(docNoService.next(DOC_NO));
         apply(request, form);
         request.setStatus(CarRequestStatus.DRAFT);
-        request.setDeptId(user.deptId());
-        request.setCreateBy(user.userId());
+        request.setDeptId(SecurityUtils.getLoginUser().deptId());
+        // create_by 由 CreateByInnerInterceptor 在插入时自动填当前用户
         requestMapper.insert(request);
         return request.getId();
     }
@@ -401,6 +446,7 @@ public class OaCarRequestService {
     @Transactional
     public void update(Long id, CarRequestForm form) {
         OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "oa.label.modify");
+        validate(form);
         apply(request, form);
         requestMapper.updateById(request);
     }
@@ -413,22 +459,23 @@ public class OaCarRequestService {
 
     // ---------------------------------------------------------------- 内部
 
+    /** 业务字典按当前租户的取值校验（租户可能新增了取值，不在代码里写死） */
+    private void validate(CarRequestForm form) {
+        dictLookup.check(CAR_TYPE_DICT, form.carType(), "oa.label.carType");
+    }
+
     private static void apply(OaCarRequest request, CarRequestForm form) {
         request.setUseDate(form.useDate());
+        request.setCarType(form.carType());
         request.setDestination(form.destination().trim());
         request.setPurpose(form.purpose());
         request.setPassengers(form.passengers());
         request.setRemark(form.remark());
     }
 
-    /** 按 ID 读取，并校验当前用户的数据权限 */
+    /** 按 ID 读取并校验当前用户的数据权限：看不到的数据视为不存在 */
     OaCarRequest getAccessible(Long id) {
-        Supplier<OaCarRequest> loader = () -> requestMapper.selectById(id);
-        OaCarRequest request = SecurityUtils.getDataScope().all() ? loader.get() : DataPermissionContext.execute(RULE, loader);
-        if (request == null) {
-            throw new BizException("oa.error.carRequestNotFound");
-        }
-        return request;
+        return DataScopes.require(RULE, () -> requestMapper.selectById(id), "oa.error.carRequestNotFound");
     }
 
     /** @param action 动作名称的消息键，填入提示的 {0} */
@@ -439,16 +486,26 @@ public class OaCarRequestService {
         }
         return request;
     }
+
+    /** 状态流转：只有当前状态为 from 时才更新（并发操作时只有一个成功），失败提示刷新 */
+    void transit(Long id, CarRequestStatus from, CarRequestStatus to) {
+        StatusTransitions.change(requestMapper, OaCarRequest::getId, id, OaCarRequest::getStatus, from, to,
+                "oa.error.carRequestStatusChanged");
+    }
 }
 ```
 
 要点：
 
-- 列表方法加 `@DataPermission`；详情、修改、删除先用 `getAccessible` 校验数据权限，防止通过构造 ID 越权；
-- 写方法加 `@Transactional`；`docNoService.next` 必须在事务中调用；
-- 新增时写入 `dept_id`、`create_by`；
-- 状态比较用枚举 `!=`，不写字符串字面量；
-- 提示一律用消息键，不拼接中文；参数本身需要翻译时先 `Messages.get` 再传入。
+- 列表方法加 `@DataPermission`；详情、修改、删除先用 `getAccessible`（`DataScopes.require`）校验数据权限，防止通过构造 ID 越权；
+- 事务边界在 Service：写方法加 `@Transactional`；`docNoService.next` 必须在事务中调用；校验在写入之前完成；
+- 新增时写入 `dept_id`；`create_by` 自动填充，不需要也不应该手工赋值；
+- 状态比较用枚举 `!=`，不写字符串字面量；状态流转用 `StatusTransitions`（`transit` 在提交、审批时使用，见 [接入审批流](./approval)）；
+- 业务字典字段用 `DictLookup.check(字典, 值, 字段名称键)` 校验，值为空时不校验（是否必填由校验注解决定），取值不在当前租户的字典中（或已停用）时提示「用车类型“XXX”不正确，请选择业务字典中启用的取值」；
+- 提示一律用消息键，不拼接中文；参数本身需要翻译时先 `Messages.get` 再传入；
+- 本模块只注入自己的 Mapper；需要其他模块的数据时调用该模块的 Service（如取号用 wms 的 `DocNoService`）。
+
+`StatusTransitions`、`DataScopes` 以及明细行、金额计算、审批等公共组件的完整说明见 [单据开发公共组件](./doc-components)。
 
 ## 6. Controller
 
@@ -528,6 +585,8 @@ public class OaCarRequestController {
 
 接口路径以模块名开头；每个接口声明权限；增删改加 `@OperLog`（标题存入操作日志，保持中文，行尾写 `// i18n-ignore`）。接口最终地址为 `/api/oa/car`。
 
+Controller 只接收参数、校验、声明权限和日志，每个接口调用一个 Service 方法；不注入 Mapper、不写判断和编排，见 [后端开发规范](./backend#controller-的职责)。返回值用实体、record 或 `PageResult`，不返回 `Map`。
+
 ## 7. 单据编号声明
 
 在本模块中声明单据编号类型，「系统管理 → 编码规则」页面据此列出可配置的单据：
@@ -558,6 +617,23 @@ public class OaDocNos {
 
 ## 8. 前端接口与页面
 
+先由后端枚举生成前端常量（新增或修改枚举后都要重新生成，生成的文件随代码一起提交）：
+
+```bash
+cd lemon-web
+npm run gen:enums      # src/constants/enums.js 中加入 CarRequestStatus
+```
+
+```js
+// src/constants/enums.js（生成的内容，不要手工修改）
+/** com.lemon.erp.modules.oa.model.CarRequestStatus（字典 oa_car_status） */
+export const CarRequestStatus = Object.freeze({
+  DRAFT: 'DRAFT', // 草稿
+  APPROVING: 'APPROVING', // 审批中
+  APPROVED: 'APPROVED', // 已批准
+})
+```
+
 `lemon-web/src/api/oa/car.js`：
 
 ```js
@@ -585,6 +661,7 @@ export default {
     confirmDelete: '确定删除用车申请「{no}」？',
     requestNo: '申请单号',
     useDate: '用车日期',
+    carType: '用车类型',
     destination: '目的地',
     passengers: '乘车人数',
     purpose: '事由',
@@ -608,6 +685,7 @@ export default {
     confirmDelete: 'Delete car request "{no}"?',
     requestNo: 'Request No.',
     useDate: 'Use Date',
+    carType: 'Car Type',
     destination: 'Destination',
     passengers: 'Passengers',
     purpose: 'Purpose',
@@ -655,15 +733,18 @@ export default {
         :data-source="list"
         :loading="loading"
         :pagination="pagination"
-        :scroll="{ x: 1100, y: '100%' }"
+        :scroll="{ x: 1210, y: '100%' }"
         @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
-          <template v-if="column.key === 'status'">
+          <template v-if="column.key === 'carType'">
+            <DictTag type="oa_car_type" :value="record.carType" />
+          </template>
+          <template v-else-if="column.key === 'status'">
             <DictTag type="oa_car_status" :value="record.status" />
           </template>
           <template v-else-if="column.key === 'action'">
-            <span v-if="record.status === 'DRAFT'" class="table-actions">
+            <span v-if="record.status === CarRequestStatus.DRAFT" class="table-actions">
               <a-button v-perm="'oa:car:edit'" type="link" size="small" @click="drawer.openEdit(record)">
                 <template #icon><EditOutlined /></template>{{ $t('common.action.edit') }}
               </a-button>
@@ -686,6 +767,11 @@ export default {
           <a-col :xs="24" :sm="12">
             <a-form-item :label="$t('oa.car.useDate')" name="useDate">
               <a-date-picker v-model:value="form.useDate" value-format="YYYY-MM-DD" class="full" />
+            </a-form-item>
+          </a-col>
+          <a-col :xs="24" :sm="12">
+            <a-form-item :label="$t('oa.car.carType')" name="carType">
+              <a-select v-model:value="form.carType" allow-clear :options="toOptions(dict.oa_car_type)" />
             </a-form-item>
           </a-col>
           <a-col :xs="24" :sm="12">
@@ -717,13 +803,14 @@ export default {
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { message } from 'ant-design-vue'
 import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import DictTag from '@/components/DictTag.vue'
 import FormDrawer from '@/components/FormDrawer.vue'
 import SearchForm from '@/components/SearchForm.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
 import { addCarRequest, deleteCarRequest, getCarRequest, pageCarRequest, updateCarRequest } from '@/api/oa/car'
+import { CarRequestStatus } from '@/constants/enums'
+import { useAction } from '@/composables/useAction'
 import { useColumns } from '@/composables/useColumns'
 import { useDict } from '@/composables/useDict'
 import { useFormDrawer } from '@/composables/useFormDrawer'
@@ -731,11 +818,12 @@ import { useTable } from '@/composables/useTable'
 import { toOptions } from '@/utils/dict'
 
 const { t } = useI18n()
-const dict = useDict('oa_car_status')
+const dict = useDict('oa_car_status', 'oa_car_type')
 
 const columns = [
   { title: t('oa.car.requestNo'), dataIndex: 'requestNo', width: 160 },
   { title: t('oa.car.useDate'), dataIndex: 'useDate', width: 120 },
+  { title: t('oa.car.carType'), key: 'carType', width: 110, dict: 'oa_car_type' },
   { title: t('oa.car.destination'), dataIndex: 'destination', width: 200, ellipsis: true },
   { title: t('oa.car.passengers'), dataIndex: 'passengers', width: 100 },
   { title: t('common.field.status'), key: 'status', width: 100, dict: 'oa_car_status' },
@@ -762,20 +850,21 @@ const rules = {
   passengers: [{ required: true, message: t('common.rule.required', { name: t('oa.car.passengers') }) }]
 }
 const drawer = useFormDrawer({
-  emptyForm: () => ({ id: undefined, useDate: undefined, destination: '', purpose: '', passengers: 1, remark: '' }),
-  fetch: (record) => getCarRequest(record.id),
+  emptyForm: () => ({ id: undefined, useDate: undefined, carType: undefined, destination: '', purpose: '', passengers: 1, remark: '' }),
+  fetch: async (record) => {
+    const d = await getCarRequest(record.id)
+    return { ...d, carType: d.carType || undefined }
+  },
   create: addCarRequest,
   update: updateCarRequest,
-  toPayload: ({ useDate, destination, purpose, passengers, remark }) => ({ useDate, destination, purpose, passengers, remark }),
+  toPayload: ({ useDate, carType, destination, purpose, passengers, remark }) =>
+    ({ useDate, carType: carType || null, destination, purpose, passengers, remark }),
   onSuccess: load
 })
 const { formRef, form } = drawer
 
-async function remove(id) {
-  await deleteCarRequest(id)
-  message.success(t('common.msg.deleteSuccess'))
-  load()
-}
+// 删除：调接口 → 提示 → 刷新列表（a-popconfirm 已确认，这里不再弹确认框）
+const remove = useAction(deleteCarRequest, { successKey: 'common.msg.deleteSuccess', reload: () => load() })
 </script>
 
 <style scoped>
@@ -785,7 +874,13 @@ async function remove(id) {
 </style>
 ```
 
-有明细行、字段多的单据，表单改为 `<FormDrawer page>` 子页并封装为 `components/oa/CarRequestForm.vue`，详情用 `SubPage` 封装为 `CarRequestDetail.vue`，见 [前端开发规范](./frontend)。
+要点：
+
+- 判断状态用生成的常量 `CarRequestStatus.DRAFT`，不写 `'DRAFT'`；用车类型是业务字典，下拉选项全部来自 `dict.oa_car_type`，不写死可选值；
+- 删除等单条操作用 `useAction`，失败时请求拦截器已提示，不需要 catch；
+- 列表列的 `dict` 让导出 Excel 时输出字典标签。
+
+有明细行、字段多的单据，表单改为 `<FormDrawer page>` 子页并封装为 `components/oa/CarRequestForm.vue`，明细行用 `useLineItems` + `LineItemsTable`，详情用 `SubPage` 封装为 `CarRequestDetail.vue`，完整写法见 [单据开发公共组件](./doc-components)。
 
 ## 9. 菜单与授权
 
@@ -817,10 +912,10 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 
 1. `./gradlew build` 编译通过、无警告；
 2. 执行建表、字典、菜单 SQL，重启后端；
-3. 用 admin 登录，顶部导航出现「行政办公」，新增、修改、删除用车申请，单号按 `YC` + 日期 + 流水生成；
+3. 用 admin 登录，顶部导航出现「行政办公」，新增、修改、删除用车申请，单号按 `YC` + 日期 + 流水生成；在「系统管理 → 业务字典」中给「用车类型」新增一个取值，确认表单中可以选择、保存通过；停用后再保存提示取值不正确；
 4. 用只有 staff 角色的账号登录，验证按钮和数据权限（仅本人数据）；
 5. 在「系统监控 → 操作日志」中确认增删改都有记录；
-6. 运行 `python3 scripts/check_i18n.py lemon-modules/lemon-oa` 和 `cd lemon-web && npm run i18n:check`，确认两个检查都通过；在顶栏切换为 English，确认菜单、页面文字、字典标签、校验和业务提示都是英文；
+6. 运行 `python3 scripts/check_i18n.py lemon-modules/lemon-oa` 和 `cd lemon-web && npm run i18n:check`，确认两个检查都通过（前端检查同时核对 `constants/enums.js` 与后端枚举一致、`init.sql` 中的内置菜单和字典都有英文）；在顶栏切换为 English，确认菜单、页面文字、字典标签、校验和业务提示都是英文；
 7. 开启 `LEMON_TENANT_ENABLED=true` 后用另一个租户登录，确认数据互相隔离（新租户需要在租户套餐中加入该菜单）。
 
 ## 其他可选的扩展
@@ -832,7 +927,8 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 | 首页待办 | 实现 `TodoProvider`，数量在 mapper XML 中一次查询 |
 | 附件、字段变更历史 | 实现 `RecordTypeProvider` 登记业务类型，前端放 `AttachmentPanel` / `ChangeLogPanel`，见 [文件与附件](../architecture/file) |
 | 自定义字段 | 登记业务类型后前端接入 `useCustomFields`，见 [业务实体接入自定义字段](./custom-field) |
-| 可配置的业务规则（比例、开关、方式） | 实现 `BizRuleProvider` 登记业务参数，见 [新增业务参数](./biz-rule) |
+| 明细行、金额合计 | `DetailLines`、`Decimals`，前端 `useLineItems` + `LineItemsTable`，见 [单据开发公共组件](./doc-components) |
+| 可配置的业务规则（比例、开关、方式、表格） | 实现 `BizRuleProvider` 登记业务参数，见 [新增业务参数](./biz-rule) |
 | 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除 |
 | 定时提醒 | [新增定时任务](./job) |
 | 新租户需要的基础数据 | [新租户初始化](./tenant-init) |

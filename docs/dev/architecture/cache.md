@@ -38,7 +38,7 @@ public interface CacheService {
 | --- | --- | --- | --- | --- |
 | `login:token:` | 登录会话 | `OnlineSession`，key 为会话 ID | 登录有效期 | `TokenService.TOKEN_KEY` |
 | `login:perms:` | 用户权限 | `LoginUser`，key 为用户 ID | 30 分钟 | `TokenService.PERMS_KEY` |
-| `dict:` | 字典数据 | 按字典类型缓存的字典数据 | 24 小时 | `SysDictService.CACHE_KEY` |
+| `dict:` | 字典数据 | 按字典类型缓存的字典数据：系统字典 `dict:{type}`，业务字典按租户 `dict:{租户ID}:{type}` | 24 小时 | `SysDictService.CACHE_KEY` |
 | `login:fail:` | 登录失败 | 按用户名记录的连续失败次数（非平台租户带租户 ID） | 锁定时长 | `PasswordPolicy.FAIL_KEY` |
 | `login:captcha:` | 登录验证码 | 验证码答案 | 2 分钟，校验一次作废 | `CaptchaService.CACHE_KEY` |
 | `settings:all` | 系统参数 | 参数设置中修改过的参数 | 12 小时 | `SysConfigService.CACHE_KEY` |
@@ -50,7 +50,7 @@ public interface CacheService {
 
 ## 缓存一致性
 
-- **修改后删除**：数据修改后删除对应缓存，下次读取时重新加载（Cache-Aside）。字典修改后删除 `dict:{type}`，参数保存后删除 `settings:all`，业务参数保存后删除当前租户的 `bizrule:{租户ID}`。
+- **修改后删除**：数据修改后删除对应缓存，下次读取时重新加载（Cache-Aside）。字典修改后删除对应的 `dict:{type}` 或 `dict:{租户ID}:{type}`，参数保存后删除 `settings:all`，业务参数保存后删除当前租户的 `bizrule:{租户ID}`。字典、业务参数在修改时立即删除一次，并在事务提交后再删除一次，避免并发请求在提交前把旧值重新加载进缓存。
 - **权限缓存在事务提交后删除**：`TokenService.evictLoginUser` / `evictAllLoginUsers` 通过 `TransactionSynchronization.afterCommit` 在提交后执行，避免并发请求在提交前把旧权限重新加载进缓存。新增类似的缓存清理时可以参照。
 - **直接改库**：直接用 SQL 修改了角色、菜单、字典等数据后，需要手工删除对应前缀（`login:perms:*`、`dict:*`），或在缓存监控中清空。与其他项目共用 Redis 时只按前缀删除，不要执行 `FLUSHDB`。
 
@@ -64,7 +64,7 @@ private String failKey(String username) {
 }
 ```
 
-按租户保存的整体数据直接以租户 ID 作 key，例如业务参数 `bizrule:{租户ID}`（`SysBizRuleService`，没有租户上下文时按平台租户）、第三方集成的 access_token `im:token:{租户ID}:{平台}`。第三方授权的 `im:state:` 以随机数作 key，租户 ID 保存在值中，回调时据此设置租户上下文。以全局唯一 ID（用户 ID、会话 ID）作 key，或缓存平台共享表（字典、参数设置）的数据时不需要带租户。
+按租户保存的整体数据直接以租户 ID 作 key，例如业务参数 `bizrule:{租户ID}`（`SysBizRuleService`，没有租户上下文时按平台租户）、第三方集成的 access_token `im:token:{租户ID}:{平台}`。第三方授权的 `im:state:` 以随机数作 key，租户 ID 保存在值中，回调时据此设置租户上下文。以全局唯一 ID（用户 ID、会话 ID）作 key，或缓存平台共享的数据（系统字典、参数设置）时不需要带租户；业务字典每个租户一份，缓存键带租户 ID。
 
 ## 进程内缓存
 

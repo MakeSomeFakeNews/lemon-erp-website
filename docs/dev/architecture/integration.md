@@ -4,7 +4,7 @@ order: 7
 
 # 业务联动
 
-ERP 的价值在于单据之间的自动联动：出入库更新库存、生成应收应付，业务单据生成凭证，审批结果回写单据。柠檬ERP 在模块单向依赖的前提下，用三种方式实现联动。
+ERP 的价值在于单据之间的自动联动：出入库更新库存、生成应收应付，业务单据生成凭证，审批结果回写单据。柠檬ERP 在模块单向依赖的前提下，用三种方式实现联动；无论哪种方式，**一个模块只写自己的表**，修改其他模块的数据必须调用所属模块的 Service 方法或通过 framework 的契约接口 / 事件。
 
 ## 三种联动方式
 
@@ -19,18 +19,51 @@ ERP 的价值在于单据之间的自动联动：出入库更新库存、生成�
 柠檬ERP 的领域事件都用 Spring 的 `ApplicationEventPublisher` 在业务事务中**同步**发布，监听方用 `@EventListener`：
 
 ```java
-// fin：出入库确认后生成应收 / 应付单，与出入库在同一事务
+// fin（FinBillService）：出入库确认后生成应收 / 应付单，与出入库在同一事务
 @EventListener
 public void onTradeDocConfirmed(TradeDocConfirmedEvent e) {
-    TradeKind kind = TradeKind.valueOf(e.kind());
-    String billKind = kind.getOrderKind() == OrderKind.SALES ? BILL_AR : BILL_AP;
+    TradeKind kind = e.kind();
+    BillKind billKind = kind.getOrderKind() == OrderKind.SALES ? BillKind.AR : BillKind.AP;
     ...
+    billMapper.insert(bill);
 }
 ```
+
+事件中的种类、状态等字段直接用枚举类型（如 `TradeDocConfirmedEvent.kind()` 是 `TradeKind`），监听方不需要再从字符串转换。
 
 - 监听器与发布方在同一事务中执行，监听器抛出异常会让整张单据回滚，保证账实一致（例如期间已结账时生成应付单失败，采购入库也不会成功）；
 - 下游可以通过抛出 `BizException` 阻止上游的操作（例如销售订单反审核时发布 `OrderStatusChangedEvent`，已生成生产计划时监听方抛异常阻止反审核）；
 - 只需在提交后执行的副作用（发消息、调用外部系统）用 `@TransactionalEventListener`。
+
+### 下游处理后回写上游
+
+下游处理上游的事件后，常常需要把生成的单据 ID 记回上游的单据（如发运单记录运费应付单）。下游**不能直接改写上游的表**（不注入上游的 Mapper，也不在自己的 mapper XML 中 `UPDATE` 上游的表），而是调用上游 Service 提供的方法，在同一事务中完成：
+
+```java
+// fin（FinBillService）：发运单发货后生成承运商运费应付单，再回写发运单
+@EventListener
+public void onShipmentShipped(ShipmentShippedEvent e) {
+    FinBill bill = ...;
+    billMapper.insert(bill);
+    shipmentService.bindFreightBill(e.shipmentId(), bill.getId());
+}
+
+// scm（ScmShipmentService）：数据所属的模块提供回写方法，注释写明由谁、在什么时机调用
+/** 记录发运单运费生成的承运商应付单。由财务模块在处理 ShipmentShippedEvent 时调用，与发货在同一事务 */
+public void bindFreightBill(Long shipmentId, Long billId) {
+    shipmentMapper.update(Wrappers.<ScmShipment>lambdaUpdate().set(ScmShipment::getFreightBillId, billId)
+            .eq(ScmShipment::getId, shipmentId));
+}
+```
+
+| 回写方法 | 所属模块 | 调用时机 |
+| --- | --- | --- |
+| `ScmShipmentService.bindFreightBill` | scm | fin 处理 `ShipmentShippedEvent` 生成运费应付单后 |
+| `ScmRebateService.bindBill` | scm | fin 处理 `RebateSettledEvent` 生成红字应收单后 |
+| `QmsClaimService.bindBill` | mes | fin 处理 `SupplierClaimConfirmedEvent` 生成红字应付单后 |
+| `MesEquipmentService.bindVoucher` / `unbindVouchers` | mes | fin 处理 `MaintenanceFinishedEvent` 生成费用凭证后 / 删除凭证时 |
+
+mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计）允许保留。
 
 ## 事件清单
 
@@ -79,7 +112,8 @@ public void onTradeDocConfirmed(TradeDocConfirmedEvent e) {
 联动的约定：
 
 - 由业务单据生成的仓库单据**保存即确认**，`wms_stock_doc.source_no` 记录来源单号；库存不足、序列号不在库等错误会让整张业务单据回滚。
-- 仓库的手工出入库只能选「其他入库 / 其他出库」，采购、销售、生产、项目、委外等类型只由对应的业务单据生成（`WmsConstants.MANUAL_TYPES`），否则会绕过应收应付和成本归集。
+- 仓库的手工入库只能选「其他入库 / 寄售入库」，手工出库只能选「其他出库 / 报废出库」（`StockInType.MANUAL`、`StockOutType.MANUAL`，判断用 `StockDocType.isManual()`，校验在 `StockDocRules.checkManualType`）；采购、销售、生产、项目、委外等类型只由对应的业务单据生成，否则会绕过应收应付和成本归集。出入库单的类型下拉列出字典中的全部类型，业务单据生成的类型不可选并提示由哪种单据生成（前端 `components/wms/wms.js` 的 `AUTO_TYPE_SOURCES`，新增由业务单据生成的类型时同步登记）。出入库类型 `biz_type` 是系统字典，成本核算按它区分，不能由租户扩充。
+- 收发类别（`wms_stock_doc.io_category`，可不填）：其他入库选「入库类别」（业务字典 `wms_in_category`），其他出库、报废出库选「出库类别」（`wms_out_category`），由 `StockDocType.ioCategoryDict()` 决定，保存时 `DictLookup.check` 按当前租户的字典校验；月末成本凭证按类别取对方科目（见下文「自动凭证的科目」）。
 - 采购入库 / 退货、销售出库 / 退货、工单领料 / 退料 / 完工入库都是保存即确认，不能修改删除，错误通过退货、退料冲回。
 - 多规格物料的款式（`is_template = 1`）只用于生成 SKU 和按规格矩阵录入订单，`StockService.apply` 拒绝款式的库存变动，所有出入库都落在具体的 SKU 上。
 
@@ -96,22 +130,23 @@ Long contractCost = accountRules.accountId(AccountRole.CONTRACT_COST);
 Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCategory);
 ```
 
-- `fin/model/AccountRole` 枚举列出全部用途（分组：往来、存货与成本、收入与费用、税费、资产、薪酬、期末），每个用途带默认科目编码（`init.sql` 预置的科目）；存货（`INVENTORY`）、主营业务收入（`REVENUE`）、主营业务成本（`COST_OF_SALES`）可按物料分类，工资费用（`SALARY_EXPENSE`）可按职位类别分别设置；
+- `fin/model/AccountRole` 枚举列出全部用途（分组：往来、存货与成本、收入与费用、税费、资产、薪酬、期末），每个用途带默认科目编码（`init.sql` 预置的科目）；存货（`INVENTORY`）、主营业务收入（`REVENUE`）、主营业务成本（`COST_OF_SALES`）可按物料分类，工资费用（`SALARY_EXPENSE`）可按职位类别，其他入库 / 其他出库的对方科目（`OTHER_IN_OFFSET` / `OTHER_OUT_OFFSET`）可按收发类别（维度 `IN_CATEGORY` / `OUT_CATEGORY`）分别设置；用途可声明后备用途（`AccountRole.fallback()`），没有任何设置时沿用后备用途的科目（其他出入库对方科目 → 待处理财产损溢 `PENDING_LOSS`）；
 - `FinAccountRuleService.accountId(用途[, 维度取值])` 的取值顺序：用途 + 维度取值的设置 → 用途的设置 → 默认科目编码（带维度的用途还可以按维度给默认值，如半成品、成品的存货默认为库存商品 1405，低值易耗品为周转材料 1411；生产岗位的工资费用为制造费用 5101，销售岗位为销售费用 6601）；
 - 设置保存在 `fin_account_rule`（按租户），设置的科目必须是启用的末级科目，被设置引用的科目不能删除、不能增加下级；修改只影响之后生成的凭证；
-- 其他模块（hr 工资、pm 项目月结等）同样注入 `FinAccountRuleService` 取科目；新增自动凭证的用途时在 `AccountRole` 中登记，「凭证科目设置」页面自动列出。
+- 其他模块（hr 工资、pm 项目月结等）同样注入 `FinAccountRuleService` 取科目；新增自动凭证的用途时在 `AccountRole` 中登记，「凭证科目设置」页面自动列出；
+- 科目范围用途（`AccountRole.scope()`：库存现金 `CASH` 1001、银行存款 `BANK` 1002）设置的是一个科目及其全部下级，可以是上级科目：结算账户校验、银行对账、出纳日记账、现金流量表、资金计划按 `FinAccountService.cashCodes()` / `roleCode(用途)` 识别，前端 `AccountSelect` 用 `:roles="['CASH', 'BANK']"` 限定可选科目；Java 代码中不写科目编码，只有报表格式（资产负债表、利润表模板，现金流量表按一级科目归类）按企业会计准则的编码前缀定义。
 
 凭证分录的辅助核算（部门、客户、供应商、项目、存货）在「会计科目」上设置（`fin_account.aux_items`，可多选，下级默认沿用上级），分录上各占一列（`dept_id`、`customer_id`、`supplier_id`、`project_id`、`material_id`），可同时填写。手工凭证使用设置了辅助核算的科目时对应项目必填；业务生成的凭证按单据自动带出客户、供应商等，不受科目设置约束。
 
 ## 存货计价
 
-成本核算（`FinCostService`）按物料上设置的计价方法（`wms/model/CostMethod`）计算出库成本：
+成本核算按物料上设置的计价方法（`wms/model/CostMethod`）计算出库成本。代码在 `fin/service/cost`：`FinCostService` 只做期间校验、编排和保存，取数 `CostSourceLoader`（查询结果转为强类型的 `CostSource`），计算 `CostCalculator`（纯计算，不依赖 Spring），凭证 `CostVoucherWriter`；填写了收发类别的其他出入库按「数量 × 本期单价」拆出，按类别的对方科目生成凭证。
 
 | 计价方法 | 说明 |
 | --- | --- |
 | `WEIGHTED` 月末一次加权平均（默认） | 本期出库按（期初 + 本期入库）的平均单价计价 |
-| `MOVING` 移动加权平均 | 按出入库发生顺序逐笔计价（`MovingValuation`），每次入库后重算平均单价 |
-| `FIFO` 先进先出 | 按发生顺序逐笔计价（`FifoValuation`），出库先消耗最早的批次；期末结存批次保存在 `fin_cost_layer`，作为下一期的期初批次 |
+| `MOVING` 移动加权平均 | 按出入库发生顺序逐笔计价（`cost/MovingValuation`），每次入库后重算平均单价 |
+| `FIFO` 先进先出 | 按发生顺序逐笔计价（`cost/FifoValuation`），出库先消耗最早的批次；期末结存批次保存在 `fin_cost_layer`，作为下一期的期初批次 |
 
 逐笔计价的两种方法共用 `Valuation` 接口（按金额入库、按当前成本入库、出库、采购退货冲减、期末结存）。逐笔计价得到期末结存后，本期出库总成本 = 期初 + 本期入库 − 期末结存，再按数量分摊到生产领用、销售、其他出库，因此凭证、工单材料成本与月末加权的处理方式一致。修改计价方法从下一次核算生效；撤销核算时一并删除当期的先进先出批次。
 
@@ -148,7 +183,7 @@ referenceGuard.checkDeletable(RefType.MATERIAL, id, Messages.get("wms.text.mater
 注入 `MessageSender` 发送站内消息，在业务事务中调用，事务回滚时消息一并回滚：
 
 ```java
-messageSender.sendToPermission("wms:stock:list", Message.of("REMIND",
+messageSender.sendToPermission("wms:stock:list", Message.of(MessageCategory.REMIND,
         "批次即将到期：" + code, "有效期至 " + expiryDate, "/wms/trace") // i18n-ignore 站内消息存库
         .dedup("batch-expiry:" + materialId + ":" + batchNo));
 ```
@@ -159,7 +194,7 @@ messageSender.sendToPermission("wms:stock:list", Message.of("REMIND",
 | --- | --- |
 | `send(userIds, message)` | 发送给指定用户 |
 | `sendToPermission(perm, message)` | 发送给拥有该权限的全部启用用户；没有人拥有时发给超级管理员 |
-| `Message.of(category, title, content, link)` | `category` 取字典 `sys_message_category`：`APPROVAL` 审批、`REMIND` 提醒、`ALERT` 预警、`SYSTEM` 系统；`link` 为点击后跳转的前端路由 |
+| `Message.of(category, title, content, link)` | `category` 为枚举 `framework/message/MessageCategory`（字典 `sys_message_category`）：`APPROVAL` 审批、`REMIND` 提醒、`ALERT` 预警、`SYSTEM` 系统；`link` 为点击后跳转的前端路由 |
 | `message.dedup(key)` | 同一用户已有相同去重键的消息时不再发送（定时提醒每天只发一次） |
 
 站内消息写入后，`SysMessageService` 发布 `MessageSentEvent`，事务提交后由 `SysImPushService` 异步推送给已绑定的钉钉 / 企业微信 / 飞书成员，并按类别发到群机器人；`link` 会转为平台客户端内的免登链接。业务代码不需要额外处理，见 [第三方集成](./im#消息推送)。

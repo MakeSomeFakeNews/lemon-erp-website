@@ -17,7 +17,8 @@ order: 5
 
 - 业务表都有 `tenant_id BIGINT NOT NULL DEFAULT 1` 列，唯一约束为「原有列 + `tenant_id`」，编码、单号在租户内唯一（如 `UNIQUE KEY uk_warehouse_code (code, tenant_id)`）。
 - 开启后注册 MyBatis-Plus 的 `TenantLineInnerInterceptor`（处理器 `LemonTenantLineHandler`）：所有 SQL，包括 mapper XML 中的 JOIN、子查询、UNION，都自动追加 `tenant_id = 当前租户`；INSERT 自动填充 `tenant_id`。实体类中不需要 `tenantId` 字段，业务代码不需要关心租户。
-- 平台共享的表没有 `tenant_id` 列，登记在 `TenantProperties.ignoreTables`：菜单（`sys_menu`）、字典（`sys_dict_type`、`sys_dict_data`）、定时任务（`sys_job`、`sys_job_log`）、租户与套餐（`sys_tenant`、`sys_tenant_package`、`sys_tenant_package_menu`）、系统参数（`sys_config`），以及只以全局唯一 ID 关联的关系表（`sys_user_role`、`sys_role_menu`、`sys_role_dept`）。
+- 平台共享的表没有 `tenant_id` 列，登记在 `TenantProperties.ignoreTables`：菜单（`sys_menu`）、字典类型（`sys_dict_type`）、定时任务（`sys_job`、`sys_job_log`）、租户与套餐（`sys_tenant`、`sys_tenant_package`、`sys_tenant_package_menu`）、系统参数（`sys_config`），以及只以全局唯一 ID 关联的关系表（`sys_user_role`、`sys_role_menu`、`sys_role_dept`）。
+- 字典数据（`sys_dict_data`）有 `tenant_id` 列，但同样登记在 `ignoreTables` 中、不由拦截器处理，由 `SysDictService` 按字典种类指定租户，见下文「字典」。
 - Flowable 的 `ACT_*` / `FLW_*` 表不由拦截器处理，引擎按自己的 `TENANT_ID_` 隔离（见下文「工作流」）。
 
 ## 当前租户 TenantContext
@@ -56,8 +57,31 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 
 - 不受套餐限制，可以管理租户和套餐；
 - 超级管理员 = 平台租户中的 `admin` 角色；
-- 菜单、字典、参数设置、租户与套餐、服务监控、缓存监控、定时任务是平台专属功能（`PlatformFeatures`，按权限前缀 `sys:menu:`、`sys:dict:`、`sys:config:`、`sys:tenant`、`monitor:server:`、`monitor:cache:`、`monitor:job:` 判断），不能加入套餐，其他租户的用户即使被分配也不生效。
+- 菜单、字典管理、参数设置、租户与套餐、服务监控、缓存监控、定时任务是平台专属功能（`PlatformFeatures`，按权限前缀 `sys:menu:`、`sys:dict:`、`sys:config:`、`sys:tenant`、`monitor:server:`、`monitor:cache:`、`monitor:job:` 判断），不能加入套餐，其他租户的用户即使被分配也不生效。「业务字典」（`sys:bizdict:*`）不是平台专属功能，可以加入套餐，由租户管理员维护本租户的业务字典。
 - 编码规则、打印模板（含上传的 JRXML、套打底图）、业务参数、自定义字段、凭证科目设置按租户保存，新租户没有保存过时使用默认值，不需要初始化；其中**上传 JRXML 只允许平台租户**（JRXML 中的表达式在服务器上执行），其他租户只能用可视化配置调整打印版式。
+
+## 字典
+
+字典分为系统字典和业务字典（`sys_dict_type.kind`，枚举 `DictKind`）：
+
+| | 系统字典 `SYSTEM` | 业务字典 `BUSINESS` |
+| --- | --- | --- |
+| 内容 | 程序内置的取值：状态、单据类型、业务类型等，代码按取值判断（后端有同名枚举） | 纯分类：客户等级、物料分类、出入库类别、不良类型、假期类型、用工类型、工程变更原因、停机原因等 |
+| 数据 | 全平台共用一份（`sys_dict_data.tenant_id = 1`），取值全部内置 | 每个租户各自一份：新租户开通时由 `SysDictTenantInitializer` 从平台复制 |
+| 维护 | 平台在「系统管理 → 字典管理」（`sys:dict:*`，平台专属）中只能修改名称、颜色、排序、备注，不能新增、删除取值或修改键值 | 租户管理员在「系统管理 → 业务字典」（`sys:bizdict:list` / `edit`）中新增、改名、停用；程序依赖的取值标记为内置（`sys_dict_data.builtin = 1`，如物料分类的低值易耗品、假期类型的年假），不能删除、不能改键值 |
+| 业务代码 | 字段用枚举类型 | 字段用 `String`，保存时用 framework 的 `DictLookup.check(字典, 值, 字段名称键)` 按当前租户的字典校验，不在代码里写死允许的取值；内置取值集中定义为常量（如 `HrDictValues`） |
+
+- 字典类型的编码和种类保存后不能修改；业务字典的键值以大写字母开头，只含大写字母、数字、下划线，不超过 16 位（存入业务表的编码字段，最短为 `VARCHAR(16)`）。
+- 字典数据表不由租户拦截器处理：`SysDictService` 读写时，系统字典固定用平台租户，业务字典用 `TenantContext.currentOrPlatform()`（当前租户，没有租户上下文时为平台）。
+- 按类型查询的结果缓存为 `dict:{type}`（系统）/ `dict:{租户ID}:{type}`（业务），修改后立即清理，事务提交后再清理一次。
+- mapper XML 中关联 `sys_dict_data` 取名称时要加租户条件：系统字典 `tenant_id = 1`，业务字典用当前租户（示例 `BiScreenMapper.xml`）：
+
+  ```xml
+  <bind name="dictTenant" value="@com.lemon.erp.framework.tenant.TenantContext@currentOrPlatform()"/>
+  LEFT JOIN sys_dict_data dd ON dd.dict_type = 'mes_stop_reason' AND dd.dict_value = s.reason AND dd.tenant_id = #{dictTenant}
+  ```
+
+- 前端用法相同（`useDict`、`DictTag`、`/system/dict/data/type/{type}` 自动返回当前租户的业务字典）；新增字典的步骤见 [新增一个业务模块](../guide/new-module#_2-建表与字典)。
 
 ## 租户套餐与租户管理员
 
@@ -84,7 +108,7 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 return TenantContext.isPlatform() ? FAIL_KEY + username : FAIL_KEY + TenantContext.require() + ":" + username;
 ```
 
-以全局唯一 ID 作为 key（如 `login:perms:{userId}`）或缓存平台共享数据（如字典 `dict:{type}`）时不需要。
+以全局唯一 ID 作为 key（如 `login:perms:{userId}`）或缓存平台共享数据（如系统字典 `dict:{type}`）时不需要；业务字典按租户缓存为 `dict:{租户ID}:{type}`。
 
 ## 编写新代码的约定
 

@@ -64,25 +64,25 @@ AND (c.dept_id IN (当前用户可访问的部门) OR c.create_by = 当前用户
 
 ## 编程式用法
 
-`@DataPermission` 基于 Spring AOP，同一个类内部的方法互相调用时注解不生效；在修改、删除前校验记录是否可访问等场景，使用 `DataPermissionContext.execute`：
+`@DataPermission` 基于 Spring AOP，同一个类内部的方法互相调用时注解不生效；在修改、删除前校验记录是否可访问等场景，按 ID 读取单据用 `DataScopes`（`framework/security/datascope`）：
 
 ```java
 public static final DataPermissionRule CONTRACT_RULE =
         new DataPermissionRule("scm_purchase_contract", "dept_id", "create_by");
 
 private ScmPurchaseContract getAccessible(Long id) {
-    Supplier<ScmPurchaseContract> loader = () -> contractMapper.selectById(id);
-    ScmPurchaseContract contract = SecurityUtils.getDataScope().all()
-            ? loader.get()
-            : DataPermissionContext.execute(CONTRACT_RULE, loader);
-    if (contract == null) {
-        throw new BizException("scm.error.purchaseContractDoesNotExistAccess");
-    }
-    return contract;
+    // 看不到的数据视为不存在
+    return DataScopes.require(CONTRACT_RULE, () -> contractMapper.selectById(id), "scm.error.purchaseContractDoesNotExistAccess");
 }
 ```
 
-详情、修改、删除、审核等按 ID 操作的接口都应先这样校验，否则用户可以通过构造 ID 访问其他部门的数据。
+| 方法 | 说明 |
+| --- | --- |
+| `DataScopes.load(rule, loader)` | 有「全部数据」权限时直接执行 `loader`，否则在规则下执行（`DataPermissionContext.execute`）；看不到时返回 null |
+| `DataScopes.require(rule, loader, 消息键, 参数...)` | 同上，看不到或不存在时抛出 `BizException` |
+| `DataScopes.require(rule, loader, check, 消息键, 参数...)` | 还要满足 `check`（如单据种类相符），否则同样视为不存在 |
+
+详情、修改、删除、审核等按 ID 操作的接口都应先这样校验，否则用户可以通过构造 ID 访问其他部门的数据。需要在规则下执行其他查询时，直接用 `DataPermissionContext.execute(rule, supplier)`（示例 `SysUserService.checkDataScope`）。
 
 规则支持嵌套：内层规则只在内层生效，退出后恢复外层规则；栈清空时移除 ThreadLocal，不会在线程池中泄漏。
 
@@ -101,16 +101,15 @@ private ScmPurchaseContract getAccessible(Long id) {
 
 ## 使用约定
 
-1. **表结构**：需要按部门隔离的业务表加 `dept_id`（制单人部门）和 `create_by`（制单人）或负责人列，并在新增时由 Service 写入：
+1. **表结构**：需要按部门隔离的业务表加 `dept_id`（制单人部门）和 `create_by`（制单人）或负责人列；`dept_id`、负责人由 Service 在新增时写入，`create_by` 自动填充：
 
    ```java
-   LoginUser user = SecurityUtils.getLoginUser();
-   contract.setDeptId(user.deptId());
-   contract.setCreateBy(user.userId());
+   contract.setDeptId(SecurityUtils.getLoginUser().deptId());
+   // create_by 不需要赋值：插入实体时由 MybatisPlusConfig 的 CreateByInnerInterceptor 自动填当前登录用户
    ```
 
 2. **只用于查询**：写操作中的唯一性校验（如单号、编码是否重复）不能受数据权限影响，否则会因为看不到其他部门的数据而误判为不重复。不要把 `@DataPermission` 加在包含这类校验的写方法上。
-3. **列表与详情一致**：列表用 `@DataPermission`，按 ID 访问用 `DataPermissionContext.execute`，两者使用同一条规则（建议定义为常量）。
+3. **列表与详情一致**：列表用 `@DataPermission`，按 ID 访问用 `DataScopes.require`，两者使用同一条规则（建议定义为常量）。
 4. **定时任务、异步线程中不要使用**：这些线程没有登录用户，`SecurityUtils.getDataScope()` 会抛出未登录异常。
 5. **商务智能等汇总分析**：多维分析、自定义报表按部门过滤；经营驾驶舱、决策分析、数据大屏汇总全公司数据，只对有「全部数据」权限的用户开放（`SecurityUtils.getDataScope().all()`）；数据大屏的投屏链接也只能由有该权限的用户创建，免登录访问时按链接所属租户统计。
 

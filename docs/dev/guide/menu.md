@@ -1,5 +1,5 @@
 ---
-order: 7
+order: 8
 ---
 
 # 新增菜单与授权
@@ -48,7 +48,7 @@ INSERT INTO sys_menu (id, parent_id, name, type, path, component, perms, icon, s
 (5005, 5001, '用车申请提交', 'F', NULL,  NULL,           'oa:car:submit', NULL, 4, 1, 1, NOW(), NOW());
 ```
 
-- 菜单 ID 选一段不会与现有数据冲突的号段（现有菜单 ID 在 3300 以内）；
+- 菜单 ID 选一段不会与现有数据冲突的号段（现有内置菜单 ID 在 3600 以内，页面上新增的菜单从 10000 开始自增）；
 - 图标使用 Ant Design Vue 图标组件名（如 `CarOutlined`），可在菜单管理的图标选择器中查找；
 - `visible = 0` 的菜单不在侧边栏显示，但仍会注册路由（可用于只从其他页面跳转进入的页面）；
 - `status = 0` 的菜单停用，不会返回给前端。

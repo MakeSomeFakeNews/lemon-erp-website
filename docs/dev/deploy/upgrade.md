@@ -97,17 +97,19 @@ git diff v旧版本 v新版本 -- sql/init.sql
 - **多租户**：开启 SaaS 时，新增的租户基础数据需要为每个已有租户插入（显式写 `tenant_id`）；新表的唯一约束带 `tenant_id`；
 - 先在测试库执行验证，再在生产库执行。
 
-例如增量添加一个字典：
+例如增量添加一个系统字典（取值全部内置，只有平台一份）：
 
 ```sql
-INSERT INTO sys_dict_type (name, type, status, remark, create_time, update_time)
-SELECT '用车申请状态', 'oa_car_status', 1, NULL, NOW(), NOW()
+INSERT INTO sys_dict_type (name, type, kind, status, remark, create_time, update_time)
+SELECT '用车申请状态', 'oa_car_status', 'SYSTEM', 1, NULL, NOW(), NOW()
 WHERE NOT EXISTS (SELECT 1 FROM sys_dict_type WHERE type = 'oa_car_status');
 
-INSERT INTO sys_dict_data (dict_type, dict_label, dict_value, tag_color, sort, status, create_time, update_time)
-SELECT 'oa_car_status', '草稿', 'DRAFT', 'default', 1, 1, NOW(), NOW()
-WHERE NOT EXISTS (SELECT 1 FROM sys_dict_data WHERE dict_type = 'oa_car_status' AND dict_value = 'DRAFT');
+INSERT INTO sys_dict_data (tenant_id, dict_type, dict_label, dict_value, tag_color, sort, status, builtin, create_time, update_time)
+SELECT 1, 'oa_car_status', '草稿', 'DRAFT', 'default', 1, 1, 1, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM sys_dict_data WHERE dict_type = 'oa_car_status' AND dict_value = 'DRAFT' AND tenant_id = 1);
 ```
+
+业务字典（`kind = 'BUSINESS'`）每个租户各有一份：新开通的租户从平台（`tenant_id = 1`）复制，已开通的租户不会自动得到新增的业务字典，增量脚本要按 `sys_tenant` 中的每个租户插入一份（同样用 `NOT EXISTS` 判断 `dict_type`、`dict_value`、`tenant_id`）。
 
 Flowable 的 `ACT_*` 表不需要手工处理：新版本的引擎在启动时按 `database-schema-update: true` 自动升级表结构。
 

@@ -1,5 +1,5 @@
 ---
-order: 13
+order: 14
 ---
 
 # 业务实体接入自定义字段
@@ -119,11 +119,12 @@ const cfFields = cf.fields
 
 const drawer = useFormDrawer(
   cf.wrap({
-    emptyForm: () => ({ id: undefined, useDate: undefined, destination: '', purpose: '', passengers: 1, remark: '' }),
+    emptyForm: () => ({ id: undefined, useDate: undefined, carType: undefined, destination: '', purpose: '', passengers: 1, remark: '' }),
     fetch: (record) => getCarRequest(record.id),
     create: addCarRequest,          // 必须返回新记录的 ID
     update: updateCarRequest,
-    toPayload: ({ useDate, destination, purpose, passengers, remark }) => ({ useDate, destination, purpose, passengers, remark }),
+    toPayload: ({ useDate, carType, destination, purpose, passengers, remark }) =>
+      ({ useDate, carType: carType || null, destination, purpose, passengers, remark }),
     onSuccess: load
   })
 )

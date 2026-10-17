@@ -1,5 +1,5 @@
 ---
-order: 8
+order: 9
 ---
 
 # 新增定时任务
@@ -15,6 +15,7 @@ package com.lemon.erp.modules.oa.service;
 
 import com.lemon.erp.framework.job.JobHandler;
 import com.lemon.erp.framework.job.JobParams;
+import com.lemon.erp.framework.message.MessageCategory;
 import com.lemon.erp.framework.message.MessageSender;
 import com.lemon.erp.framework.message.MessageSender.Message;
 import com.lemon.erp.modules.oa.entity.OaCarRequest;
@@ -69,7 +70,7 @@ public class OaCarRemindJob implements JobHandler {
                 continue;
             }
             // 站内消息、执行结果存入数据库，保持中文（定时任务中没有请求语言）
-            messageSender.send(List.of(r.getCreateBy()), Message.of("REMIND",
+            messageSender.send(List.of(r.getCreateBy()), Message.of(MessageCategory.REMIND,
                     "用车提醒：" + r.getRequestNo(), useDate + " 前往 " + r.getDestination(), "/oa/car") // i18n-ignore 站内消息存库
                     .dedup("oa-car-remind:" + r.getId()));
         }
@@ -104,7 +105,7 @@ String mode = params.get("mode", "summary");
 
 - **没有登录用户**：任务在调度线程中运行，不能调用 `SecurityUtils.getLoginUser()`，不能使用 `@DataPermission`，制单人等需要用户的字段要自己决定取值。
 - **多租户**：开启 SaaS 时调度器在每个租户的上下文中分别调用一次 `run`，任务代码按单租户编写即可，SQL 自动带租户条件；某个租户抛异常不影响其他租户，日志中记录各租户的结果。
-- **事务**：`run` 本身不在事务中。需要事务时调用 Service 中加了 `@Transactional` 的方法，不要在 `JobHandler` 实现类的方法上加 `@Transactional` 后在类内部调用（AOP 不生效）。
+- **事务**：`run` 本身不在事务中。需要事务时调用 Service 中加了 `@Transactional` 的方法，不要在 `JobHandler` 实现类的方法上加 `@Transactional` 后在类内部调用（AOP 不生效）。逐条处理多条记录时每条单独提交（Service 中用 `TransactionTemplate`），一条失败不影响其他，最后汇总失败的记录；有失败时抛出异常让本次执行记为失败（示例 `MesEcnEffectJob` 调用 `MesEcnService.effectDue`）。
 - **幂等与去重**：任务可能被手动重复执行，提醒类消息用 `Message.dedup(key)`，同一用户相同的去重键只发一次；数据处理类任务用条件更新保证重复执行不出错。
 - **大数据量**：统计在数据库中完成；需要逐条处理时分批查询，避免一次加载全部数据。
 - **失败**：抛出异常时本次执行记为失败（日志中记录异常信息），下次按 Cron 照常执行。

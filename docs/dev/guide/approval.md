@@ -1,21 +1,22 @@
 ---
-order: 5
+order: 6
 ---
 
 # 接入审批流
 
-业务单据接入审批时，业务模块只依赖 `framework/workflow` 中的契约（`FlowApi`、`FlowBusiness`、`FlowFinishedEvent`、`FlowStatus`），不直接使用 Flowable。本页继续以用车申请为例：提交时如果发布了审批流程就进入审批，审批通过后变为「已批准」，拒绝或撤回后回到草稿；没有发布流程时提交即直接批准。
+业务单据接入审批时，业务模块只依赖 `framework/workflow` 中的契约（`FlowBusiness`、`ApprovalFlow`、`ApprovalSupport`、`FlowApi`、`FlowFinishedEvent`、`FlowStatus`），不直接使用 Flowable。本页继续以用车申请为例：提交时如果发布了审批流程就进入审批，审批通过后变为「已批准」，拒绝或撤回后回到草稿；没有发布流程时提交即直接批准。
 
 实现原理见 [工作流引擎集成](../architecture/workflow)。
 
 ## 整体步骤
 
 1. 在本模块的 `service/<模块>FlowBusinesses` 中声明 `FlowBusiness` Bean：流程标识 + 发起时传入的流程变量；
-2. 提交时用 `flowApi.isAvailable` 判断流程是否已发布：已发布则 `flowApi.start` 发起，单据进入「审批中」；未发布则直接生效；
-3. 监听 `FlowFinishedEvent`，按审批结果回写单据状态；
-4. 撤回时 `flowApi.cancel`；
-5. 在 `init.sql` 中内置一个未发布的流程模型，流程标识与 `FlowBusiness` 一致；
-6. 前端加「提交」「撤回」按钮和「审批记录」。
+2. 在单据的 Service 中声明 `ApprovalFlow` 常量（流程标识 + 业务标识前缀）；
+3. 提交时调用 `approvalSupport.submit`：流程已发布则把单据改为「审批中」、发起流程并记录流程实例 ID；未发布则直接生效；
+4. 监听 `FlowFinishedEvent`，用 `FLOW.onFinished` 取出单据 ID 和审批结果回写单据状态；
+5. 撤回时 `approvalSupport.cancelIfRunning`；
+6. 在 `init.sql` 中内置一个未发布的流程模型，流程标识与 `FlowBusiness` 一致；
+7. 前端加「提交」「撤回」按钮和「审批记录」。
 
 ## 1. 声明 FlowBusiness
 
@@ -30,7 +31,7 @@ import static com.lemon.erp.framework.workflow.FlowBusiness.Variable.number;
 import static com.lemon.erp.framework.workflow.FlowBusiness.Variable.text;
 
 /**
- * 行政办公接入审批的流程及发起时传入的流程变量，与 OaCarRequestService.submit 中 flowApi.start 传入的变量保持一致
+ * 行政办公接入审批的流程及发起时传入的流程变量，与 OaCarRequestService.submit 中传入的变量保持一致
  */
 @Configuration
 public class OaFlowBusinesses {
@@ -52,14 +53,17 @@ public class OaFlowBusinesses {
 - 流程详情的「业务信息」据此显示变量的名称和值；
 - 声明过的流程只能由业务单据发起，不出现在「发起申请」中。
 
-**变量必须与 `flowApi.start` 实际传入的一致**，否则设计器中的条件引用的变量在运行时为 null（只有「不等于」成立）。
+**变量必须与发起时实际传入的一致**，否则设计器中的条件引用的变量在运行时为 null（只有「不等于」成立）。
 
-| 变量类型 | 工厂方法 | 说明 |
+| 变量类型（`VariableType`） | 工厂方法 | 说明 |
 | --- | --- | --- |
-| 数字 | `Variable.number(field, label)` | 条件可用大于、小于等运算符 |
-| 文本 | `Variable.text(field, label)` | |
-| 字典 | `Variable.dict(field, label, dictType)` | 下拉选择，可选值来自字典（值为字典值） |
-| 固定选项 | `Variable.select(field, label, options...)` | 下拉选择，可选值为给定的字符串 |
+| 数字 `NUMBER` | `Variable.number(field, label)` | 条件可用大于、小于等运算符 |
+| 文本 `INPUT` | `Variable.text(field, label)` | |
+| 下拉 `SELECT` | `Variable.dict(field, label, dictType, 额外取值...)` | 可选值来自字典（值为字典值）；字典之外还可能出现的固定值写在后面，如加班时假期类型为 `OVERTIME` |
+| 下拉 `SELECT` | `Variable.select(field, label, 枚举值...)` | 可选值为枚举的名称，如 `select("kind", "scm.label.orderType", OrderKind.values())` |
+| 下拉 `SELECT` | `Variable.select(field, label, "A", "B")` | 可选值为给定的字符串 |
+
+传入枚举类型的变量时用 `name()`（如 `"contractType", contract.getContractType().name()`），条件分支按名称比较。
 
 本例用到的消息键（`oa.label.carRequestApproval`、`oa.label.passengers`、`oa.label.destination`、`oa.label.requestNo`，以及下文的 `oa.label.submit`、`oa.label.withdraw`、`oa.error.carRequestStatusChanged`）要在 `oa.properties` 和 `oa_en.properties` 中登记，写法见 [新增业务模块](./new-module) 的「消息资源包」。
 
@@ -70,9 +74,10 @@ public class OaFlowBusinesses {
 ```java
 // OaCarRequestService 中增加
 public static final String PROCESS_KEY = "oa_car";
-private static final String BUSINESS_KEY_PREFIX = PROCESS_KEY + ":";
+/** 流程标识 + 业务标识前缀（业务标识 = 前缀 + 单据 ID）。已发起的流程按原前缀回调，上线后不能修改前缀 */
+private static final ApprovalFlow FLOW = new ApprovalFlow(PROCESS_KEY, PROCESS_KEY + ":");
 
-private final FlowApi flowApi;
+private final ApprovalSupport approvalSupport;
 
 /**
  * 提交：发布了审批流程时进入审批，否则直接批准
@@ -82,63 +87,101 @@ private final FlowApi flowApi;
 @Transactional
 public boolean submit(Long id) {
     OaCarRequest request = requireStatus(id, CarRequestStatus.DRAFT, "oa.label.submit");
-    if (!flowApi.isAvailable(PROCESS_KEY)) {
-        transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVED);
-        return false;
-    }
-    transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVING);
-    String instanceId = flowApi.start(PROCESS_KEY, BUSINESS_KEY_PREFIX + id, Map.of(
-            "passengers", request.getPassengers(),
-            "destination", request.getDestination(),
-            "requestNo", request.getRequestNo()));
-    requestMapper.update(Wrappers.<OaCarRequest>lambdaUpdate()
-            .set(OaCarRequest::getFlowInstanceId, instanceId)
-            .eq(OaCarRequest::getId, id));
-    return true;
-}
-
-private void transit(Long id, CarRequestStatus from, CarRequestStatus to) {
-    if (requestMapper.transit(id, from, to) == 0) {
-        throw new BizException("oa.error.carRequestStatusChanged");
-    }
+    return approvalSupport.submit(FLOW, id, Map.of(
+                    "passengers", request.getPassengers(),
+                    "destination", request.getDestination(),
+                    "requestNo", request.getRequestNo()),
+            // 流程未发布：直接批准
+            () -> transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVED),
+            // 发起前：改为审批中（流程没有审批节点时会在发起过程中直接结束并回调 onFlowFinished，所以要先改状态）
+            () -> transit(id, CarRequestStatus.DRAFT, CarRequestStatus.APPROVING),
+            // 发起后：记录流程实例 ID
+            instanceId -> requestMapper.update(Wrappers.<OaCarRequest>lambdaUpdate()
+                    .set(OaCarRequest::getFlowInstanceId, instanceId).eq(OaCarRequest::getId, id)));
 }
 ```
 
-`FlowApi` 的方法：
+`transit` 是 [新增一个业务模块](./new-module#_5-service) 中用 `StatusTransitions.change` 实现的状态流转（按原状态条件更新，失败提示刷新）。
+
+`ApprovalSupport`（`framework/workflow`，在调用方的事务中执行，单据状态与流程一起提交或回滚）：
 
 | 方法 | 说明 |
 | --- | --- |
-| `boolean isAvailable(processKey)` | 流程是否可以发起：模型存在、已启用且已发布。业务据此决定走审批还是直接生效 |
+| `boolean submit(flow, id, 变量, 直接审核, 改为审批中, 记录实例ID)` | 流程未发布时执行「直接审核」并返回 `false`；已发布时依次执行「改为审批中」→ 发起流程 → 「记录实例ID」，返回 `true` |
+| `boolean submit(flow, id, Supplier<变量>, ...)` | 同上，变量需要查询时传 `Supplier`，只在发起审批时才计算 |
+| `void start(flow, id, 变量, 改为审批中, 记录实例ID)` | 直接发起（调用方已确认流程已发布）：创建即审批中、或只有满足条件时才走审批的单据（如有差异的盘点、请假） |
+| `boolean isAvailable(flow)` | 流程是否已发布，配合 `start` 使用 |
+| `boolean cancelIfRunning(instanceId, 原因)` | 流程仍在运行时撤销（会触发结束事件，状态为 `CANCELED`），返回是否撤销了 |
+
+`ApprovalFlow`（record）：
+
+| 方法 | 说明 |
+| --- | --- |
+| `new ApprovalFlow(processKey, keyPrefix)` | 流程标识（与 `FlowBusiness` 一致）、业务标识前缀（含分隔符，如 `"oa_car:"`） |
+| `businessKey(id)` | 前缀 + 单据 ID |
+| `idOf(event)` | 结束事件对应的单据 ID，不是本流程的单据时返回 null |
+| `onFinished(event, (id, approved) -> ...)` | 是本流程的单据时处理审批结果；驳回、撤销、终止都为 `approved = false` |
+| `onFinishedWithStatus(event, (id, status) -> ...)` | 需要区分驳回（`REJECTED`）与撤销（`CANCELED`）时使用 |
+
+`ApprovalSupport` 底层调用 `FlowApi`，一般不需要直接使用：
+
+| 方法 | 说明 |
+| --- | --- |
+| `boolean isAvailable(processKey)` | 流程是否可以发起：模型存在、已启用且已发布 |
 | `String start(processKey, businessKey, variables)` | 以当前登录用户的身份发起（使用最新发布的版本），返回流程实例 ID；流程不存在、未发布、已停用时抛 `BizException` |
 | `void cancel(processInstanceId, reason)` | 撤销运行中的流程，状态变为 `CANCELED`；不校验是否为发起人，撤销人记为当前用户 |
 | `FlowStatus getStatus(processInstanceId)` | 流程状态，实例不存在时返回 null |
 
-- `businessKey` 建议用「流程标识:业务主键」，审批结束事件中原样返回；
 - 流程实例 ID 保存到单据（`flow_instance_id`），用于撤回和查看审批记录；
 - 发起流程与单据状态修改在同一事务中，任一失败整体回滚。
+
+只有满足条件时才走审批的单据（例如盘点单有差异才审批），先用 `isAvailable` 判断流程已发布，再按条件调用 `start`（`WmsCheckService.confirm`）：
+
+```java
+if (approvalSupport.isAvailable(FLOW)) {
+    // ... 读取明细，统计盘盈、盘亏数量和差异行数 diffLines
+    if (diffLines > 0) {
+        approvalSupport.start(FLOW, id,
+                Map.of("docNo", check.getDocNo(), "gainQty", gain, "lossQty", loss, "diffLines", diffLines),
+                () -> StatusTransitions.change(checkMapper, WmsCheck::getId, id, WmsCheck::getStatus,
+                        DocStatus.DRAFT, DocStatus.APPROVING, "wms.error.stockCountHasConfirmedRefresh"),
+                instanceId -> checkMapper.update(Wrappers.<WmsCheck>lambdaUpdate()
+                        .set(WmsCheck::getFlowInstanceId, instanceId).eq(WmsCheck::getId, id)));
+        return true;
+    }
+}
+adjust(check, DocStatus.DRAFT);   // 流程未发布或没有差异：直接调整库存
+return false;
+```
 
 ## 3. 监听审批结果
 
 ```java
 /** 审批结束：通过 → 已批准；拒绝、撤回、终止 → 草稿 */
-@EventListener(condition = "#e.processKey == 'oa_car'")
+@EventListener
 public void onFlowFinished(FlowFinishedEvent e) {
-    if (e.businessKey() == null || !e.businessKey().startsWith(BUSINESS_KEY_PREFIX)) {
-        return;
-    }
-    Long id = Long.valueOf(e.businessKey().substring(BUSINESS_KEY_PREFIX.length()));
-    CarRequestStatus to = e.status() == FlowStatus.APPROVED ? CarRequestStatus.APPROVED : CarRequestStatus.DRAFT;
-    requestMapper.transit(id, CarRequestStatus.APPROVING, to);
+    // 只处理仍在审批中的单据（已撤回、删除的忽略），不抛异常，避免回滚审批操作
+    FLOW.onFinished(e, (id, approved) -> StatusTransitions.tryChange(requestMapper, OaCarRequest::getId, id,
+            OaCarRequest::getStatus, CarRequestStatus.APPROVING, approved ? CarRequestStatus.APPROVED : CarRequestStatus.DRAFT));
 }
 ```
 
 注意：
 
+- 所有流程结束时都会发布 `FlowFinishedEvent`，`FLOW.onFinished` 按业务标识前缀过滤，不是本流程的单据时不执行，所以 `@EventListener` 不需要写 `condition`；
 - `FlowFinishedEvent` 在流程引擎的事务中**同步**发布，`@EventListener` 与审批操作在同一事务中：监听器抛异常会回滚审批（审批人会看到错误提示）。需要在审批通过时做校验（如库存是否足够）时，可以在这里抛 `BizException` 阻止通过；
 - 只需在提交后处理的副作用（发消息、调用外部系统）用 `@TransactionalEventListener`；
-- 监听器在**审批人**的请求中执行，当前登录用户是审批人而不是制单人，不要在这里做数据权限校验，也不要把当前用户当作制单人；
+- 监听器在**审批人**的请求中执行，当前登录用户是审批人而不是制单人，不要在这里做数据权限校验，也不要把当前用户当作制单人（审核人可以记为 `SecurityUtils.getUserIdOrNull()`）；
 - `e.status()` 为 `APPROVED`、`REJECTED`、`CANCELED`（发起人撤回或管理员终止）；
-- 用带原状态条件的更新（`WHERE status = 'APPROVING'`），重复事件或已由撤回处理过时不会重复修改。
+- 用 `tryChange`（带原状态条件、失败不抛异常），重复事件或已由撤回处理过时不会重复修改。
+
+需要区分驳回和撤销时（如请假被驳回与撤销显示不同状态）：
+
+```java
+// HrLeaveService：流程状态到请假状态的对应写在枚举方法 LeaveStatus.ofFlow 中
+FLOW.onFinishedWithStatus(e, (id, status) ->
+        finish(id, LeaveStatus.ofFlow(status), SecurityUtils.getUserIdOrNull(), null));
+```
 
 ## 4. 撤回
 
@@ -147,11 +190,10 @@ public void onFlowFinished(FlowFinishedEvent e) {
 @Transactional
 public void withdraw(Long id) {
     OaCarRequest request = requireStatus(id, CarRequestStatus.APPROVING, "oa.label.withdraw");
-    if (request.getFlowInstanceId() != null && flowApi.getStatus(request.getFlowInstanceId()) == FlowStatus.RUNNING) {
-        flowApi.cancel(request.getFlowInstanceId(), "撤回用车申请"); // i18n-ignore 撤销原因存入流程记录，保持中文
-    }
+    approvalSupport.cancelIfRunning(request.getFlowInstanceId(), "撤回用车申请"); // i18n-ignore 撤销原因存入流程记录，保持中文
     // 流程撤销事件已把单据改回草稿时，这里更新 0 行
-    requestMapper.transit(id, CarRequestStatus.APPROVING, CarRequestStatus.DRAFT);
+    StatusTransitions.tryChange(requestMapper, OaCarRequest::getId, id, OaCarRequest::getStatus,
+            CarRequestStatus.APPROVING, CarRequestStatus.DRAFT);
 }
 ```
 
@@ -190,7 +232,7 @@ INSERT INTO wf_model (model_key, name, category, sort, status, design_json, rema
  '内置流程（未发布）：部门主管 → 乘车人数 ≥ 10 时总经理。发布后用车申请「提交」改为提交审批', NOW(), NOW());
 ```
 
-- `model_key` 与 `FlowBusiness.processKey`、`flowApi.start` 的第一个参数一致；
+- `model_key` 与 `FlowBusiness.processKey`、`ApprovalFlow` 的流程标识一致；
 - `category` 取字典 `wf_category`（`PURCHASE`、`SALES`、`PRODUCTION`、`ADMIN` 等）；
 - 业务流程的 `form` 为空数组，条件使用业务变量；
 - 设计 JSON 中的节点 ID 只能包含字母、数字、下划线且以字母开头；角色审批人的 `ids` 为 `sys_role.id`（本例 3 为总经理）；
@@ -205,9 +247,13 @@ export const withdrawCarRequest = (id) => request.post(`/oa/car/${id}/withdraw`)
 ```
 
 ```vue
-<a-button v-if="record.status === 'DRAFT'" v-perm="'oa:car:submit'" type="link" size="small" @click="submit(record)">提交</a-button>
-<a-button v-if="record.status === 'APPROVING'" v-perm="'oa:car:submit'" type="link" size="small" @click="withdraw(record)">撤回</a-button>
-<a-button v-if="record.flowInstanceId" type="link" size="small" @click="openFlow(record)">审批记录</a-button>
+<a-button v-if="record.status === CarRequestStatus.DRAFT" v-perm="'oa:car:submit'" type="link" size="small" @click="submit(record)">
+  {{ $t('common.action.submit') }}
+</a-button>
+<a-button v-if="record.status === CarRequestStatus.APPROVING" v-perm="'oa:car:submit'" type="link" size="small" @click="withdraw(record)">
+  {{ $t('oa.car.withdraw') }}
+</a-button>
+<a-button v-if="record.flowInstanceId" type="link" size="small" @click="openFlow(record)">{{ $t('oa.car.flowRecords') }}</a-button>
 
 <InstanceDetailDrawer v-model:open="flowOpen" :instance-id="flowInstanceId" />
 ```
@@ -215,18 +261,19 @@ export const withdrawCarRequest = (id) => request.post(`/oa/car/${id}/withdraw`)
 ```js
 import InstanceDetailDrawer from '@/components/workflow/InstanceDetailDrawer.vue'
 import { submitCarRequest, withdrawCarRequest } from '@/api/oa/car'
+import { CarRequestStatus } from '@/constants/enums'
+import { useAction } from '@/composables/useAction'
 
-async function submit(record) {
-  const approving = await submitCarRequest(record.id)
-  message.success(approving ? '已提交审批' : '已批准')
-  load()
-}
-
-async function withdraw(record) {
-  await withdrawCarRequest(record.id)
-  message.success('已撤回')
-  load()
-}
+// 接口返回 true 表示已进入审批，false 表示流程未发布、已直接批准
+const submit = useAction((r) => submitCarRequest(r.id), {
+  successKey: (approving) => (approving ? t('oa.car.submittedFlow') : t('oa.car.approved')),
+  reload: () => load()
+})
+const withdraw = useAction((r) => withdrawCarRequest(r.id), {
+  confirm: (r) => t('oa.car.confirmWithdraw', { no: r.requestNo }),
+  successKey: 'oa.car.withdrawn',
+  reload: () => load()
+})
 
 const flowOpen = ref(false)
 const flowInstanceId = ref()
@@ -236,6 +283,8 @@ function openFlow(record) {
 }
 ```
 
+用到的 `oa.car.withdraw`（撤回）、`oa.car.flowRecords`（审批记录）、`oa.car.submittedFlow`（已提交审批）、`oa.car.approved`（已批准）、`oa.car.confirmWithdraw`（确定撤回用车申请「{no}」？）、`oa.car.withdrawn`（已撤回）加到 `locales/zh-CN/oa.js` 和 `en-US/oa.js` 中。`useAction` 的用法见 [前端开发规范](./frontend#单条操作-useaction)。
+
 列表 SQL 中记得查出 `flow_instance_id`。`InstanceDetailDrawer` 显示流程进度、审批记录和业务信息；流程详情只有发起人、审批人、抄送人和有 `wf:instance:list` 权限的用户可以查看。
 
 ## 已接入审批的业务
@@ -244,8 +293,10 @@ function openFlow(record) {
 
 | 流程标识 | 业务 | 实现 |
 | --- | --- | --- |
-| `scm_purchase_order` / `scm_sales_order` | 采购 / 销售订单审核 | `ScmOrderService.submit`、`withdraw` |
+| `scm_purchase_order` / `scm_sales_order` | 采购 / 销售订单审核 | `ScmOrderService.approve`、`withdraw`、`onFlowFinished`（两种订单的流程标识不同、业务标识前缀相同，按 `OrderKind` 构造 `ApprovalFlow`） |
 | `scm_contract` | 采购合同 | `ScmPurchaseContractService.submit`、`onFlowFinished` |
+| `fin_loan` | 员工借款 | `FinLoanService.submit`、`onFlowFinished`（最简单的完整示例） |
+| `hr_leave` | 请假 / 加班 | `HrLeaveService`：创建即发起（`start`）、撤销（`cancelIfRunning`）、区分驳回与撤销（`onFinishedWithStatus`） |
 | `scm_requisition`、`scm_quotation`、`scm_order_change` | 请购单、销售报价、订单变更 | scm |
 | `wms_check`、`wms_stock_doc` | 有差异的盘点、手工出入库与调拨确认 | wms |
 | `mes_supplement`、`mes_ecn`、`qms_ncr` | 补料申请、工程变更、不合格品评审 | mes |

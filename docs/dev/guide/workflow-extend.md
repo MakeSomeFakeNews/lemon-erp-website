@@ -1,10 +1,10 @@
 ---
-order: 6
+order: 7
 ---
 
 # 扩展审批人类型、运算符、字段类型
 
-流程设计器的审批人类型、条件运算符、表单字段类型、节点类型都是前后端共同约定的取值：后端是 `modules/workflow/model` 中的枚举，前端是 `components/workflow` 中的常量。**扩展时后端枚举和前端常量必须同步修改**，否则设计器保存的值后端无法识别（或反过来）。前端常量的显示名称用 `t('workflow.xxx')`，新增的取值要同时在 `locales/zh-CN/workflow.js` 和 `locales/en-US/workflow.js` 中加译文；后端枚举中的中文名称只用于内部、不返回前端（行内 `// i18n-ignore`），后端返回给前端的校验提示用消息键，见 [国际化](./i18n)。
+流程设计器的审批人类型、条件运算符、表单字段类型、节点类型都是前后端共同约定的取值：后端是 `modules/workflow/model` 中的枚举，前端是 `components/workflow` 中的常量（下拉选项和显示名称），代码中判断取值时用由后端枚举生成的 `@/constants/enums`（`AssigneeType`、`ConditionOperator`、`FormFieldType`、`ApproveMode` 等）。**扩展时后端枚举和前端常量必须同步修改**，后端加了枚举值后在 `lemon-web` 中运行 `npm run gen:enums` 重新生成，否则设计器保存的值后端无法识别（或反过来）。前端常量的显示名称用 `t('workflow.xxx')`，新增的取值要同时在 `locales/zh-CN/workflow.js` 和 `locales/en-US/workflow.js` 中加译文；后端枚举中的中文名称只用于内部、不返回前端（行内 `// i18n-ignore`），后端返回给前端的校验提示用消息键，见 [国际化](./i18n)。
 
 | 扩展点 | 后端 | 前端 |
 | --- | --- | --- |
@@ -116,17 +116,18 @@ export const ASSIGNEE_TYPES = [
   { label: t('workflow.assignee.leaderChain'), value: 'DEPT_LEADER_CHAIN' }
 ]
 
+// AssigneeType 来自 @/constants/enums，后端加了 DEPT_LEADER_CHAIN 后运行 npm run gen:enums 才有
 export function assigneeText(node) {
   const a = node.assignee
   if (!a) return ''
-  if (a.type === 'INITIATOR') return t('workflow.assignee.initiator')
-  if (a.type === 'DEPT_LEADER') return (a.level || 1) === 1 ? t('workflow.leader.direct') : t('workflow.leader.level', { n: a.level })
-  if (a.type === 'DEPT_LEADER_CHAIN') return t('workflow.leader.chain', { n: a.level || 1 })
+  if (a.type === AssigneeType.INITIATOR) return t('workflow.assignee.initiator')
+  if (a.type === AssigneeType.DEPT_LEADER) return (a.level || 1) === 1 ? t('workflow.leader.direct') : t('workflow.leader.level', { n: a.level })
+  if (a.type === AssigneeType.DEPT_LEADER_CHAIN) return t('workflow.leader.chain', { n: a.level || 1 })
   // ...
 }
 ```
 
-`designer/NodeConfigDrawer.vue` 中，主管级别的选择框和 `onTypeChange` 中的默认级别目前只针对 `DEPT_LEADER`，改为同时适用于新类型（例如 `['DEPT_LEADER', 'DEPT_LEADER_CHAIN'].includes(draft.assignee.type)`）。新类型会得到多个审批人，不设置 `single`，设计器会显示「多人审批方式」，连续多级主管一般选「依次审批」。
+`designer/NodeConfigDrawer.vue` 中，主管级别的选择框和 `onTypeChange` 中的默认级别目前只针对 `DEPT_LEADER`，改为同时适用于新类型（例如 `[AssigneeType.DEPT_LEADER, AssigneeType.DEPT_LEADER_CHAIN].includes(draft.assignee.type)`）。新类型会得到多个审批人，不设置 `single`，设计器会显示「多人审批方式」，连续多级主管一般选「依次审批」。
 
 ## 新增条件运算符
 
@@ -157,11 +158,11 @@ public enum ConditionOperator {
 
 ```js
 export const OPERATORS = [
-  { label: '等于', value: 'EQ' },
+  { label: t('workflow.operator.eq'), value: 'EQ' },
   // ...
-  { label: '属于', value: 'IN' },
-  { label: '不属于', value: 'NOT_IN' },
-  { label: '包含', value: 'CONTAINS' }
+  { label: t('workflow.operator.in'), value: 'IN' },
+  { label: t('workflow.operator.notIn'), value: 'NOT_IN' },
+  { label: t('workflow.operator.contains'), value: 'CONTAINS' }
 ]
 
 /** 各字段类型可用的比较方式 */
@@ -174,7 +175,7 @@ const TYPE_OPERATORS = {
 }
 ```
 
-`ConditionEditor.vue` 中，下拉字段在运算符为 `IN` 时改为输入框、占位提示「多个值用逗号分隔」，`NOT_IN` 需要同样处理（把 `rule.operator !== 'IN'`、`rule.operator === 'IN'` 的判断扩展到 `NOT_IN`）。
+`workflow.operator.notIn` 加到两个语言包的 `workflow.js` 中。`ConditionEditor.vue` 中，下拉字段在运算符为 `IN` 时改为输入框、占位提示「多个值用逗号分隔」，`NOT_IN` 需要同样处理（把 `rule.operator !== ConditionOperator.IN`、`rule.operator === ConditionOperator.IN` 的判断扩展到 `ConditionOperator.NOT_IN`）。
 
 ## 新增表单字段类型
 
@@ -223,7 +224,7 @@ export const FIELD_TYPES = [
 ```vue
 <!-- components/workflow/form/FormRender.vue：在 NUMBER 之后加一个分支 -->
 <a-input-number
-  v-else-if="f.type === 'AMOUNT'"
+  v-else-if="f.type === FormFieldType.AMOUNT"
   v-model:value="model[f.field]"
   :min="0"
   :precision="2"
@@ -234,7 +235,7 @@ export const FIELD_TYPES = [
 
 再在 `designer/flow.js` 的 `TYPE_OPERATORS` 中加 `AMOUNT: ['EQ', 'NE', 'GT', 'GE', 'LT', 'LE']`，条件分支才能为金额字段提供比较方式；需要特殊显示（如千分位）时修改 `FormView.vue`。
 
-业务模块 `FlowBusiness.Variable` 的 `type` 与表单字段类型一致（`NUMBER`、`SELECT`、`INPUT`），设计器按同样的规则为业务变量提供运算符。
+业务模块 `FlowBusiness.Variable` 的 `type` 是枚举 `FlowBusiness.VariableType`（`NUMBER`、`INPUT`、`SELECT`），取值与表单字段类型中的同名取值一致，设计器按同样的规则为业务变量提供运算符。
 
 ## 待办提醒
 
@@ -267,4 +268,4 @@ public class WfMailNotifier {
 
 ## 验证
 
-扩展后在「流程中心 → 流程模型」中新建一个测试模型：设计、保存、发布，再从「发起申请」或业务单据发起，检查审批人、条件分支走向、流程详情的显示是否正确。前后端取值不一致时，保存设计会报「请求参数格式不正确」（后端无法反序列化未知的枚举值）。
+扩展后在「流程中心 → 流程模型」中新建一个测试模型：设计、保存、发布，再从「发起申请」或业务单据发起，检查审批人、条件分支走向、流程详情的显示是否正确。前后端取值不一致时，保存设计会报「请求参数格式不正确」或「字段 xxx 的取值“yyy”不正确」（后端无法反序列化未知的枚举值）；`npm run i18n:check` 也会提示 `constants/enums.js` 与后端枚举不一致。
