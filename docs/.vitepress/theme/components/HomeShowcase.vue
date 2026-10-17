@@ -125,6 +125,14 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
     </section>
 
     <section class="block">
+      <h2>业务全景</h2>
+      <p class="sub">九大业务域、近百个功能节点，单据在模块之间自动流转，一次录入、处处可用</p>
+      <a class="arch" :href="withBase('/images/arch/business.png')" target="_blank" rel="noreferrer">
+        <img :src="withBase('/images/arch/business.png')" alt="柠檬ERP 业务架构图" />
+      </a>
+    </section>
+
+    <section class="block">
       <h2>舒适的使用体验</h2>
       <p class="sub">顶部模块导航、多标签页、全局菜单搜索，支持深色模式</p>
       <div class="browser dark-shot">
@@ -196,6 +204,8 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 .demo-info .row { display: flex; gap: 12px; margin: 6px 0; line-height: 1.7; }
 .demo-info .row span { flex: none; width: 64px; color: var(--vp-c-text-2); }
 .demo-info a { color: var(--vp-c-brand-1); font-weight: 500; }
+.arch { display: block; padding: 16px; border-radius: 16px; border: 1px solid var(--vp-c-divider); background: #fff; }
+.arch img { display: block; width: 100%; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
 .stack { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .stack span { padding: 10px 20px; border-radius: 10px; border: 1px solid var(--vp-c-divider); background: var(--vp-c-bg-soft); font-weight: 500; }
 

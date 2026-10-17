@@ -24,6 +24,8 @@ docs
 └── public/images         截图
 ```
 
+架构图由 `scripts/diagrams` 中的脚本生成（Ant Design 图标 + 本机 Chrome 渲染），修改后运行 `npm run diagrams` 重新生成 `docs/public/images/arch/*.png`。
+
 侧边栏按目录自动生成：章节目录下的 `index.md` 为章节概览，其他页面按 frontmatter 中的 `order` 排序。
 
 推送到 `main` 分支后，GitHub Actions 自动构建并发布到 GitHub Pages。

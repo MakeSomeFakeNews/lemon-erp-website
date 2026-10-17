@@ -30,6 +30,8 @@ Spring Boot 4 默认使用 Jackson 3，`ObjectMapper` 等类位于 `tools.jackso
 
 ## 架构总览
 
+![柠檬ERP 技术架构图](/images/arch/tech.png)
+
 | 层次 | 内容 |
 | --- | --- |
 | 前端 `lemon-web` | 登录后按菜单动态注册路由；请求统一走 `/api`，由拦截器处理统一返回结构 |

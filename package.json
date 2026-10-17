@@ -5,9 +5,12 @@
   "scripts": {
     "dev": "vitepress dev docs",
     "build": "vitepress build docs",
-    "preview": "vitepress preview docs"
+    "preview": "vitepress preview docs",
+    "diagrams": "node scripts/diagrams/business.mjs && node scripts/diagrams/tech.mjs"
   },
   "devDependencies": {
+    "@ant-design/icons-svg": "^4.4.2",
+    "puppeteer-core": "^23.11.1",
     "vitepress": "1.6.3"
   }
 }
