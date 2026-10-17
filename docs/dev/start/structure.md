@@ -29,7 +29,7 @@ lemon-erp
 │   ├── lemon-hr                人力资源：员工、招聘培训、考勤、请假、薪酬、绩效、员工自助
 │   ├── lemon-crm               客户关系：客户、线索、商机、跟进、合同、市场活动、服务工单
 │   ├── lemon-pm                项目管理：项目、WBS 计划、工时、成本、项目核算
-│   └── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、决策支持
+│   └── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
 ├── lemon-admin                 启动模块：组装全部业务模块，打包为 lemon-erp.jar
 ├── lemon-web                   前端（Vite + Vue 3 + Ant Design Vue）
 └── sql
@@ -134,9 +134,11 @@ lemon-web
     ├── style.css               全局样式与亮 / 暗主题 CSS 变量（--app-*）、table-page 等布局类
     ├── api/<模块>/*.js          接口封装，基于 utils/request.js
     ├── views/<模块>/<页面>/index.vue   页面，菜单的「组件路径」即相对 views 的路径（不含 .vue）
+    │                           views/screen 数据大屏（静态路由 /screen/:key、免登录的 /screen-share/:token）
     ├── components              通用组件（TableToolbar、SearchForm、FormDrawer、SubPage、DictTag、
     │                           AttachmentPanel、ChangeLogPanel、ImportModal 等）与各模块的单据表单、详情
-    │                           print/ 打印预览与套打设计器，common/ 自定义字段的表单与显示
+    │                           print/ 打印预览与套打设计器，common/ 自定义字段的表单与显示，
+    │                           charts/ ECharts 封装，screen/ 数据大屏外壳、指标卡、面板、滚动列表
     ├── composables             useTable、useColumns、useFormDrawer、useDict、useCustomFields
     ├── directives/perm.js      按钮权限指令 v-perm
     ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）

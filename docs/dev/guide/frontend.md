@@ -341,6 +341,34 @@ html[data-theme='dark'] .workbench .hero {
 - 页面要在窄屏下可用：表单用 `a-row` / `a-col` 的响应式栅格（`:xs="24" :sm="12"`），抽屉宽度用 `min(640px, 100vw)`。
 - 手机 / PDA 的移动作业页面放在 `views/mobile` 下，菜单路径以 `/m` 开头，使用全屏的 `MobileLayout`。
 
+## 数据大屏
+
+数据大屏不使用后台布局，是两个静态路由（`router/index.js`）：
+
+| 路由 | 页面 | 说明 |
+| --- | --- | --- |
+| `/screen/:key` | `views/screen/ScreenPage.vue` | 登录后查看，`key` 为 `factory` / `warehouse` / `sales` / `quality`；`?rotate=factory,quality&interval=60` 轮播，`?workCenterId=` 生产车间按工作中心 |
+| `/screen-share/:token` | `views/screen/ShareScreenPage.vue` | 投屏链接，免登录。路由守卫对 `SCREEN_SHARE_PATH` 开头的路径直接放行，不加载用户和菜单（电视上可能残留过期的登录令牌） |
+
+两者都交给 `ScreenRunner.vue`：轮播、每 30 秒刷新当前大屏、请求失败时保留上次数据并在标题栏提示离线。通用组件在 `components/screen`：
+
+| 组件 | 作用 |
+| --- | --- |
+| `ScreenShell` | 外壳：按 1920 × 1080 设计、`transform: scale` 等比缩放铺满窗口；标题栏（企业名称、日期、时钟、更新时间 / 离线提示）、多屏切换、右下角轮播 / 全屏 / 返回按钮 |
+| `ScreenKpi` | 指标卡（数字滚动动画），属性 `label`、`value`、`unit`、`digits`、`sub`、`subClass`（`up` / `down`）、`color` |
+| `ScreenPanel` | 面板（标题 + `#extra` 插槽） |
+| `ScrollList` | 自动滚动列表，`columns` 的 `width` 用 CSS Grid 写法（`140px`、`1fr`），`#cell` 插槽自定义单元格 |
+| `screen.js` | `SCREENS` 大屏清单、配色 `COLORS` / `PALETTE`、`fmtNum` / `fmtMoney` / `fmtRate` 格式化、`axisStyle` / `tooltip` / `legend` / `gradient` 图表样式 |
+
+图表使用 `<EChart :option height="100%" dark />`，`dark` 强制暗色配色，不跟随系统主题。大屏的数据请求在 `api/bi/screen.js` 中用独立的 axios 实例：失败时不弹全局提示、401 不跳转登录页（无人值守的电视不能被弹窗打断），投屏链接请求不带登录令牌。
+
+### 新增一块大屏
+
+1. 后端：在 `bi/model/ScreenKey` 中加枚举值（名称即大屏标题），在 `BiScreenService.data` 的 `switch` 中加一个方法，一次返回 `kpi`、各图表和列表的全部数据；统计 SQL 写在 `BiScreenMapper.xml` 中，按租户自动过滤，不加数据权限（大屏接口要求「全部数据」）。列表加 `LIMIT`，趋势类数据用 `fillDays` 补齐没有数据的日期。
+2. 前端：在 `views/screen` 下新建 `XxxScreen.vue`（接收 `data` 属性，引入 `./screen.css` 使用 `screen-grid` 的「一行指标卡 + 两行面板」布局），在 `ScreenRunner.vue` 的 `COMPONENTS` 中登记，在 `components/screen/screen.js` 的 `SCREENS` 中加入 `key`、`label`、`desc`（数据大屏页面的卡片、投屏链接表单的选项都来自这里）。
+3. 投屏链接按 `ScreenKey` 保存（`bi_screen_share.screens` 逗号分隔），无需改表；如果 `screens` 的总长度可能超过 128 个字符，需要加宽该列。
+4. 只适合部分用户看的数据（如薪资）不要放进大屏：大屏可以通过投屏链接免登录查看。
+
 ## 其他约定
 
 - 不使用 `alert`、`confirm`，确认用 `Modal.confirm` 或 `a-popconfirm`，提示用 `message`。

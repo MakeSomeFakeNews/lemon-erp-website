@@ -64,7 +64,32 @@ order: 2
 
 未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。
 
-不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，以及 GET `/files/**`（头像等公开文件）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
+不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），以及 GET `/screen-share/**`（数据大屏投屏链接，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
+
+### 投屏链接（免登录）
+
+数据大屏的投屏链接供车间、仓库的电视免登录查看大屏，是唯一不需要登录就能读取业务数据的入口：
+
+```java
+// SecurityConfig：免登录只读，按链接令牌校验
+.requestMatchers(HttpMethod.GET, "/screen-share/**").permitAll()
+```
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /screen-share/{token}` | 链接信息：名称、企业名称、大屏清单、轮播间隔、工作中心 |
+| `GET /screen-share/{token}/{key}` | 大屏数据，`key` 必须在链接的大屏清单中，否则提示「链接中没有该大屏」 |
+
+校验在 `BiScreenShareService.resolve` 中完成：
+
+1. 令牌是 `SecureRandom` 生成的 16 字节（128 位）随机数的十六进制（32 个字符），保存在 `bi_screen_share.token`（唯一索引）；长度不是 32 的直接拒绝。
+2. 请求没有租户上下文，用 `TenantContext.callIgnore` 跨租户按令牌查找，再用 `TenantContext.callAs(链接所属租户, ...)` 统计数据，因此只能看到创建该链接的租户的数据。
+3. 链接不存在、已停用（`status = 0`）或已过有效期（`expire_time`）时统一提示「投屏链接无效、已停用或已过期」，不区分原因。
+4. 最近访问时间（`last_access_time`）最多每 5 分钟更新一次，避免每次刷新都写库。
+
+链接的新建、修改、重置令牌（`POST /bi/screen/share/{id}/reset`，旧令牌立即失效）、删除在 `/bi/screen/share` 下，需要 `bi:screen:share` 按钮权限和「全部数据」数据权限（创建链接等于把全公司汇总数据开放给一台设备），并记录操作日志（重置令牌不记录返回结果，避免新令牌出现在日志中）。登录后查看大屏的 `GET /bi/screen/{key}` 需要 `bi:screen:list` 和「全部数据」。
+
+投屏接口只返回大屏的汇总数据，不要在 `/screen-share` 下增加其他接口，也不要在大屏中加入薪资等只适合部分用户查看的数据。
 
 ## LoginUser
 
