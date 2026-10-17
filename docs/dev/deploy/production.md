@@ -195,6 +195,23 @@ fc-list :lang=zh
 | 文件目录 | `UPLOAD_PATH` 和附件目录挂载同一个共享存储（NFS 等），或改造 `FileStorageService` 使用对象存储 |
 | 定时任务 | 只在一个实例上 `LEMON_JOB_ENABLED=true`，其他实例为 `false`，否则任务会在每个实例上各执行一次 |
 | 流程引擎 | Flowable 共用同一个数据库，多实例之间由引擎的乐观锁保证一致 |
+| 第三方集成 | 授权登录的 state（`im:state:`）和应用 access_token 在缓存中，发起授权与回调可能落在不同实例，必须使用 Redis |
+
+## 第三方集成
+
+接入钉钉、企业微信、飞书（「系统管理 → 第三方集成」）时，部署上需要满足：
+
+| 项目 | 要求 |
+| --- | --- |
+| 系统访问地址 | 在页面上填写的 `home_url` 是**前端**地址（如 `https://erp.example.com`），授权回调 `{home_url}/im-callback` 和应用首页 `{home_url}/im-login` 都是前端路由。员工的手机和电脑必须能访问它；在公司外用手机打开时需要外网可访问。建议使用 HTTPS，飞书、钉钉的重定向 URL 和企业微信的可信域名都按这个地址登记 |
+| 前端路由回退 | Nginx 需要 `try_files $uri $uri/ /index.html`，使 `/im-callback`、`/im-login` 直接访问时返回 `index.html`，见 [Nginx 配置](./nginx) |
+| 服务器出口 | 后端要能访问平台的开放接口：`oapi.dingtalk.com`、`api.dingtalk.com`、`qyapi.weixin.qq.com`、`open.feishu.cn`（地址见 `lemon.im.*`）。处在代理或防火墙之后时放行这些域名的 443 端口 |
+| 企业微信可信 IP | 企业微信要求在应用的「企业可信 IP」中登记调用接口的服务器出口 IP，出口 IP 变化后需要更新 |
+| 回调不需要入站 | 平台只把浏览器重定向回系统访问地址，不会主动回调后端，后端不需要对平台开放入站访问 |
+| 多实例 | 必须使用 Redis，见上文「多实例部署」 |
+| 子路径部署 | 系统访问地址可以带路径，但前端本身需要按 [部署在子路径下](./nginx#部署在子路径下) 改造；免登入口直接请求 `/api/auth/info` 校验令牌，接口地址需与前端同源 |
+
+应用凭证保存在数据库 `sys_im_config` 中（密钥只写不读、操作日志隐藏），备份数据库时注意保护。
 
 ## 安全建议
 

@@ -19,6 +19,7 @@ order: 2
 | `SecurityConfig` | framework/config | Spring Security 配置：无状态、关闭表单登录和 CSRF、放行公开接口 |
 | `AuthService` / `AuthController` | modules/system | 登录、退出、当前用户信息、当前用户菜单 |
 | `PasswordPolicy`、`CaptchaService` | modules/system | 登录失败锁定、密码策略与过期、验证码 |
+| `SysImAuthService` / `ImAuthController` | modules/system | 钉钉、企业微信、飞书授权登录（OAuth 授权码），见 [第三方集成](./im) |
 
 ## 登录流程
 
@@ -64,7 +65,7 @@ order: 2
 
 未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。
 
-不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），以及 GET `/screen-share/**`（数据大屏投屏链接，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
+不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），GET `/screen-share/**`（数据大屏投屏链接，见下文），以及 `/auth/im/**`（钉钉、企业微信、飞书授权登录，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
 
 ### 投屏链接（免登录）
 
@@ -90,6 +91,28 @@ order: 2
 链接的新建、修改、重置令牌（`POST /bi/screen/share/{id}/reset`，旧令牌立即失效）、删除在 `/bi/screen/share` 下，需要 `bi:screen:share` 按钮权限和「全部数据」数据权限（创建链接等于把全公司汇总数据开放给一台设备），并记录操作日志（重置令牌不记录返回结果，避免新令牌出现在日志中）。登录后查看大屏的 `GET /bi/screen/{key}` 需要 `bi:screen:list` 和「全部数据」。
 
 投屏接口只返回大屏的汇总数据，不要在 `/screen-share` 下增加其他接口，也不要在大屏中加入薪资等只适合部分用户查看的数据。
+
+### 第三方登录（钉钉 / 企业微信 / 飞书）
+
+```java
+// SecurityConfig：授权页地址和回调
+.requestMatchers("/auth/im/**").permitAll()
+```
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /auth/im/providers?tenantName=` | 登录页显示的平台（租户已启用并开启登录的配置） |
+| `GET /auth/im/{platform}/authorize` | 生成授权页地址：登录页传 `tenantName`，免登入口 `/im-login` 传 `tenantId`；`inApp` 表示在平台客户端内打开；`redirect` 为登录后进入的站内路由 |
+| `POST /auth/im/callback` | 前端回调页 `/im-callback` 提交 `{code, state}`，登录返回令牌，绑定则保存绑定关系 |
+
+与密码登录的区别：
+
+1. 租户和用途来自授权时创建的 `state`（`SecureRandom` 128 位随机数，缓存 `im:state:` 10 分钟，回调时读取后立即删除），不信任回调请求中的其他参数；
+2. 授权码由平台换成成员 userid，按 `sys_im_user` 的绑定关系找到用户。未绑定时 `AuthService.recordLoginFailure` 记入登录日志（用户名为「钉钉:userid」）并提示先绑定；
+3. `AuthService.loginAs(user, "钉钉登录")` 校验账号启用、不是门户账号，然后与密码登录共用 `issue()`：`createToken`、登录日志（「钉钉登录成功」）、返回 `passwordExpired`。第三方登录不经过验证码和密码错误锁定；
+4. 授权页地址中的回调地址固定为 `{系统访问地址}/im-callback`，必须与平台中登记的一致；`redirect` 只接受站内路由，防止借登录跳转到外部网站。
+
+已登录用户绑定本人账号走同一流程（`GET /system/im/mine/{platform}/bind-url`，state 中记录当前用户 ID）。前端 `/im-callback`、`/im-login` 在路由白名单中，且已登录时也不加载菜单路由（`BARE_PAGES`），由页面自行处理令牌。完整流程见 [第三方集成](./im#授权登录与绑定)。
 
 ## LoginUser
 
@@ -124,6 +147,7 @@ DataScope scope = SecurityUtils.getDataScope();
 | --- | --- |
 | 退出登录 | 删除当前会话 |
 | 系统监控 → 在线用户 → 强制下线 | 删除指定会话 |
+| 通讯录同步新建了部门或账号 | 清空全部权限缓存（`login:perms:*`） |
 | 停用、删除用户，重置密码 | `kickUser`：删除该用户全部会话并清除权限缓存 |
 | 修改用户角色、部门 | 清除该用户的权限缓存，下次请求重新加载 |
 | 修改角色权限、菜单、部门，修改租户套餐 | 清空全部权限缓存（`login:perms:*`） |

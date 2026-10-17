@@ -18,7 +18,7 @@ lemon-erp
 ├── lemon-common                通用层：与业务无关，可被任何模块引用
 ├── lemon-framework             框架层：基础设施与模块间契约，不依赖任何业务模块
 ├── lemon-modules               业务模块
-│   ├── lemon-system            系统管理：登录认证、用户、部门、角色、菜单、字典、租户、参数、业务参数、自定义字段、编码规则、打印（JasperReports）、消息、附件
+│   ├── lemon-system            系统管理：登录认证、用户、部门、角色、菜单、字典、租户、参数、业务参数、自定义字段、编码规则、打印（JasperReports）、消息、附件、第三方集成（钉钉 / 企业微信 / 飞书）
 │   ├── lemon-monitor           系统监控：在线用户、操作日志、登录日志、服务监控、缓存监控
 │   ├── lemon-workflow          流程中心：Flowable 集成、流程模型、发起与审批、抄送
 │   ├── lemon-dashboard         首页工作台

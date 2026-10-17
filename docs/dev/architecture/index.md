@@ -28,6 +28,7 @@
 | 定时任务 | `framework/job/JobHandler` + `SysJobService` | 实现 `JobHandler` 注册为 Bean | [定时任务](./job) |
 | 日志与审计 | `@OperLog`、登录日志、`ChangeLogger` | 增删改接口加 `@OperLog` | [日志与审计](./log) |
 | 文件与附件 | `FileStorageService`、`RecordTypeProvider` | 登记业务记录类型，前端放 `AttachmentPanel` | [文件与附件](./file) |
+| 第三方集成 | `modules/system/im`（`ImClient`、`ImHttp`）+ `SysIm*Service` | 无；业务通知用 `MessageSender` 发送即自动推送到钉钉 / 企业微信 / 飞书 | [第三方集成](./im) |
 | 单据打印 | `modules/system/print`（JasperReports）+ `utils/print.js` | 页面调用 `printDocs`，在 `PRINT_TYPES` 中登记 | [单据编号与打印](../guide/doc-no-print) |
 | 业务参数 | `framework/rule` + `SysBizRuleService` | 实现 `BizRuleProvider` 登记，注入 `BizRules` 读取 | [新增业务参数](../guide/biz-rule) |
 | 自定义字段 | `SysCustomFieldService` + `useCustomFields` | 登记业务记录类型，表单 / 列表 / 详情接入 | [业务实体接入自定义字段](../guide/custom-field) |

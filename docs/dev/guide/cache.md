@@ -63,7 +63,7 @@ public record CarStat(long total, long approved, long passengers) {
 ## 键的命名
 
 - 以「模块:功能:」开头，冒号分隔，如 `oa:car:stat:`，避免与其他缓存冲突，也便于按前缀清理；
-- 已使用的前缀：`login:token:`、`login:perms:`、`login:fail:`、`login:captcha:`、`dict:`、`settings:all`、`bizrule:`，不要占用；
+- 已使用的前缀：`login:token:`、`login:perms:`、`login:fail:`、`login:captcha:`、`dict:`、`settings:all`、`bizrule:`、`im:token:`、`im:state:`，不要占用；
 - **多租户**：以租户内唯一的值（用户名、编码、统计范围等）作 key 时，带上租户 ID（`TenantContext.require()`）；以全局唯一的 ID（用户 ID、单据 ID）作 key，或缓存平台共享表的数据时不需要；
 - 与其他项目共用 Redis 时，前缀是区分数据的唯一依据。
 

@@ -57,7 +57,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `lemon.demo.enabled` | `false`（环境变量 `LEMON_DEMO_ENABLED`） | 开启后所有用户只能查看，不能新增、修改、删除数据 |
-| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway`、`/system/print/pdf`、`/system/print/jrxml` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、标记消息已读，以及用 POST 传参的只读查询（多维分析、促销预览、上架建议、单据打印） |
+| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/auth/im/callback`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway`、`/system/print/pdf`、`/system/print/jrxml` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、第三方授权登录回调、标记消息已读，以及用 POST 传参的只读查询（多维分析、促销预览、上架建议、单据打印） |
 
 ### lemon.tenant：SaaS 多租户
 
@@ -122,6 +122,23 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `lemon.bi.etl-cron` | `0 30 1 * * *` | 定时任务「数据仓库同步」的默认 Cron（每天 01:30），设为 `-` 时该任务首次登记为停用。只在任务首次登记到 `sys_job` 时生效，之后以「定时任务」页面的设置为准 |
+
+### lemon.im：第三方集成
+
+对应 `modules/system/im/ImProperties`，只有钉钉、企业微信、飞书开放接口的地址，默认为官方地址，`application.yml` 中只有注释掉的示例，一般不需要配置。应用凭证（AppKey、Secret、AgentId 等）在「系统管理 → 第三方集成」中按租户配置，不放在配置文件中，也没有对应的环境变量。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `lemon.im.dingtalk.oapi` | `https://oapi.dingtalk.com` | 钉钉旧版服务端接口（access_token、工作通知、通讯录、群机器人） |
+| `lemon.im.dingtalk.api` | `https://api.dingtalk.com` | 钉钉新版接口（用户授权） |
+| `lemon.im.dingtalk.login` | `https://login.dingtalk.com` | 钉钉登录授权页 |
+| `lemon.im.wecom.api` | `https://qyapi.weixin.qq.com` | 企业微信服务端接口 |
+| `lemon.im.wecom.open` | `https://open.weixin.qq.com` | 企业微信客户端内的网页授权 |
+| `lemon.im.wecom.login` | `https://login.work.weixin.qq.com` | 企业微信浏览器扫码登录 |
+| `lemon.im.feishu.api` | `https://open.feishu.cn` | 飞书服务端接口；Lark 国际版改为 `https://open.larksuite.com` |
+| `lemon.im.feishu.accounts` | `https://accounts.feishu.cn` | 飞书授权页；Lark 国际版改为 `https://accounts.larksuite.com` |
+
+需要时也可以用环境变量覆盖，如 `LEMON_IM_FEISHU_API`。详见 [第三方集成](../architecture/im#配置项)。
 
 ### lemon.workflow：工作流
 

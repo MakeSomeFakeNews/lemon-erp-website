@@ -43,6 +43,8 @@ public interface CacheService {
 | `login:captcha:` | 登录验证码 | 验证码答案 | 2 分钟，校验一次作废 | `CaptchaService.CACHE_KEY` |
 | `settings:all` | 系统参数 | 参数设置中修改过的参数 | 12 小时 | `SysConfigService.CACHE_KEY` |
 | `bizrule:` | 业务参数 | 按租户缓存的业务参数（修改过的），key 为 `bizrule:{租户ID}` | 12 小时 | `SysBizRuleService.CACHE_KEY` |
+| `im:token:` | 第三方集成令牌 | 钉钉、企业微信、飞书应用的 access_token，key 为 `im:token:{租户ID}:{平台}` | 平台返回的有效期减 5 分钟，保存集成配置时清理 | `ImHttp.TOKEN_KEY` |
+| `im:state:` | 第三方授权 | 授权登录 / 绑定的 `State`（租户、平台、用途、用户、登录后进入的页面），key 为 `im:state:{随机数}` | 10 分钟，回调时删除（一次有效） | `SysImAuthService.STATE_KEY` |
 
 这些缓存都登记在 `CacheMonitorService.CACHES` 中，「系统监控 → 缓存监控」可以查看 key 数量、查看值、按 key 删除或清空整类缓存；缓存监控只开放这些前缀，不能通过接口查看或删除任意 key。Redis 模式下页面还显示 Redis 的运行信息和命令统计。
 
@@ -62,7 +64,7 @@ private String failKey(String username) {
 }
 ```
 
-按租户保存的整体数据直接以租户 ID 作 key，例如业务参数 `bizrule:{租户ID}`（`SysBizRuleService`，没有租户上下文时按平台租户）。以全局唯一 ID（用户 ID、会话 ID）作 key，或缓存平台共享表（字典、参数设置）的数据时不需要带租户。
+按租户保存的整体数据直接以租户 ID 作 key，例如业务参数 `bizrule:{租户ID}`（`SysBizRuleService`，没有租户上下文时按平台租户）、第三方集成的 access_token `im:token:{租户ID}:{平台}`。第三方授权的 `im:state:` 以随机数作 key，租户 ID 保存在值中，回调时据此设置租户上下文。以全局唯一 ID（用户 ID、会话 ID）作 key，或缓存平台共享表（字典、参数设置）的数据时不需要带租户。
 
 ## 进程内缓存
 

@@ -96,6 +96,10 @@ server {
 
 `http2 on;` 需要 Nginx 1.25.1 及以上，更早的版本写成 `listen 443 ssl http2;`。
 
+::: tip 第三方集成的回调地址
+钉钉、企业微信、飞书授权后跳回前端路由 `/im-callback`，应用首页和消息链接指向 `/im-login`，它们都依赖 `try_files $uri $uri/ /index.html` 回退到前端入口。平台要求回调地址与登记的完全一致，建议直接使用 HTTPS 域名作为「系统访问地址」，HTTP 访问时由上面的配置 301 跳转到 HTTPS 会使地址变化。部署要求见 [生产环境配置](./production#第三方集成)。
+:::
+
 ## 真实客户端 IP
 
 后端配置了 `server.forward-headers-strategy: native`，由 Tomcat 的 RemoteIpValve 处理转发头：
