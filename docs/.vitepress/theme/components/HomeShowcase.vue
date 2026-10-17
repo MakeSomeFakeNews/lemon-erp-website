@@ -161,6 +161,11 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
         <div class="step"><b>2</b><div><h4>启动后端</h4><code>./gradlew bootRun</code></div></div>
         <div class="step"><b>3</b><div><h4>启动前端</h4><code>cd lemon-web &amp;&amp; npm run dev</code></div></div>
       </div>
+      <div class="docker">
+        <span>或者使用 Docker 一键部署</span>
+        <code>cd docker &amp;&amp; cp .env.example .env &amp;&amp; docker compose up -d --build</code>
+        <a :href="withBase('/dev/deploy/docker')">部署说明 →</a>
+      </div>
       <div class="actions">
         <a class="btn primary" href="https://erp.dqq.me" target="_blank" rel="noreferrer">在线演示</a>
         <a class="btn" :href="withBase('/dev/start/')">阅读开发文档</a>
@@ -219,6 +224,9 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 .step b { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--vp-c-brand-1); color: #fff; }
 .step h4 { font-weight: 600; margin-bottom: 8px; }
 .step code { font-size: 13px; padding: 3px 8px; border-radius: 6px; background: var(--vp-c-default-soft); }
+.docker { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 20px; color: var(--vp-c-text-2); font-size: 14px; }
+.docker code { font-size: 13px; padding: 4px 10px; border-radius: 6px; background: var(--vp-c-default-soft); }
+.docker a { color: var(--vp-c-brand-1); font-weight: 500; }
 .actions { display: flex; justify-content: center; gap: 12px; margin-top: 36px; }
 .btn { padding: 10px 24px; border-radius: 20px; border: 1px solid var(--vp-c-divider); font-weight: 600; }
 .btn { color: var(--vp-c-text-1); }

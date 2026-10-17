@@ -6,6 +6,10 @@ order: 2
 
 本页介绍在本机初始化数据库、启动后端和前端的完整步骤。所有 Gradle 命令都在项目根目录执行。
 
+::: tip 只想快速体验
+本机安装了 Docker 时，不需要安装 JDK、MySQL、Redis 和 Node，在仓库的 `docker/` 目录执行 `cp .env.example .env` 和 `docker compose up -d --build`，完成后访问 `http://localhost` 即可，见 [Docker 部署](../deploy/docker)。
+:::
+
 ## 1. 获取源码
 
 ```bash

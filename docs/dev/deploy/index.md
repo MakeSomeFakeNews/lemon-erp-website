@@ -2,6 +2,10 @@
 
 本章介绍柠檬ERP 的打包、生产环境配置、Nginx 反向代理、Docker 部署，以及升级、备份和常见问题。
 
+::: tip 最快的部署方式
+服务器上安装了 Docker 时，进入仓库的 `docker/` 目录执行 `cp .env.example .env`（修改密码）和 `docker compose up -d --build` 即可一键启动 MySQL、Redis、后端和前端，见 [Docker 部署](./docker)。下面的内容适用于不使用 Docker、直接在服务器上运行 jar 的部署方式。
+:::
+
 ## 部署架构
 
 | 组件 | 说明 |
@@ -50,6 +54,6 @@
 | [打包](./build) | 后端 jar、前端 dist 的构建 |
 | [生产环境配置](./production) | prod 配置、环境变量、启动脚本、systemd 服务、JVM 参数 |
 | [Nginx 配置](./nginx) | 静态文件、反向代理、HTTPS、上传大小、真实 IP |
-| [Docker 部署示例](./docker) | Dockerfile 与 docker-compose 参考 |
+| [Docker 部署](./docker) | 仓库自带的 Dockerfile、docker-compose 一键部署与镜像构建脚本 |
 | [升级与数据备份](./upgrade) | 版本升级步骤、数据库与文件备份建议 |
 | [常见问题](./faq) | Flowable 表、`nullCatalogMeansCurrent`、`JWT_SECRET` 长度、`X-Forwarded-For`、ip2region 更新等 |
