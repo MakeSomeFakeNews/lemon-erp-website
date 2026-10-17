@@ -5,6 +5,7 @@ import path from 'node:path'
 const DOCS = path.resolve(__dirname, '..')
 const BASE = '/lemon-erp-website/'
 const REPO = 'https://github.com/MakeSomeFakeNews/lemon-erp'
+const DEMO = 'https://erp.dqq.me'
 
 /** 用户手册各章节：目录 → 标题，顺序即侧边栏顺序 */
 const MANUAL: [string, string][] = [
@@ -74,6 +75,7 @@ export default defineConfig({
     logo: '/logo.svg',
     nav: [
       { text: '首页', link: '/' },
+      { text: '在线演示', link: DEMO },
       { text: '用户手册', link: '/manual/guide/', activeMatch: '^/manual/' },
       { text: '开发文档', link: '/dev/start/', activeMatch: '^/dev/' },
       { text: '源码', link: REPO }

@@ -10,6 +10,9 @@ hero:
     alt: 柠檬ERP
   actions:
     - theme: brand
+      text: 在线演示
+      link: https://erp.dqq.me
+    - theme: alt
       text: 用户手册
       link: /manual/guide/
     - theme: alt

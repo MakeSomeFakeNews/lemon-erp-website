@@ -4,6 +4,10 @@
 
 ![柠檬ERP 工作台](/images/manual/guide/home.jpg)
 
+::: tip 在线演示
+不想自己部署时，可以直接访问演示环境 [https://erp.dqq.me](https://erp.dqq.me)（租户「柠檬科技」，账号 admin / admin123）对照本手册操作。演示环境只能查看，不能新增、修改、删除数据。
+:::
+
 ## 适用企业
 
 | 企业类型 | 典型用法 |

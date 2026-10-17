@@ -90,6 +90,20 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
       </div>
     </section>
 
+    <section class="block demo">
+      <h2>在线体验</h2>
+      <p class="sub">无需安装，打开浏览器即可体验全部功能（演示环境只能查看，不能修改数据）</p>
+      <div class="demo-card">
+        <div class="demo-info">
+          <div class="row"><span>演示地址</span><a href="https://erp.dqq.me" target="_blank" rel="noreferrer">https://erp.dqq.me</a></div>
+          <div class="row"><span>租户</span><b>柠檬科技</b></div>
+          <div class="row"><span>账号</span><b>admin</b> / <b>admin123</b>（超级管理员）</div>
+          <div class="row"><span></span><b>test</b> / <b>admin123</b>（普通用户，只读）</div>
+        </div>
+        <a class="btn primary" href="https://erp.dqq.me" target="_blank" rel="noreferrer">立即体验</a>
+      </div>
+    </section>
+
     <section class="block">
       <h2>覆盖企业经营全流程</h2>
       <p class="sub">一套系统打通采购、仓储、生产、质量、销售、财务、人力、客户与项目，业务单据自动联动</p>
@@ -135,7 +149,8 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
         <div class="step"><b>3</b><div><h4>启动前端</h4><code>cd lemon-web &amp;&amp; npm run dev</code></div></div>
       </div>
       <div class="actions">
-        <a class="btn primary" :href="withBase('/dev/start/')">阅读开发文档</a>
+        <a class="btn primary" href="https://erp.dqq.me" target="_blank" rel="noreferrer">在线演示</a>
+        <a class="btn" :href="withBase('/dev/start/')">阅读开发文档</a>
         <a class="btn" href="https://github.com/MakeSomeFakeNews/lemon-erp" target="_blank" rel="noreferrer">GitHub 源码</a>
       </div>
     </section>
@@ -177,6 +192,10 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 .module .more { display: inline-block; margin-top: 12px; font-weight: 500; color: var(--vp-c-brand-1); }
 .module .pic img { display: block; width: 100%; border-radius: 10px; border: 1px solid var(--vp-c-divider); box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12); }
 
+.demo-card { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; max-width: 760px; margin: 0 auto; padding: 28px 32px; border-radius: 16px; background: linear-gradient(135deg, rgba(255, 212, 59, 0.16), rgba(105, 219, 124, 0.14)); border: 1px solid var(--vp-c-divider); }
+.demo-info .row { display: flex; gap: 12px; margin: 6px 0; line-height: 1.7; }
+.demo-info .row span { flex: none; width: 64px; color: var(--vp-c-text-2); }
+.demo-info a { color: var(--vp-c-brand-1); font-weight: 500; }
 .stack { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .stack span { padding: 10px 20px; border-radius: 10px; border: 1px solid var(--vp-c-divider); background: var(--vp-c-bg-soft); font-weight: 500; }
 

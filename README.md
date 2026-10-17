@@ -3,6 +3,7 @@
 柠檬ERP 的官方网站，包含产品介绍、用户手册和开发文档，基于 [VitePress](https://vitepress.dev) 构建。
 
 - 在线访问：https://makesomefakenews.github.io/lemon-erp-website/
+- 在线演示：https://erp.dqq.me（租户「柠檬科技」，账号 admin / admin123）
 - 柠檬ERP 源码：https://github.com/MakeSomeFakeNews/lemon-erp
 
 ## 本地预览
