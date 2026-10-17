@@ -102,7 +102,7 @@ printDocs(doc, '打印任务标题', '模板标识')
 | `title` | string | 单据名称，如「记账凭证」 |
 | `no` | string | 单号，显示在标题下方（`No. 单号`） |
 | `fields` | `[标签, 值, 是否整行][]` | 表头字段，每行三个，第三项为 `true` 时独占一行 |
-| `columns` | `{ title, key?, value?, align?, width? }[]` | 明细列：`key` 取行的字段，或 `value(row, index)` 计算；`align: 'right'` 右对齐；`width` 列宽（mm），一般不在代码中写，由打印模板设置 |
+| `columns` | `{ title, id?, key?, value?, align?, width? }[]` | 明细列：`key` 取行的字段，或 `value(row, index)` 计算；`align: 'right'` 右对齐；`width` 列宽（mm），一般不在代码中写，由打印模板设置（财务报表这类固定版式的报表在代码中给出默认列宽）；`id` 为打印模板匹配用的标识，默认同 `title`，同一张单据中有同名列时用它区分（如资产负债表左右两栏都有「行次」「期末余额」，右栏的 `id` 为「行次（右）」「期末余额（右）」，打印出来的列名仍是 `title`） |
 | `rows` | object[] | 明细行 |
 | `totals` | object | 合计行 `{ 列 key: 值 }`，按列的 `key` 对应到列上（没有 `key` 的列不能放合计值）；第一列没有值时显示「合计」 |
 | `sections` | `{ title, columns, rows }[]` | 主明细之后的其他明细表（如生产任务单的工序），最多 5 个 |
@@ -110,7 +110,7 @@ printDocs(doc, '打印任务标题', '模板标识')
 | `note` | string | 备注，显示在明细之后 |
 | `slip` | boolean | 条状单据（工资条）：一页连续打印多条，之间用虚线分隔，每条不跨页拆开 |
 
-表头字段、明细列、签字栏的**名称就是它们的标识**：打印模板按名称匹配配置，套打按名称定位，上传的 JRXML 按名称取值（`$P{FIELDS}.get("供应商")`、`$F{物料名称}`）。因此同一张单据中的名称不要重复，也不要随意修改已有单据的名称，否则用户保存过的模板会对应不上。
+表头字段、明细列（有 `id` 时为 `id`）、签字栏的**名称就是它们的标识**：打印模板按名称匹配配置，套打按名称定位，上传的 JRXML 按名称取值（`$P{FIELDS}.get("供应商")`、`$F{物料名称}`）。因此同一张单据中的名称不要重复，也不要随意修改已有单据的名称，否则用户保存过的模板会对应不上。
 
 真实示例（`components/fin/VoucherDetail.vue`）：
 
@@ -244,7 +244,7 @@ export const PRINT_TYPES = [
 | `key` | 模板标识，`printDocs` 的第三个参数，建议「模块.单据」（只能包含字母、数字、下划线和点，最长 64 个字符） |
 | `module` / `name` | 模板列表中的分组和名称 |
 | `fields` | 表头字段名称，**与 doc.fields 中的标签一致** |
-| `columns` | 明细列标题，**与 doc.columns 中的 title 一致**；数字列可写 `{ title: '数量', align: 'right' }`（文件内的 `num('数量')`） |
+| `columns` | 明细列标题，**与 doc.columns 中的 title 一致**（列有 `id` 时与 `id` 一致）；数字列可写 `{ title: '数量', align: 'right' }`（文件内的 `num('数量')`） |
 | `signs` | 签字栏名称，**与 doc.signs 中的名称一致** |
 | `note` | 是否有备注 |
 | `slip` | 是否条状单据 |
@@ -303,6 +303,7 @@ function print(r) {
 | `scm.pickList`、`scm.wavePick`、`scm.packingList` | 拣货单、波次拣货单、装箱单 |
 | `wms.in`、`wms.out`、`wms.transfer` | 入库单、出库单、调拨单 |
 | `fin.voucher` | 记账凭证 |
+| `fin.balanceSheet`、`fin.incomeStatement`、`fin.cashFlow` | 资产负债表、利润表、现金流量表（`views/fin/report`，明细列为报表的项目、行次和金额列） |
 | `fin.partnerStatement` | 往来对账单（客户 / 供应商共用一个模板） |
 | `mes.workOrder` | 生产任务单 |
 | `hr.payslip` | 工资条（条状） |
