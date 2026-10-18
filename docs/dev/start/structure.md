@@ -56,7 +56,8 @@ lemon-erp
 com.lemon.erp.common
 ├── base          BaseEntity（id、createTime、updateTime）、TreeEntity（parentId、sort、children）
 ├── dto           StatusRequest（启用 / 停用请求体）
-├── exception     BizException（消息键 + 参数）、GlobalExceptionHandler
+├── enums         EnableStatus（启用 / 停用，存储与 JSON 为 1 / 0）
+├── exception     BizException（消息键 + 参数）、InvalidEnumValueException、GlobalExceptionHandler
 ├── i18n          Messages：自动发现各模块的消息资源包，按请求语言取消息
 ├── result        R（统一返回）、PageResult（分页结果）
 ├── util          Decimals（金额、数量的判空、求和、精度）、ServletUtils（请求、客户端 IP）、UserAgentUtils、TreeUtils

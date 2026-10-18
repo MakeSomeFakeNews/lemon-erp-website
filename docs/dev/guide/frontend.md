@@ -350,6 +350,7 @@ const editable = [OrderStatus.APPROVED, OrderStatus.PARTIAL].includes(d.status)
 - 导出名为 Java 简单类名；多个模块有同名枚举时全部加模块前缀（如 `WmsDocStatus`、`MesDocStatus`），`lemon-common` / `lemon-framework` 的前缀为 `Common` / `Framework`。
 - `npm run i18n:check` 的最后一步（`gen-enums.mjs --check`）检查生成的文件是否与后端一致，不一致时提示重新生成。
 - 业务字典（租户可扩展的分类）、Java 类内部的嵌套枚举、前端自己合成的取值不在其中，仍用字面量或在页面 / 模块的 js 中定义常量。
+- 用 `@JsonValue` 自定义 JSON 取值的枚举不生成。目前只有启用 / 停用 `EnableStatus`，接口中是数字 1 / 0，前端用 `@/utils/constants` 中的 `STATUS_ENABLED`（1）/ `STATUS_DISABLED`（0），如新增表单的默认值 `status: STATUS_ENABLED`。
 
 ## 单条操作：useAction
 

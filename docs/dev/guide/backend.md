@@ -61,7 +61,7 @@ public class R<T> {
 public R<PageResult<WmsWarehouse>> page(@RequestParam(defaultValue = "1") long current,
                                         @RequestParam(defaultValue = "10") long size,
                                         @RequestParam(required = false) String keyword,
-                                        @RequestParam(required = false) Integer status) {
+                                        @RequestParam(required = false) EnableStatus status) {
     return R.ok(warehouseService.page(current, size, keyword, status));
 }
 ```
@@ -202,11 +202,37 @@ orderMapper.update(Wrappers.<ScmOrder>lambdaUpdate().set(ScmOrder::getStatus, Or
         .eq(ScmOrder::getId, id).in(ScmOrder::getStatus, OrderStatus.EXECUTABLE));
 ```
 
+**启用 / 停用状态用 `EnableStatus`**。物料、仓库、库位、客户、供应商、科目、币种、BOM、工作中心、检验方案、岗位、社保方案、用户、角色、部门、菜单、字典、租户、定时任务、流程模型等约 30 个启停字段统一用 `lemon-common` 的 `com.lemon.erp.common.enums.EnableStatus`（`ENABLED`、`DISABLED`，对应字典 `sys_common_status`）。它是唯一**不按名称存储**的枚举：数据库列、JSON、查询参数中仍是数字 1 / 0，与字典取值、已有数据和前端保持一致。
+
+```java
+// 实体、请求 DTO：字段直接用 EnableStatus（数据库列仍为 TINYINT 1 / 0）
+private EnableStatus status;
+
+// 比较用 == 或枚举方法，不写 Integer.valueOf(1).equals(...)、status == 1
+if (warehouse.getStatus() == EnableStatus.DISABLED) { ... }
+if (EnableStatus.isEnabled(user.getStatus())) { ... }   // null 视为未启用
+entity.setStatus(EnableStatus.ENABLED);
+.eq(WmsWarehouse::getStatus, EnableStatus.ENABLED)
+
+// 查询参数：?status=1 / ?status=0
+@RequestParam(required = false) EnableStatus status
+
+// 启停接口统一用 StatusRequest：{"status": 1 | 0}
+public record StatusRequest(@NotNull(message = "{common.valid.statusRequired}") EnableStatus status) { }
+warehouseService.changeStatus(id, req.status());
+```
+
+- 读写方式：`code` 字段同时标注 MyBatis-Plus 的 `@EnumValue`（按 1 / 0 读写数据库）和 Jackson 的 `@JsonValue`（输出数字）；反序列化由 `@JsonCreator` 的 `EnableStatus.fromJson` 处理，接受数字 1 / 0、字符串 `"1"` / `"0"`（也接受常量名 `ENABLED` / `DISABLED`），空字符串为 `null`；查询参数、路径变量由 `framework/config/WebMvcConfig.addFormatters` 注册的转换器同样按 1 / 0 转换；
+- 非法值：`fromJson` / `of(Integer)` 抛出 `InvalidEnumValueException`，请求体中由 `GlobalExceptionHandler` 提示「字段 status 的取值“2”不正确」，查询参数中提示「参数「status」格式不正确」，不再需要 `@Min` / `@Max` 校验；
+- 其他方法：`EnableStatus.of(Integer)`（null 返回 null）、`EnableStatus.of(boolean)`、实例方法 `isEnabled()` / `isDisabled()`、`getCode()`；
+- 只有启用 / 停用改用 `EnableStatus`；成功 / 失败（登录日志、操作日志的状态）、显示 / 隐藏（菜单的 `visible`）以及「是否主联系人」「是否内置」「是否必填」等是否标志仍是 `Integer` 1 / 0；
+- 前端不在 `@/constants/enums` 中生成该枚举（`gen-enums.mjs` 跳过带 `@JsonValue` 的枚举，按名称生成会与接口数据不一致），使用 `@/utils/constants` 的 `STATUS_ENABLED`（1）/ `STATUS_DISABLED`（0），显示用字典 `sys_common_status` 的 `<DictTag>`。
+
 **跨模块共用的取值放在 framework**：审批状态 `framework/workflow/ApproveStatus`（字典 `sys_approve_status`）、站内消息类别 `framework/message/MessageCategory`（字典 `sys_message_category`）、流程变量类型 `FlowBusiness.VariableType`。
 
 **业务字典的字段保持字符串**。业务字典（客户等级、物料分类、假期类型等，见 [字典](../architecture/tenant#字典)）的取值由租户维护、可以新增，不能定义为枚举；字段用 `String`，保存时用 `DictLookup.check` 按当前租户的字典校验。程序依赖的内置取值集中定义为常量（如 `hr/model/HrDictValues.LEAVE_ANNUAL`），并在 `init.sql` 中标记为内置（`builtin = 1`），租户不能删除、不能改键值。
 
-**前端同步**：前端比较状态时使用由后端枚举生成的 `@/constants/enums`。新增或修改枚举后在 `lemon-web` 中运行 `npm run gen:enums` 重新生成，`npm run i18n:check` 会检查生成的文件是否与后端一致，见 [前端开发规范](./frontend#状态与类型常量)。只有「文件名与枚举同名的顶层枚举」会被生成，类内部的嵌套枚举不会。
+**前端同步**：前端比较状态时使用由后端枚举生成的 `@/constants/enums`。新增或修改枚举后在 `lemon-web` 中运行 `npm run gen:enums` 重新生成，`npm run i18n:check` 会检查生成的文件是否与后端一致，见 [前端开发规范](./frontend#状态与类型常量)。只有「文件名与枚举同名的顶层枚举」会被生成，类内部的嵌套枚举、用 `@JsonValue` 自定义取值的枚举（`EnableStatus`）不会。
 
 ## SQL 约定
 

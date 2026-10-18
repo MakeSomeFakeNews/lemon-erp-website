@@ -44,10 +44,12 @@ order: 13
 | `scm.salesOut.overRate` | 供应链 | 销售出库超发比例（%） | 数字 0~100 | 0 | 同上，销售出库 |
 | `scm.credit.control` | 供应链 | 客户信用额度控制 | 下拉（`CreditControl`） | `ALL` 审核和出库时控制 | `ScmOrderService`：`ALL` 时审核销售订单和出库都校验，`SHIPMENT` 只在出库时校验，`NONE` 不校验 |
 | `fin.voucher.selfAudit` | 财务 | 允许审核自己制单的凭证 | 是否 | false | `FinVoucherService`：关闭时制单人不能审核自己的凭证（超级管理员除外） |
-| `hr.pay.monthDays` | 人力资源 | 月计薪天数 | 小数（2 位）1~31 | 21.75 | 日工资 =（基本工资 + 岗位津贴）/ 月计薪天数 |
-| `hr.pay.dayHours` | 人力资源 | 每日工时 | 小数 1~24 | 8 | 小时工资 = 日工资 / 每日工时；请假跨天时每天按此计 |
+| `hr.pay.monthDays` | 人力资源 | 月计薪天数 | 小数（2 位）1~31 | 21.75 | 日工资 =（基本工资 + 岗位津贴）/ 月计薪天数；月计薪小时 `monthPayHours()` = 月计薪天数 × 每日工时，用于薪资档案的小时人工成本（项目成员小时成本） |
+| `hr.pay.dayHours` | 人力资源 | 每日工时 | 小数 1~24 | 8 | 小时工资 = 日工资 / 每日工时；请假跨天时每天按此计；请假流程变量 `days`、项目工时的全天请假判断（`PmTimesheetService`） |
 | `hr.social.personalRate` / `hr.social.companyRate` | 人力资源 | 个人 / 单位社保比例（%） | 小数 0~100 | 10.5 / 26 | 员工没有社保方案时使用 |
 | `hr.attendance.lateFine` | 人力资源 | 迟到早退扣款（每次） | 小数 0~10000 | 50 | 工资表考勤扣款 |
+| `hr.attendance.lunchThresholdHours` | 人力资源 | 午休扣除阈值（小时） | 小数 0~24 | 5 | `HrAttendanceService.evaluate` → `HrRules.workHours`：打卡间隔超过该小时数（不含等于）时扣除午休 |
+| `hr.attendance.lunchBreakHours` | 人力资源 | 午休时长（小时） | 小数 0~24 | 1 | 同上，扣除的小时数，0 表示不扣；只影响之后打卡、补卡计算的出勤时长 |
 | `hr.leave.sickDeductRate` | 人力资源 | 病假扣发比例（%） | 小数 0~100 | 40 | 病假按小时工资扣发 |
 | `hr.overtime.workdayRate` / `restdayRate` / `holidayRate` | 人力资源 | 工作日 / 休息日 / 法定节假日加班倍数 | 小数 0~10 | 1.5 / 2 / 3 | 加班费 |
 | `hr.tax.threshold` | 人力资源 | 个税基本减除费用（月） | 小数 | 5000 | 累计预扣法 |
@@ -250,15 +252,17 @@ public void validate(String key, String value) {
 
 ### 多个相关参数的类型化读取
 
-一组计算规则有很多参数时（如工资计算用到的 12 个参数），不要在计算代码中到处 `bizRules.decimal("...")`，而是定义一个 record 汇总这组参数，读取一次后作为参数传给计算方法。人力资源的写法：
+一组计算规则有很多参数时（如工资、考勤计算用到的 14 个参数），不要在计算代码中到处 `bizRules.decimal("...")`，而是定义一个 record 汇总这组参数，读取一次后作为参数传给计算方法。人力资源的写法：
 
 ```java
 // hr/model/HrRules：参数标识、默认值和类型化的取值
 public record HrRules(BigDecimal monthPayDays, BigDecimal dayHours, BigDecimal socialPersonal, BigDecimal socialCompany,
                       BigDecimal lateFine, BigDecimal sickDeduct, BigDecimal overtimeWorkday, BigDecimal overtimeRestday,
-                      BigDecimal overtimeHoliday, BigDecimal taxThreshold, List<TaxBracket> taxBrackets, int probationMonths) {
+                      BigDecimal overtimeHoliday, BigDecimal taxThreshold, List<TaxBracket> taxBrackets, int probationMonths,
+                      BigDecimal lunchThreshold, BigDecimal lunchBreak) {
 
     public static final String MONTH_PAY_DAYS = "hr.pay.monthDays";
+    public static final String LUNCH_THRESHOLD = "hr.attendance.lunchThresholdHours";
     // ... 其他参数标识
 
     /** 默认值（规范写法，业务参数的默认值） */
@@ -274,6 +278,12 @@ public record HrRules(BigDecimal monthPayDays, BigDecimal dayHours, BigDecimal s
     public BigDecimal socialPersonalRate() {
         return socialPersonal.divide(Decimals.HUNDRED);
     }
+
+    /** 月计薪小时 = 月计薪天数 × 每日工时（默认 174） */
+    public BigDecimal monthPayHours() { ... }
+
+    /** 出勤时长（小时，两位小数）：打卡间隔超过午休扣除阈值时扣除午休，不小于 0 */
+    public BigDecimal workHours(long minutes) { ... }
 
     /** 累计预扣的个税 = 累计应纳税所得额 × 预扣率 − 速算扣除数 */
     public BigDecimal cumulativeTax(BigDecimal cumTaxable) { ... }
@@ -293,6 +303,34 @@ public HrRules current() {
 HrRules rules = ruleService.current();
 // HrPayrollService：日工资 =（基本工资 + 岗位津贴）/ 月计薪天数
 BigDecimal daily = salary.getBaseSalary().add(salary.getPostAllowance()).divide(rules.monthPayDays(), 6, RoundingMode.HALF_UP);
+// HrAttendanceService：打卡、补卡时读取一次，传给静态的计算方法
+evaluate(a, calendarService.shiftOf(e), calendarService.isWorkday(today), ruleService.current());
+a.setWorkHours(rules.workHours(Duration.between(a.getCheckIn(), a.getCheckOut()).toMinutes()));
+```
+
+**前端需要参数值时提供只读的子集接口**。业务参数页面的读取接口要求 `sys:bizRule:list` 权限，业务人员通常没有；需要按参数估算时，由本模块提供一个只返回所需字段的接口，权限跟随业务页面，前端不写死这些数字。薪资档案页面的写法：
+
+```java
+// hr/dto/SalaryRules：薪资档案页面估算用到的子集
+public record SalaryRules(BigDecimal monthPayDays, BigDecimal dayHours, BigDecimal monthPayHours,
+                          BigDecimal socialPersonal, BigDecimal socialCompany) {
+    public static SalaryRules of(HrRules rules) { ... }
+}
+
+// HrSalaryController：GET /hr/salary/rules，有薪资档案查看权限即可
+@GetMapping("/rules")
+@PreAuthorize("@ss.hasPerm('hr:salary:list')")
+public R<SalaryRules> rules() {
+    return R.ok(SalaryRules.of(ruleService.current()));
+}
+```
+
+```js
+// lemon-web/src/views/hr/salary/index.vue：页面加载时读取，用于默认社保比例和时薪成本
+import { salaryRules } from '@/api/hr'
+const payRules = ref({})
+payRules.value = await salaryRules().catch(() => ({}))
+const hourlyCost = (monthly) => (Number(payRules.value.monthPayHours) ? monthly / Number(payRules.value.monthPayHours) : null)
 ```
 
 - 标识、默认值、类型转换和派生的计算（如 `monthPayHours()`、`cumulativeTax()`）都集中在 record 中，`BizRuleProvider` 只负责登记；
