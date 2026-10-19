@@ -131,6 +131,8 @@ publisher.publishEvent(new MessageSentEvent(List.copyOf(targets), message));
 - 异常只 `log.warn`，不重试、不影响站内消息；
 - 推送的标题、内容来自站内消息（存库内容，中文），卡片按钮「查看详情」（企业微信「详情」）也固定为中文，不按接收人的界面语言变化（源码中这些字面量带 `// i18n-ignore`）。
 
+同一个事件还由 `SysMiniappPushService` 监听，给绑定了微信的接收人发送小程序订阅消息（审批提醒），见 [微信小程序开发](../guide/miniapp#审批提醒-订阅消息)。
+
 去重键（`dedupKey`）过滤后没有接收人时 `send` 直接返回，不发布事件，所以定时提醒在平台中同样每天只推一次。业务模块继续只依赖 `framework/message/MessageSender`，不需要知道推送的存在。
 
 ## 通讯录同步

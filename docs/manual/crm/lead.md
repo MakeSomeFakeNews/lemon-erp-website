@@ -12,6 +12,10 @@ order: 2
 
 ![线索管理列表](/images/manual/crm/lead-list.jpg)
 
+::: tip 微信小程序
+在[微信小程序](../miniapp/sales#线索)中也可以录入、编辑、跟进、转化线索和标记无效。
+:::
+
 ## 查询条件
 
 | 条件 | 说明 |

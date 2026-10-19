@@ -39,6 +39,7 @@ order: 11
 | 接口 | 说明 |
 | --- | --- |
 | `GET ?bizType=&bizId=` | 某条业务记录的附件列表 |
+| `POST /batch?bizType=`（请求体为记录 ID 列表） | 多条记录的附件，按记录 ID 分组返回附件信息（不含文件内容），用于列表中的缩略图（如小程序跟进记录的照片）；一次最多 500 条记录。与自定义字段的批量取值一样只校验业务类型的查看权限，下载时仍按记录的数据权限校验 |
 | `POST ?bizType=&bizId=`（multipart，字段 `file`） | 上传 |
 | `GET /{id}/download` | 下载：以附件形式返回（`Content-Disposition: attachment`），`X-Content-Type-Options: nosniff`，禁止浏览器按内容猜测类型 |
 | `DELETE /{id}` | 删除记录和文件 |

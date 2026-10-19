@@ -14,6 +14,10 @@ order: 2
 
 ![质量检验列表](/images/manual/qms/inspection-list.jpg)
 
+::: tip 微信小程序
+质量人员可以在[微信小程序](../miniapp/quality#质量检验)中新增检验单、按检验方案逐项录入实测值并确认。
+:::
+
 ## 检验类型
 
 | 类型 | 用途 | 关联单据 | 物料要求 |

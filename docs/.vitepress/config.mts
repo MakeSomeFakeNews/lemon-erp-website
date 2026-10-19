@@ -22,6 +22,7 @@ const MANUAL: [string, string][] = [
   ['workflow', '流程中心'],
   ['portal', '供应商与经销商门户'],
   ['mobile', '移动作业'],
+  ['miniapp', '微信小程序'],
   ['system', '系统管理'],
   ['monitor', '系统监控'],
   ['faq', '常见问题']

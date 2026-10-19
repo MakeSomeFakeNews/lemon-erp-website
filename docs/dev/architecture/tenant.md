@@ -47,6 +47,8 @@ TenantContext.runAs(tenantId, () -> doSomething());
 long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 ```
 
+登录前还不知道租户、需要按全局唯一的标识跨租户查找时（如微信小程序按 openid 查找绑定），在 mapper 方法上加 `@InterceptorIgnore(tenantLine = "true")`，SQL 写在 mapper XML 中，查到租户后再用 `callAs` 在该租户下继续处理，例如 `SysMiniappUserMapper.selectByOpenid`（见 [微信小程序开发](../guide/miniapp#绑定关系)）。
+
 ::: warning 自建线程与 @Scheduled
 自己创建的线程、`@Scheduled` 方法没有租户上下文，开启 SaaS 后访问租户表会报错。异步处理用 `@Async`，定时任务实现 `JobHandler`（由调度器按租户执行），见 [新增定时任务](../guide/job)。
 :::

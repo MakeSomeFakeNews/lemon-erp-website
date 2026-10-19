@@ -12,6 +12,10 @@ order: 4
 
 ![我的已办](/images/manual/workflow/done.jpg)
 
+::: tip 微信小程序
+在[微信小程序](../miniapp/approval)「审批」页的「已办」分段中也可以查看。
+:::
+
 ## 查询条件与列表
 
 | 项目 | 说明 |

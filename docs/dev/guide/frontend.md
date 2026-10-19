@@ -536,6 +536,7 @@ html[data-theme='dark'] .workbench .hero {
 
 - 页面要在窄屏下可用：表单用 `a-row` / `a-col` 的响应式栅格（`:xs="24" :sm="12"`），抽屉宽度用 `min(640px, 100vw)`。
 - 手机 / PDA 的移动作业页面放在 `views/mobile` 下，菜单路径以 `/m` 开头，使用全屏的 `MobileLayout`。
+- 微信小程序是单独的项目 `lemon-mp`（uni-app），与 Web 端共用后端接口和 `constants/enums.js`、`locales/en-US/dict.js`。修改这两个文件中已有的常量名或字典键时，同时检查小程序中的引用（`@web/...`）；首页待办、站内消息的链接在小程序中按 Web 端路由前缀转到对应页面，修改 Web 端路由时同步修改 `lemon-mp/src/config/entries` 中的 `links`。见 [微信小程序开发](./miniapp)。
 
 ## 数据大屏
 

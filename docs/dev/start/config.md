@@ -41,12 +41,22 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | `UPLOAD_PATH` | `lemon.upload.path` | `./uploads`（来自 application.yml） | 必填 |
 | `LEMON_TENANT_ENABLED` | `lemon.tenant.enabled` | `false` | 默认 `false` |
 | `LEMON_DEMO_ENABLED` | `lemon.demo.enabled` | `false` | 默认 `false`，搭建对外演示环境时设为 `true` |
+| `LEMON_MINIAPP_APP_ID` | `lemon.miniapp.app-id` | 空 | 默认空，使用微信小程序时设置 |
+| `LEMON_MINIAPP_APP_SECRET` | `lemon.miniapp.app-secret` | 空 | 默认空，使用微信小程序时设置 |
+| `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID` | `lemon.miniapp.subscribe.template-id` | 空 | 默认空，需要审批提醒（订阅消息）时设置 |
 
 前端构建时可选的环境变量：
 
 | 环境变量 | 说明 |
 | --- | --- |
 | `VITE_COMPANY_NAME` | 打印单据上的默认公司名称（未开启 SaaS、打印模板中也没有设置公司名称时使用），默认「柠檬ERP」。在 `npm run build` 时生效，例如 `VITE_COMPANY_NAME=某某公司 npm run build` |
+
+小程序（`lemon-mp`）编译时的环境变量：
+
+| 环境变量 | 说明 |
+| --- | --- |
+| `VITE_API_BASE` | 后端接口地址，包含 `/api`，写在 `lemon-mp/.env` 中，默认 `http://localhost:8080/api`；正式版必须是在微信公众平台登记的 HTTPS 域名。H5 调试时设为 `/api` |
+| `VITE_PROXY_TARGET` | H5 调试（`npm run dev:h5`）时 `/api` 代理的后端地址，默认 `http://localhost:8080`；在 `vite.config.js` 中从进程环境变量读取，需要在命令行中设置 |
 
 ## lemon.* 配置项
 
@@ -57,7 +67,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
 | `lemon.demo.enabled` | `false`（环境变量 `LEMON_DEMO_ENABLED`） | 开启后所有用户只能查看，不能新增、修改、删除数据 |
-| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/auth/im/callback`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway`、`/system/print/pdf`、`/system/print/jrxml` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、第三方授权登录回调、标记消息已读，以及用 POST 传参的只读查询（多维分析、促销预览、上架建议、单据打印） |
+| `lemon.demo.allowed-paths` | `/auth/login`、`/auth/logout`、`/auth/im/callback`、`/auth/miniapp/login`、`/auth/miniapp/choose`、`/auth/miniapp/bind`、`/system/message/read`、`/bi/olap/pivot`、`/scm/promotion/preview`、`/wms/location/putaway`、`/system/print/pdf`、`/system/print/jrxml`、`/system/attachment/batch` | 演示模式下仍然放行的非 GET 请求（Ant 风格路径，不含 `/api`）：登录退出、第三方授权登录回调、微信小程序登录（含选择租户、绑定）、标记消息已读，以及用 POST 传参的只读查询（多维分析、促销预览、上架建议、单据打印、批量取附件） |
 
 ### lemon.tenant：SaaS 多租户
 
@@ -139,6 +149,23 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | `lemon.im.feishu.accounts` | `https://accounts.feishu.cn` | 飞书授权页；Lark 国际版改为 `https://accounts.larksuite.com` |
 
 需要时也可以用环境变量覆盖，如 `LEMON_IM_FEISHU_API`。详见 [第三方集成](../architecture/im#配置项)。
+
+### lemon.miniapp：微信小程序
+
+对应 `modules/system/miniapp/MiniappProperties`。所有租户共用一个小程序，AppID / AppSecret 是平台级配置，不在「第三方集成」中按租户配置。详见 [微信小程序开发](../guide/miniapp#配置)。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `lemon.miniapp.app-id` | 空（环境变量 `LEMON_MINIAPP_APP_ID`） | 小程序 AppID；与 `app-secret` 任一为空时不能用微信登录，也不推送订阅消息 |
+| `lemon.miniapp.app-secret` | 空（环境变量 `LEMON_MINIAPP_APP_SECRET`） | 小程序 AppSecret，只通过环境变量提供 |
+| `lemon.miniapp.api` | `https://api.weixin.qq.com` | 微信服务端接口地址，一般不修改 |
+| `lemon.miniapp.subscribe.template-id` | 空（环境变量 `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID`） | 审批提醒的订阅消息模板 ID，为空时不推送 |
+| `lemon.miniapp.subscribe.title-field` | `thing1` | 模板中标题对应的字段名 |
+| `lemon.miniapp.subscribe.content-field` | `thing2` | 模板中内容对应的字段名 |
+| `lemon.miniapp.subscribe.time-field` | `time3` | 模板中时间对应的字段名 |
+| `lemon.miniapp.subscribe.categories` | `APPROVAL` | 推送的站内消息类别（`MessageCategory`），可配置多个 |
+| `lemon.miniapp.subscribe.page` | `pages/approval/index` | 点击订阅消息打开的小程序页面 |
+| `lemon.miniapp.subscribe.state` | `formal` | 打开的小程序版本：`formal` 正式版、`trial` 体验版、`developer` 开发版 |
 
 ### lemon.workflow：工作流
 

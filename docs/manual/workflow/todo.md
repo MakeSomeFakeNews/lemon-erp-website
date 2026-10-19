@@ -14,6 +14,10 @@ order: 1
 
 ![我的待办](/images/manual/workflow/todo.jpg)
 
+::: tip 微信小程序
+待办也可以在[微信小程序](../miniapp/approval)中处理：底部导航「审批」的「待办」分段中查看详情并同意、拒绝或转交；开启[审批提醒](../miniapp/approval#审批提醒)后，有新待办时微信会收到通知。
+:::
+
 ## 查询条件与列表
 
 | 项目 | 说明 |

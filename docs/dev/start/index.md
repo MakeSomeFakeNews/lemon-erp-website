@@ -1,6 +1,6 @@
 # 项目介绍
 
-柠檬ERP 是一套面向中小制造、商贸企业的全功能开源 ERP，前后端分离，后端为 Gradle 多模块的 Spring Boot 应用，前端为 Vite + Vue 3 + Ant Design Vue 单页应用。本开发文档面向需要部署、二次开发或基于柠檬ERP 交付项目的程序员。
+柠檬ERP 是一套面向中小制造、商贸企业的全功能开源 ERP，前后端分离，后端为 Gradle 多模块的 Spring Boot 应用，前端为 Vite + Vue 3 + Ant Design Vue 单页应用，另有一个 uni-app 开发的微信小程序（`lemon-mp`），与 Web 端共用后端接口。本开发文档面向需要部署、二次开发或基于柠檬ERP 交付项目的程序员。
 
 业务功能的使用方法见 [用户手册](/manual/guide/)，本文档只介绍技术实现与开发约定。
 
@@ -23,8 +23,10 @@
 | 前端 | UI 组件 | Ant Design Vue、@ant-design/icons-vue | 4.2、7.0 |
 | 前端 | 国际化 | vue-i18n（Composition API 模式；后端为 Spring `MessageSource` 资源包） | 11.4 |
 | 前端 | 其他 | Axios、ECharts、Day.js、ExcelJS、JsBarcode、qrcode | - |
+| 小程序 | 框架 | uni-app（Vue 3），编译为微信小程序 | uni-app 3.0、Vue 3.4 |
+| 小程序 | 构建 | Vite、Sass | 5.2、1.77 |
 
-后端依赖版本统一维护在 `gradle/libs.versions.toml`，前端依赖见 `lemon-web/package.json`。
+后端依赖版本统一维护在 `gradle/libs.versions.toml`，前端依赖见 `lemon-web/package.json`，小程序依赖见 `lemon-mp/package.json`。
 
 ::: tip Spring Boot 4 的变化
 Spring Boot 4 默认使用 Jackson 3，`ObjectMapper` 等类位于 `tools.jackson.databind` 包；注解（`@JsonFormat`、`@JsonProperty` 等）仍然是 `com.fasterxml.jackson.annotation`。二次开发时注意导入正确的包。
@@ -37,6 +39,7 @@ Spring Boot 4 默认使用 Jackson 3，`ObjectMapper` 等类位于 `tools.jackso
 | 层次 | 内容 |
 | --- | --- |
 | 前端 `lemon-web` | 登录后按菜单动态注册路由；请求统一走 `/api`，由拦截器处理统一返回结构 |
+| 小程序 `lemon-mp` | 微信小程序，审批、员工自助、销售外勤、扫码作业等轻量功能；微信绑定已有账号后免密登录，接口与 Web 端共用，见 [微信小程序开发](../guide/miniapp) |
 | 启动模块 `lemon-admin` | 启动类 `LemonErpApplication`、`application*.yml`，组装全部业务模块并打包为 `lemon-erp.jar` |
 | 业务模块 `lemon-modules/*` | system、monitor、workflow、dashboard、wms、scm、mes、fin、hr、crm、pm、bi，每个模块包含自己的 Controller、Service、Mapper 和 mapper XML |
 | 框架层 `lemon-framework` | 安全认证、数据权限、多租户、缓存、日志、文件、Excel 导入、定时任务契约、演示模式、业务参数契约，以及业务模块之间的契约接口和事件 |

@@ -10,6 +10,10 @@ order: 4
 
 项目 → 工时管理
 
+::: tip 微信小程序
+也可以在[微信小程序](../miniapp/timesheet)中按周填报工时（工作台「办公 → 填工时」），项目经理可以在小程序「工时审核」中批量通过或驳回。
+:::
+
 ## 我的工时
 
 ![我的工时](/images/manual/pm/timesheet-mine.jpg)

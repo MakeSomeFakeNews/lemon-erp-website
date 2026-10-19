@@ -39,19 +39,25 @@ Docker 部署时在 `environment` 中加上 `LEMON_DEMO_ENABLED: "true"`。
 | --- | --- |
 | `/auth/login`、`/auth/logout` | 登录、退出 |
 | `/auth/im/callback` | 钉钉、企业微信、飞书授权回调（扫码登录、个人中心绑定） |
+| `/auth/miniapp/login`、`/auth/miniapp/choose`、`/auth/miniapp/bind` | 微信小程序登录：微信登录、选择租户、账号密码登录并绑定微信 |
 | `/system/message/read` | 标记站内消息已读 |
 | `/bi/olap/pivot` | 多维分析查询 |
 | `/scm/promotion/preview` | 销售订单的促销预览 |
 | `/wms/location/putaway` | 上架库位建议 |
 | `/system/print/pdf` | 单据打印：生成 PDF |
 | `/system/print/jrxml` | 打印模板：下载按当前配置生成的默认 JRXML |
+| `/system/attachment/batch` | 批量取多条记录的附件信息（小程序跟进记录的照片缩略图） |
 
 ::: warning 新增接口时注意
 如果新增了用 `POST` 传参、但不修改数据的查询接口，要把它的路径加到 `DemoProperties.allowedPaths` 的默认值中，否则演示模式下无法使用。会修改数据的接口一律不要加入白名单。
 :::
 
 ::: tip 第三方集成
-`GET /auth/im/providers`、`GET /auth/im/{platform}/authorize` 是 GET 请求，回调 `POST /auth/im/callback` 在白名单中，因此演示环境中已启用的平台仍可扫码登录。注意回调在「绑定」用途时会写入 `sys_im_user`（个人中心绑定账号仍然生效），这是白名单中唯一会写数据的情况；而保存集成配置、测试连接、测试群机器人、同步通讯录、手工绑定和解除绑定都会被拦截。演示环境如需展示扫码登录，请在开启演示模式之前配置好集成并绑定演示账号。
+`GET /auth/im/providers`、`GET /auth/im/{platform}/authorize` 是 GET 请求，回调 `POST /auth/im/callback` 在白名单中，因此演示环境中已启用的平台仍可扫码登录。注意回调在「绑定」用途时会写入 `sys_im_user`（个人中心绑定账号仍然生效），这是白名单中会写数据的情况之一（另一个是微信小程序的绑定，见下文）；而保存集成配置、测试连接、测试群机器人、同步通讯录、手工绑定和解除绑定都会被拦截。演示环境如需展示扫码登录，请在开启演示模式之前配置好集成并绑定演示账号。
+:::
+
+::: tip 微信小程序
+小程序的微信登录、选择租户和绑定都在白名单中，演示环境中访客可以用演示账号绑定自己的微信后登录。注意 `/auth/miniapp/bind` 会写入 `sys_miniapp_user`（与第三方集成的绑定一样，是白名单中会写数据的例外）；解除绑定 `/auth/miniapp/unbind` 不在白名单中，会被拦截，访客重新绑定其他账号时会自动替换原有绑定；一个账号只能绑定一个微信，多个访客先后用同一个演示账号绑定时，后绑定的会替换前一个（前一个访客已登录的会话不受影响，下次需要重新绑定）。小程序中的写跟进、报工、审批等写操作同样被拦截。
 :::
 
 ::: tip 数据大屏

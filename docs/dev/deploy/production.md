@@ -49,6 +49,8 @@ logging:
 | `LEMON_UPLOAD_ATTACHMENTPATH` | 建议 | `/data/lemon-erp/attachments` | 业务附件目录，默认是工作目录下的 `./attachments` |
 | `LEMON_TENANT_ENABLED` | 否 | `false` | 是否开启 SaaS 多租户 |
 | `LEMON_DEMO_ENABLED` | 否 | `false` | 是否开启演示模式（只能查看），见 [搭建演示环境](./demo) |
+| `LEMON_MINIAPP_APP_ID` / `LEMON_MINIAPP_APP_SECRET` | 否 | `wx0123456789abcdef` / `***` | 微信小程序的 AppID / AppSecret，不用小程序时不设置 |
+| `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID` | 否 | 公众平台中的模板 ID | 审批提醒的订阅消息模板，不设置时不推送 |
 | `LEMON_JOB_ENABLED` | 否 | `true` | 多实例部署时只在一个实例上为 true |
 | `SERVER_PORT` | 否 | `8080` | 后端端口 |
 | `TZ` | 建议 | `Asia/Shanghai` | 进程时区，影响 `LocalDate.now()`、定时任务的执行时间 |
@@ -196,6 +198,7 @@ fc-list :lang=zh
 | 定时任务 | 只在一个实例上 `LEMON_JOB_ENABLED=true`，其他实例为 `false`，否则任务会在每个实例上各执行一次 |
 | 流程引擎 | Flowable 共用同一个数据库，多实例之间由引擎的乐观锁保证一致 |
 | 第三方集成 | 授权登录的 state（`im:state:`）和应用 access_token 在缓存中，发起授权与回调可能落在不同实例，必须使用 Redis |
+| 微信小程序 | 登录会话（`mp:session:`）和 access_token（`mp:token`）在缓存中，登录与选择租户、绑定可能落在不同实例，必须使用 Redis |
 
 ## 第三方集成
 
@@ -212,6 +215,22 @@ fc-list :lang=zh
 | 子路径部署 | 系统访问地址可以带路径，但前端本身需要按 [部署在子路径下](./nginx#部署在子路径下) 改造；免登入口直接请求 `/api/auth/info` 校验令牌，接口地址需与前端同源 |
 
 应用凭证保存在数据库 `sys_im_config` 中（密钥只写不读、操作日志隐藏），备份数据库时注意保护。
+
+## 微信小程序
+
+使用微信小程序（`lemon-mp`）时，部署上需要满足：
+
+| 项目 | 要求 |
+| --- | --- |
+| HTTPS 域名 | 小程序正式版只能访问 HTTPS 域名：已备案的域名（不能是 IP 地址或 `localhost`），证书有效且由受信任的机构签发，支持 TLS 1.2 及以上。小程序编译时的接口地址 `VITE_API_BASE` 为 `https://<域名>/api` |
+| 服务器域名 | 在微信公众平台「开发管理 → 开发设置 → 服务器域名」中把该域名登记为 request、uploadFile、downloadFile 合法域名；使用非 443 端口时要连同端口登记 |
+| Nginx | 与 Web 端共用同一个 `/api` 转发即可，不需要额外配置；跟进照片上传受 `client_max_body_size` 和附件大小上限限制，见 [Nginx 配置](./nginx) |
+| 后端配置 | `LEMON_MINIAPP_APP_ID`、`LEMON_MINIAPP_APP_SECRET`；审批提醒另需 `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID`，见 [配置说明](../start/config) |
+| 服务器出口 | 后端要能访问 `api.weixin.qq.com` 的 443 端口（code2Session、access_token、订阅消息）；如果在公众平台「开发设置」中开启了 IP 白名单，要登记后端的出口 IP |
+| access_token | 同一个小程序的 AppSecret 不要再给其他系统获取 access_token，否则会互相使对方的令牌失效 |
+| 多实例 | 必须使用 Redis，见上文「多实例部署」 |
+
+AppSecret 只通过环境变量提供，不要写入配置文件或提交到代码仓库；在公众平台重置 AppSecret 后要同步更新环境变量并重启后端。小程序的编译、上传、审核见 [微信小程序开发 → 发布](../guide/miniapp#发布)。
 
 ## 安全建议
 

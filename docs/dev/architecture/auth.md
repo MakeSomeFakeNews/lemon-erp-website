@@ -20,6 +20,7 @@ order: 2
 | `AuthService` / `AuthController` | modules/system | 登录、退出、当前用户信息、当前用户菜单 |
 | `PasswordPolicy`、`CaptchaService` | modules/system | 登录失败锁定、密码策略与过期、验证码 |
 | `SysImAuthService` / `ImAuthController` | modules/system | 钉钉、企业微信、飞书授权登录（OAuth 授权码），见 [第三方集成](./im) |
+| `SysMiniappAuthService` / `MiniappAuthController` | modules/system | 微信小程序登录与账号绑定，见 [微信小程序开发](../guide/miniapp#登录与绑定) |
 
 ## 登录流程
 
@@ -38,6 +39,8 @@ order: 2
 5. **校验账号状态**：停用的账号不能登录。
 6. **创建会话**：清除失败次数，`TokenService.createToken` 创建会话并签发 JWT，发布登录日志事件。
 7. 返回 `{ token, passwordExpired }`：`passwordExpired` 为 true 时（管理员设置的初始密码、重置过的密码、超过密码有效期），前端提示用户修改密码。
+
+第 1~5 步和清除失败次数在 `AuthService.authenticate(req)` 中（校验通过后返回用户，不签发令牌），创建会话、记录登录成功日志在 `issue()` 中；小程序的「账号密码登录并绑定」复用 `authenticate`，见下文「微信小程序登录」。
 
 ## 令牌与会话
 
@@ -65,7 +68,7 @@ order: 2
 
 未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。安全过滤器链中输出的 401 / 403 提示同样按请求头 `Accept-Language` 返回中文或英文（`I18nConfig` 中的过滤器在安全过滤器之前设置语言，见 [国际化](../guide/i18n#语言的传递与解析)）。
 
-不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），GET `/screen-share/**`（数据大屏投屏链接，见下文），以及 `/auth/im/**`（钉钉、企业微信、飞书授权登录，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
+不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），GET `/screen-share/**`（数据大屏投屏链接，见下文），`/auth/im/**`（钉钉、企业微信、飞书授权登录，见下文），以及微信小程序登录的 `/auth/miniapp/config`、`/auth/miniapp/login`、`/auth/miniapp/choose`、`/auth/miniapp/bind`（`/auth/miniapp/unbind` 需要登录，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
 
 ### 投屏链接（免登录）
 
@@ -113,6 +116,30 @@ order: 2
 4. 授权页地址中的回调地址固定为 `{系统访问地址}/im-callback`，必须与平台中登记的一致；`redirect` 只接受站内路由，防止借登录跳转到外部网站。
 
 已登录用户绑定本人账号走同一流程（`GET /system/im/mine/{platform}/bind-url`，state 中记录当前用户 ID）。前端 `/im-callback`、`/im-login` 在路由白名单中，且已登录时也不加载菜单路由（`BARE_PAGES`），由页面自行处理令牌。完整流程见 [第三方集成](./im#授权登录与绑定)。
+
+### 微信小程序登录
+
+```java
+// SecurityConfig：微信小程序登录（解除绑定需要登录）
+.requestMatchers("/auth/miniapp/config", "/auth/miniapp/login", "/auth/miniapp/choose", "/auth/miniapp/bind").permitAll()
+```
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /auth/miniapp/config` | 订阅消息模板 ID（小程序启动时读取，用于申请审批提醒授权） |
+| `POST /auth/miniapp/login` | `{ code, switchAccount }`：`wx.login` 的 code 经 code2Session 换取 openid，按 `sys_miniapp_user` 的绑定登录 |
+| `POST /auth/miniapp/choose` | `{ key, tenantId }`：同一个微信绑定了多个租户的账号时选择租户 |
+| `POST /auth/miniapp/bind` | `{ key, username, password, tenantName, captchaId, captchaCode }`：账号密码登录并绑定当前微信 |
+| `POST /auth/miniapp/unbind` | 解除当前用户的绑定（需要登录） |
+
+与密码登录的关系：
+
+1. openid 只在服务端使用，不返回前端。只有一个可登录的绑定（租户可用、用户启用、不是门户账号）时直接调用 `AuthService.loginAs(user, "system.label.miniappLogin")` 签发令牌，登录日志记「微信小程序登录成功」，不经过验证码和密码错误锁定；
+2. 否则返回会话标识 `key`（`SecureRandom` 128 位随机数），openid 缓存在 `mp:session:{key}` 下 10 分钟，前端用它选择租户或绑定；
+3. 绑定时调用 `AuthService.authenticate`：与 `login` 共用租户解析、锁定检查、验证码、密码校验、账号状态、失败计数和登录日志，只是不签发令牌；随后 `loginAs` 签发令牌并保存绑定（替换该微信在本租户的绑定和该用户原有的绑定）；
+4. `login` 和 `loginAs` 最终都调用 `issue()`，小程序的令牌与 Web 端完全相同，同样受「同一账号只允许一处登录」、强制下线、停用账号的约束。
+
+绑定关系在登录时还没有租户上下文，`SysMiniappUserMapper.selectByOpenid` 用 `@InterceptorIgnore(tenantLine = "true")` 跨租户查询。完整流程见 [微信小程序开发](../guide/miniapp#登录与绑定)。
 
 ## LoginUser
 

@@ -63,6 +63,9 @@ docker compose logs -f backend      # 查看后端日志
 | `JWT_SECRET` | 必填 | 登录令牌签名密钥，至少 32 字节，用 `openssl rand -base64 48` 生成 |
 | `LEMON_TENANT_ENABLED` | `false` | 开启 SaaS 多租户，开启后登录需要填写租户「柠檬科技」，见 [SaaS 多租户](../architecture/tenant) |
 | `LEMON_DEMO_ENABLED` | `false` | 开启演示模式（只能查看），见 [搭建演示环境](./demo) |
+| `LEMON_MINIAPP_APP_ID` | 空 | 微信小程序（`lemon-mp`）的 AppID，不用小程序时留空 |
+| `LEMON_MINIAPP_APP_SECRET` | 空 | 微信小程序的 AppSecret，不用小程序时留空 |
+| `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID` | 空 | 审批提醒的订阅消息模板 ID；模板字段名默认 `thing1` 标题、`thing2` 内容、`time3` 时间，不同时要修改 `application.yml`（或在 `docker-compose.yml` 的后端 `environment` 中加 `LEMON_MINIAPP_SUBSCRIBE_TITLEFIELD` 等变量），见 [微信小程序开发](../guide/miniapp#订阅消息模板) |
 | `JAVA_OPTS` | `-Xms512m -Xmx1g` | 后端 JVM 参数，数据量大时调大 `-Xmx` |
 | `IMAGE_PREFIX` | `lemon-erp` | 镜像名前缀，推送到镜像仓库时改为仓库地址，如 `registry.example.com/lemon/lemon-erp` |
 | `IMAGE_TAG` | `latest` | 镜像标签 |
@@ -151,6 +154,8 @@ docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" lemon_
 
 - 在宿主机或负载均衡器上再放一层负责 HTTPS 的反向代理，转发到 `WEB_PORT`（推荐，证书续期与应用升级互不影响）；
 - 修改 `docker/nginx.conf` 增加 443 监听和证书配置，在 `docker-compose.yml` 中挂载证书目录并映射 443 端口，参考 [Nginx 配置](./nginx)。
+
+使用微信小程序时必须启用 HTTPS：小程序正式版只能访问在微信公众平台登记的 HTTPS 域名，小程序的接口地址为 `https://<域名>/api`，经前端容器的 Nginx 转发到后端，见 [生产环境配置 → 微信小程序](./production#微信小程序)。
 
 外层代理需要传递 `X-Forwarded-For`，并且其地址要在后端信任的内网范围内，否则日志中记录的是代理的 IP，见 [常见问题](./faq)。
 

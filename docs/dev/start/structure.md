@@ -32,6 +32,7 @@ lemon-erp
 │   └── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
 ├── lemon-admin                 启动模块：组装全部业务模块，打包为 lemon-erp.jar
 ├── lemon-web                   前端（Vite + Vue 3 + Ant Design Vue）
+├── lemon-mp                    微信小程序（uni-app + Vue 3）：审批、员工自助、销售外勤、扫码作业
 ├── scripts
 │   └── check_i18n.py           后端国际化检查（资源包、消息键、残留中文）
 └── sql
@@ -165,6 +166,30 @@ lemon-web
     └── utils                   request、number（金额、数量的格式化与舍入）、print（提交后端生成 PDF）、printTemplates（打印模板目录与套用）、
                                 labels（条码标签）、excel、dict、format、ellipsisTitle 等工具
 ```
+
+## 小程序 lemon-mp
+
+```
+lemon-mp
+├── package.json                dev:mp-weixin、build:mp-weixin、dev:h5、i18n:check
+├── vite.config.js              uni 插件、H5 调试代理、@web 别名（指向 ../lemon-web/src，共用枚举常量与字典英文译文）
+├── .env.example                VITE_API_BASE（后端接口地址，含 /api）
+├── scripts/check-i18n.mjs      多语言检查
+└── src
+    ├── manifest.json           应用名称、mp-weixin.appid
+    ├── pages.json              页面与分包、底部导航、easycom（l-* 组件自动引入）
+    ├── pages                   主包：工作台、审批、消息、我的、登录、修改密码
+    ├── pkg-approval、pkg-hr、pkg-pm、pkg-crm、pkg-wms、pkg-mes   按功能区的分包
+    ├── api/<区>.js              接口封装，基于 utils/request.js（uni.request）
+    ├── config/entries          工作台入口登记：权限 perm / permAll、对应的 Web 端路由 links
+    ├── components/l-*          通用组件：l-card、l-cell、l-field、l-tag、l-empty、l-load-more、l-segmented、l-scan-input
+    ├── composables             usePaged（下拉刷新 + 触底加载）、useAction（runAction、scanCode、vibrate）、useTitle
+    ├── locales                 最小多语言实现 index.js，zh-CN/、en-US/ 下按区的语言包
+    ├── store                   user（当前用户、hasPerm）、dict（字典缓存）
+    └── utils                   request、auth、session、subscribe（订阅消息）、tabbar、format
+```
+
+详见 [微信小程序开发](../guide/miniapp)。
 
 ## 数据库脚本
 

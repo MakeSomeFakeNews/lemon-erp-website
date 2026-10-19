@@ -12,6 +12,10 @@ order: 3
 
 ![我的申请](/images/manual/workflow/mine.jpg)
 
+::: tip 微信小程序
+在[微信小程序](../miniapp/approval)「审批」页的「我发起的」分段中也可以查看申请进度，审批中的申请可以撤回。
+:::
+
 ## 查询条件
 
 | 条件 | 说明 |

@@ -55,12 +55,24 @@ dist
 - 打印单据上的默认公司名称可以在构建时指定：`VITE_COMPANY_NAME=某某公司 npm run build`（未开启 SaaS、也没有在打印模板中设置公司名称时使用）；
 - 路由使用 HTML5 History 模式，部署在域名根路径下，Nginx 需要把未知路径回退到 `index.html`。
 
+## 微信小程序
+
+```bash
+cd lemon-mp
+npm ci
+# .env 中设置 VITE_API_BASE=https://erp.example.com/api
+npm run build:mp-weixin
+```
+
+输出 `lemon-mp/dist/build/mp-weixin`，用微信开发者工具导入后上传，在微信公众平台提交审核、发布。接口地址在编译时写入，开发、体验、正式环境的后端地址不同时要分别编译。小程序引用了 `lemon-web/src` 中的枚举常量和字典译文（`@web` 别名），编译时两个目录要在同一个仓库中。详见 [微信小程序开发 → 发布](../guide/miniapp#发布)。
+
 ## 产物清单
 
 | 产物 | 部署位置 |
 | --- | --- |
 | `lemon-admin/build/libs/lemon-erp.jar` | 后端服务器，如 `/opt/lemon-erp/lemon-erp.jar` |
 | `lemon-web/dist/` | Nginx 静态目录，如 `/opt/lemon-erp/web/` |
+| `lemon-mp/dist/build/mp-weixin/` | 用微信开发者工具上传到微信公众平台（不部署到服务器） |
 | `sql/init.sql` | 首次部署时初始化数据库 |
 
 ## 首次部署初始化数据库

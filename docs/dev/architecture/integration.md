@@ -197,4 +197,4 @@ messageSender.sendToPermission("wms:stock:list", Message.of(MessageCategory.REMI
 | `Message.of(category, title, content, link)` | `category` 为枚举 `framework/message/MessageCategory`（字典 `sys_message_category`）：`APPROVAL` 审批、`REMIND` 提醒、`ALERT` 预警、`SYSTEM` 系统；`link` 为点击后跳转的前端路由 |
 | `message.dedup(key)` | 同一用户已有相同去重键的消息时不再发送（定时提醒每天只发一次） |
 
-站内消息写入后，`SysMessageService` 发布 `MessageSentEvent`，事务提交后由 `SysImPushService` 异步推送给已绑定的钉钉 / 企业微信 / 飞书成员，并按类别发到群机器人；`link` 会转为平台客户端内的免登链接。业务代码不需要额外处理，见 [第三方集成](./im#消息推送)。
+站内消息写入后，`SysMessageService` 发布 `MessageSentEvent`，事务提交后由 `SysImPushService` 异步推送给已绑定的钉钉 / 企业微信 / 飞书成员，并按类别发到群机器人；`link` 会转为平台客户端内的免登链接；审批类消息同时由 `SysMiniappPushService` 推送为微信小程序订阅消息（见 [微信小程序开发](../guide/miniapp#审批提醒-订阅消息)）。业务代码不需要额外处理，见 [第三方集成](./im#消息推送)。

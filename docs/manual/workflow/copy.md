@@ -12,6 +12,10 @@ order: 5
 
 ![抄送我的](/images/manual/workflow/copy.jpg)
 
+::: tip 微信小程序
+在[微信小程序](../miniapp/approval)「审批」页的「抄送我的」分段中也可以查看。
+:::
+
 ## 查询条件与列表
 
 | 项目 | 说明 |

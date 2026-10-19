@@ -82,10 +82,11 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   .data .layer-title { background: linear-gradient(160deg, #fab005, #f08c00); box-shadow: 0 8px 18px rgba(240, 140, 0, .22); }
 </style></head><body>
 <div id="canvas">
-  ${layer('TeamOutlined', '访问终端', '浏览器即可使用', `<div class="row" style="grid-template-columns: repeat(5, 1fr)">
-    ${card('DesktopOutlined', 'PC 浏览器', '内部员工使用全部业务功能')}
+  ${layer('TeamOutlined', '访问终端', '浏览器即可使用', `<div class="row" style="grid-template-columns: repeat(6, 1fr)">
+    ${card('DesktopOutlined', 'PC 浏览器', '全部业务功能')}
+    ${card('WechatOutlined', '微信小程序', '审批、自助、外勤、扫码作业')}
     ${card('MobileOutlined', '手机 / PDA', '扫码收货、上架、拣货、盘点')}
-    ${card('ShopOutlined', '供应商门户', '订单确认、送货、对账、投标')}
+    ${card('ShopOutlined', '供应商门户', '订单确认、送货、对账')}
     ${card('IdcardOutlined', '经销商门户', '在线订货、渠道库存上报')}
     ${card('DingdingOutlined', '钉钉 / 企微 / 飞书', '扫码登录、免登、消息推送')}
   </div>`)}
