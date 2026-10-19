@@ -56,7 +56,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | 环境变量 | 说明 |
 | --- | --- |
 | `VITE_API_BASE` | 后端接口地址，包含 `/api`，写在 `lemon-mp/.env` 中，默认 `http://localhost:8080/api`；正式版必须是在微信公众平台登记的 HTTPS 域名。H5 调试时设为 `/api` |
-| `VITE_PROXY_TARGET` | H5 调试（`npm run dev:h5`）时 `/api` 代理的后端地址，默认 `http://localhost:8080`；在 `vite.config.js` 中从进程环境变量读取，需要在命令行中设置 |
+| `VITE_PROXY_TARGET` | H5 调试（`npm run dev:h5`）时 `/api` 代理的后端地址，默认 `http://localhost:8080`；可以写在 `.env` 中（`vite.config.js` 用 `loadEnv` 读取），命令行中的环境变量优先 |
 
 ## lemon.* 配置项
 

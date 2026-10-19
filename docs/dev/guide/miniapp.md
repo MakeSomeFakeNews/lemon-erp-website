@@ -124,7 +124,7 @@ VITE_API_BASE=http://localhost:8080/api
 为避免跨域，H5 调试时把 `.env` 中的 `VITE_API_BASE` 改为 `/api`，开发服务器把 `/api` 代理到 `VITE_PROXY_TARGET`（默认 `http://localhost:8080`）：
 
 ```bash
-# VITE_PROXY_TARGET 在 vite.config.js 中通过 process.env 读取，需要作为命令行环境变量传入，写在 .env 中不生效
+# VITE_PROXY_TARGET 可以写在 .env 中（vite.config.js 用 loadEnv 读取），也可以在命令行中临时指定（命令行优先）
 VITE_PROXY_TARGET=http://192.168.1.10:8080 npm run dev:h5
 ```
 
@@ -468,7 +468,8 @@ onReachBottom(() => paged.more())
 - 状态比较用 `@web/constants/enums` 中由后端枚举生成的常量（`SalesContractStatus.ACTIVE`），不写 `'ACTIVE'` 这样的字符串字面量；
 - 字典用 `useDict(类型...)` 加载（同一类型只请求一次），`dictText` 取标签、`dictColor` 取 Web 端字典的 `tagColor` 交给 `l-tag`；英文界面自动使用 Web 端的字典译文；
 - 页面中不写中文，全部用 `t('键')`（模板中也可以用 `$t`）；
-- 按钮级权限用 `hasPerm('crm:contract:add')`（`store/user`）判断是否显示，与 Web 端的 `v-perm` 对应；最终仍以后端 `@PreAuthorize` 为准。
+- 按钮级权限用 `hasPerm('crm:contract:add')`（`store/user`）判断是否显示，与 Web 端的 `v-perm` 对应；最终仍以后端 `@PreAuthorize` 为准。**要写在 `computed` 或模板中**（例如 `const canAdd = computed(() => hasPerm('crm:contract:add'))`）：小程序冷启动或从链接直接打开分包页面时用户信息可能还没加载，`hasPerm` 读取的是响应式状态，写在 `computed` 中用户信息加载后会自动更新；在 `setup` 顶层直接求值只会得到加载前的结果，按钮不显示；
+- 需要按权限决定加载哪些数据的页面，在 `onLoad` / `onShow` 中先 `await ensureUser()`（`store/user`，并发调用共用一次请求，没有令牌时直接返回）再加载。
 
 ### 5. 登记工作台入口
 
@@ -503,7 +504,7 @@ onReachBottom(() => paged.more())
 
 入口的权限要与页面实际调用的接口权限一致，否则用户能看到入口、进入后接口返回 403。
 
-**链接转换**：工作台待办（`TodoProvider` 返回的 `link`）和站内消息的 `link` 都是 Web 端路由。`entryOfLink(link)` 去掉查询参数后，在当前用户可见的入口中按 `links` 前缀匹配（取最长的前缀），找到后 `openEntry` 打开对应页面；找不到或没有权限时提示「该事项请在电脑端处理」。底部导航页不能带参数，`openEntry` 把链接暂存，由页面在 `onShow` 中用 `takeTabLink(url)` 取出（审批页据此切换到待办 / 我发起的等分段）。后端新增待办或消息时，如果希望小程序中可以直接处理，确认链接前缀已登记在某个入口的 `links` 中。
+**链接转换**：工作台待办（`TodoProvider` 返回的 `link`）和站内消息的 `link` 都是 Web 端路由。`entryOfLink(link)` 去掉查询参数后，在当前用户可见的入口中按 `links` 前缀匹配（取最长的前缀），找到后 `openEntry` 打开对应页面，并把链接中的查询参数（筛选条件，例如库存的 `lowStock=1`、检验单的 `status=DRAFT`、服务工单的 `mine=1`）原样拼到小程序页面地址上，页面在 `onLoad(query)` 中按与 Web 端相同的参数名读取；找不到或没有权限时提示「该事项请在电脑端处理」。底部导航页不能带参数，`openEntry` 把链接暂存，由页面在 `onShow` 中用 `takeTabLink(url)` 取出（审批页据此切换到待办 / 我发起的等分段）。后端新增待办或消息时，如果希望小程序中可以直接处理，确认链接前缀已登记在某个入口的 `links` 中。
 
 ### 6. 检查
 
