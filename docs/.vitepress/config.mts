@@ -63,13 +63,19 @@ const sidebarOf = (root: string, sections: [string, string][]) =>
 export default defineConfig({
   lang: 'zh-CN',
   title: '柠檬ERP',
-  description: '柠檬ERP：Spring Boot 4 + Vue 3 全功能开源 ERP，覆盖供应链、仓储、生产、质量、财务、人力、客户、项目与商务智能',
+  description: '柠檬ERP（Lemon ERP）开源 ERP 系统：进销存、生产制造 MES、仓储 WMS、质量、财务、CRM、人力 HR、项目管理与 BI，Spring Boot + Vue 3，支持 SaaS 多租户、审批流、微信小程序',
   base: BASE,
   cleanUrls: true,
+  sitemap: { hostname: 'https://makesomefakenews.github.io/lemon-erp-website/' },
   lastUpdated: true,
   head: [
     ['link', { rel: 'icon', href: `${BASE}logo.svg` }],
-    ['meta', { name: 'keywords', content: '开源ERP,ERP,MES,WMS,CRM,进销存,Spring Boot,Vue3,柠檬ERP' }]
+    ['meta', { name: 'keywords', content: '柠檬ERP,Lemon ERP,开源ERP,ERP系统,ERP软件,免费ERP,进销存,生产管理,MES,WMS,仓库管理,财务软件,CRM,人力资源,HR,项目管理,BI,SaaS,多租户,审批流,微信小程序,Spring Boot,Vue3,Java,open source ERP' }],
+    ['meta', { property: 'og:type', content: 'website' }],
+    ['meta', { property: 'og:site_name', content: '柠檬ERP' }],
+    ['meta', { property: 'og:title', content: '柠檬ERP - 全功能开源 ERP 系统' }],
+    ['meta', { property: 'og:description', content: '进销存、生产制造、仓储、财务、CRM、人力、项目管理与 BI，一套系统全部打通。Spring Boot + Vue 3，Apache-2.0 开源免费商用。' }],
+    ['meta', { property: 'og:image', content: 'https://makesomefakenews.github.io/lemon-erp-website/images/home/dashboard.jpg' }]
   ],
   markdown: { image: { lazyLoading: true } },
   themeConfig: {
