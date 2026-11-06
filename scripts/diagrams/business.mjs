@@ -18,7 +18,7 @@ const LANES = [
     [6, 0, '工作中心', 'ClusterOutlined'], [7, 0, '仓库库位', 'HomeOutlined'], [8, 0, '会计科目', 'AccountBookOutlined'],
     [9, 0, '编码规则', 'NumberOutlined'], [10, 0, '打印模板', 'PrinterOutlined'],
     [0, 1, '业务参数', 'ControlOutlined'], [1, 1, '自定义字段', 'FormOutlined'], [2, 1, '字典管理', 'BookOutlined'], [3, 1, '业务字典', 'ProfileOutlined'],
-    [4, 1, '规格属性', 'TagsOutlined'], [6, 1, '第三方集成', 'ApiOutlined'], [8, 1, '凭证科目设置', 'SettingOutlined'], [10, 1, '套打设计', 'LayoutOutlined']
+    [4, 1, '规格属性', 'TagsOutlined'], [5, 1, '商品价格', 'TagOutlined'], [6, 1, '第三方集成', 'ApiOutlined'], [8, 1, '凭证科目设置', 'SettingOutlined'], [10, 1, '套打设计', 'LayoutOutlined']
   ] },
   { key: 'sales', name: '销售与客户', icon: 'RiseOutlined', rows: 1, nodes: [
     [0, 0, '线索', 'BulbOutlined'], [1, 0, '客户', 'IdcardOutlined'], [2, 0, '销售机会', 'FunnelPlotOutlined'],
@@ -71,7 +71,7 @@ const LANES = [
   { key: 'bi', name: '商务智能', icon: 'PieChartOutlined', rows: 1, nodes: [
     [0, 0, '数据仓库', 'CloudSyncOutlined'], [1, 0, '多维分析', 'TableOutlined'], [2, 0, '自定义报表', 'FileTextOutlined'],
     [3, 0, '自定义仪表盘', 'DashboardOutlined'], [4, 0, '经营驾驶舱', 'FundOutlined'], [5, 0, '决策支持', 'BulbOutlined'],
-    [6, 0, '预警规则', 'AlertOutlined'], [8, 0, '数据大屏', 'FundProjectionScreenOutlined']
+    [6, 0, '预警规则', 'AlertOutlined'], [8, 0, '数据大屏', 'FundProjectionScreenOutlined'], [10, 0, '进销存报表', 'BarChartOutlined']
   ] }
 ]
 

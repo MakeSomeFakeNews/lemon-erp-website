@@ -23,13 +23,13 @@ lemon-erp
 │   ├── lemon-workflow          流程中心：Flowable 集成、流程模型、发起与审批、抄送
 │   ├── lemon-dashboard         首页工作台
 │   ├── lemon-wms               仓库管理：仓库、库位、物料、出入库 / 调拨 / 盘点、库存、批次与序列号、单据编号
-│   ├── lemon-scm               供应链：供应商、客户、请购询价报价、采购 / 销售、发货、物流发运、门户
+│   ├── lemon-scm               供应链：供应商、客户、请购询价报价、采购 / 销售、出入库（含直接开单）、价格体系（开单取价、价格记忆）、发货、物流发运、门户
 │   ├── lemon-mes               生产制造：BOM、生产计划、MRP、工单、设备；质量管理（Qms*）
 │   ├── lemon-fin               财务：科目、凭证、账簿报表、应收应付、资金、资产、成本、预算、结账
 │   ├── lemon-hr                人力资源：员工、招聘培训、考勤、请假、薪酬、绩效、员工自助
 │   ├── lemon-crm               客户关系：客户、线索、商机、跟进、合同、市场活动、服务工单
 │   ├── lemon-pm                项目管理：项目、WBS 计划、工时、成本、项目核算
-│   ├── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
+│   ├── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持；进销存报表（供应链菜单下，实时查询）
 │   └── lemon-ai                智能：大模型客户端（OpenAI 兼容）、AI 设置与用量、AI 问数、智能录入、数据整理、智能报告（只依赖 framework）
 ├── lemon-admin                 启动模块：组装全部业务模块，打包为 lemon-erp.jar
 ├── lemon-web                   前端（Vite + Vue 3 + Ant Design Vue）
@@ -172,13 +172,16 @@ lemon-web
     ├── views/<模块>/<页面>/index.vue   页面，菜单的「组件路径」即相对 views 的路径（不含 .vue）
     │                           views/screen 数据大屏（静态路由 /screen/:key、免登录的 /screen-share/:token）
     │                           views/ai 智能：chat（AI 问数）、extract（智能录入）、cleanse（数据整理）、report（智能报告）、settings（AI 设置）
+    │                           views/jxc 进销存报表：sales、purchase、business（经营状况）、assets（资产状况）、goods（商品分析）、rfm（客户分析），接口在 api/bi/jxc.js
     ├── components              通用组件（TableToolbar、SearchForm、FormDrawer、SubPage、DictTag、
     │                           AttachmentPanel、ChangeLogPanel、ImportModal 等）与各模块的单据表单、详情
     │                           print/ 打印预览与套打设计器，common/ 单据明细行表格 LineItemsTable、自定义字段的表单与显示，
     │                           charts/ ECharts 封装，screen/ 数据大屏外壳、指标卡、面板、滚动列表，
-    │                           ai/ 智能录入的输入与预览、「AI 识别」按钮、预填提示、导入字段对应、Markdown 渲染
+    │                           ai/ 智能录入的输入与预览、「AI 识别」按钮、预填提示、导入字段对应、Markdown 渲染，
+    │                           bi/jxc/ 进销存报表的汇总（JxcTradeReport）与明细子页（JxcDetail），
+    │                           scm/ 中的 TradeDocItems（出入库明细）、PriceReference（价格参考）等供应链单据组件
     ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useCustomFields、
-    │                           useAiPrefill（智能录入预填到新增表单）
+    │                           useAiPrefill（智能录入预填到新增表单）、useBizRules（读取前端可读的业务参数）
     ├── constants/enums.js      由后端枚举生成的状态、类型常量（不要手工修改）
     ├── directives/perm.js      按钮权限指令 v-perm
     ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）

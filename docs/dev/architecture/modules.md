@@ -34,7 +34,7 @@ order: 1
 | `lemon-hr` | fin、system、wms | 人力资源 |
 | `lemon-crm` | fin、scm、wms | 客户关系（校验负责人通过 framework 的 `UserLookup`，不依赖 system） |
 | `lemon-pm` | fin、hr、scm、wms | 项目管理（system 经 hr 传递；校验项目经理、成员通过 `UserLookup`） |
-| `lemon-bi` | fin、scm | 商务智能 |
+| `lemon-bi` | fin、scm | 商务智能；供应链菜单下的「进销存报表」代码也在这里（实时查询业务表，不经数据仓库） |
 | `lemon-ai` | framework | 智能（另依赖 OpenPDF），不依赖任何业务模块；各业务模块提供的 AI 能力通过 `framework/ai` 契约收集，见 [智能（AI）](./ai) |
 
 可以概括为两条主线和两个独立模块：
@@ -53,7 +53,7 @@ order: 1
    - **接口**：上游注入接口，下游实现为 Spring Bean。例如供应链校验客户信用额度时需要应收余额，框架层定义 `PartnerBalanceProvider`，财务模块的 `FinPartnerBalanceProvider` 实现；
    - **事件**：上游发布事件，下游用 `@EventListener` 监听。例如人力资源发布 `EmployeeLeftEvent`，系统模块停用账号、客户关系和项目移交数据、工作流移交待办。
 4. **只在本模块内使用的事件放在本模块**：例如 scm 的 `TradeDocConfirmedEvent`（出入库确认）由 fin 监听生成应收应付单，fin 依赖 scm，因此事件定义在 scm 中即可。
-5. **报表类查询直接关联上游表**：例如成本核算读取仓库流水、采购金额、工单数据，直接在 fin 的 mapper XML 中 JOIN 上游表，不在上游模块增加只为财务服务的接口。这类跨模块 JOIN 只允许读，写操作必须经过数据所属模块的 Service。
+5. **报表类查询直接关联上游表**：例如成本核算读取仓库流水、采购金额、工单数据，直接在 fin 的 mapper XML 中 JOIN 上游表，不在上游模块增加只为财务服务的接口。这类跨模块 JOIN 只允许读，写操作必须经过数据所属模块的 Service。进销存报表也是这样：页面在供应链菜单下，代码放在 bi（`BiJxcService`、`BiJxcMapper.xml`），只读 JOIN scm、wms、fin 的表（业务员名称取 `sys_user`），需要的资金余额调用 fin 的 `FinCashierService.daily`（bi 依赖 fin，属于下游调用上游），不在 scm 中增加报表接口。
 
 框架层中的契约接口与实现方：
 

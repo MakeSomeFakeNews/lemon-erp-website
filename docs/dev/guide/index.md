@@ -1,6 +1,6 @@
 # 开发指南
 
-本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序、AI 能力扩展等专题。
+本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序、AI 能力扩展、开单取价、进销存报表等专题。
 
 ## 内容清单
 
@@ -9,20 +9,22 @@
 | [后端开发规范](./backend) | 分层与拆分、统一返回 `R`、异常、校验分组、枚举约定、SQL 约定（`StatusTransitions`、`Queries`）、分页上限、`@PreAuthorize`、`@OperLog`、Controller 的职责、接口类型化、事务边界、跨模块访问数据、制单人自动填充、`Decimals` |
 | [前端开发规范](./frontend) | 列表页结构、`useTable`、`FormDrawer`、`SubPage`、`useDict` / `DictTag`（系统字典与业务字典）、`@/constants/enums` 状态常量、`useAction`、`useLineItems` / `LineItemsTable`、`utils/number.js`、下拉框与表格的显示约定、拆分大页面、`v-perm`、深色模式样式 |
 | [新增一个业务模块](./new-module) | 从建 Gradle 模块、建表与字典（系统字典 / 业务字典）、写实体 / Mapper / Service / Controller，到前端页面与菜单的完整步骤 |
-| [单据开发公共组件](./doc-components) | `ApprovalFlow` / `ApprovalSupport`、`StatusTransitions`、`DataScopes`、`DetailLines`、`Queries`、`Decimals`、制单人自动填充，前端 `useAction`、`useLineItems` + `LineItemsTable`；带明细行单据的完整示例 |
+| [单据开发公共组件](./doc-components) | `ApprovalFlow` / `ApprovalSupport`、`StatusTransitions`、`DataScopes`、`DetailLines`、`Queries`、`Decimals`、制单人自动填充，前端 `useAction`、`useLineItems` + `LineItemsTable`、`useBizRules`，供应链的 `TradeDocItems`、`PriceReference`；带明细行单据的完整示例 |
 | [单据编号与打印](./doc-no-print) | `DocNoService` 取号、`DocNoCatalog` 声明、`printDocs` 打印、`PRINT_TYPES` 登记打印模板，后端 JasperReports 生成 PDF、JRXML 与套打 |
 | [接入审批流](./approval) | `FlowBusiness` 声明、`ApprovalFlow` + `ApprovalSupport` 提交与撤回、`FLOW.onFinished` 回写状态、内置流程模型 |
 | [扩展审批人类型、运算符、字段类型](./workflow-extend) | 新增 `AssigneeStrategy`、`ConditionOperator`、`FormFieldType`、节点类型的前后端改动 |
-| [新增菜单与授权](./menu) | 在菜单管理或 `init.sql` 中登记模块、分组、页面、按钮，给内置角色授权 |
+| [新增菜单与授权](./menu) | 在菜单管理或 `init.sql` 中登记模块、分组、页面、按钮，给内置角色授权，SaaS 功能模块与行业模板（`SysFeatureCatalog`） |
 | [新增定时任务](./job) | 实现 `JobHandler`，参数、站内消息提醒、多租户 |
 | [新增缓存](./cache) | 使用 `CacheService`、键命名、失效、登记到缓存监控 |
 | [新租户初始化](./tenant-init) | 实现 `TenantInitializer` 为新租户复制基础数据 |
 | [供应商门户接口开发](./portal) | 门户账号、`/portal/**` 接口、`requireSupplierId`、`portal:*` 权限 |
-| [新增业务参数](./biz-rule) | 用 `BizRuleProvider` 登记按租户的业务控制和计算规则（开关、整数、小数、下拉、表格），业务代码通过 `BizRules` 读取，一组参数用 record 类型化读取 |
+| [新增业务参数](./biz-rule) | 用 `BizRuleProvider` 登记按租户的业务控制和计算规则（开关、整数、小数、下拉、表格），业务代码通过 `BizRules` 读取，一组参数用 record 类型化读取，前端按开关显示界面用 `publicKeys` + `useBizRules` |
 | [业务实体接入自定义字段](./custom-field) | 自定义字段的存储与权限，`useCustomFields` / `CustomFieldsForm` / `useCustomColumns` / `CustomFieldsView` 接入表单、列表、详情 |
 | [国际化](./i18n) | 前端 vue-i18n 语言包与 `$t`、菜单和字典译文，后端 `MessageSource` 资源包、`BizException` 消息键、校验注解 `{键}`、`Accept-Language`，新增语言与检查脚本 |
 | [AI 能力扩展开发](./ai) | 业务模块实现 `framework/ai` 契约：新增问数工具（`AiTool`、`AiSchema`、`AiToolResult`）、可智能录入的单据（`AiExtractTarget`、`AiPrefillBuilder`，前端 `useAiPrefill` / `AiExtractButton`）、可整理的资料（`AiCleanseSource`）、报告指标（`AiReportSource`、`AiReportMetrics`） |
 | [微信小程序开发](./miniapp) | `lemon-mp`（uni-app + Vue 3）的项目结构、本地开发与配置、微信登录与绑定、订阅消息审批提醒、新增页面与工作台入口（`pages.json` 分包、`config/entries`、`l-*` 组件、`usePaged` / `runAction` / `useTitle`）、多语言、发布 |
+| [开单取价与价格参考](./pricing) | 开单默认价的取价顺序（`PriceSource`、`ScmPricingService`）、价格列与客户价格等级、价格记忆、价格参考的权限裁剪（`PriceReference.vue`），新增一种价格来源 |
+| [进销存报表开发](./jxc-report) | bi 模块实时查询业务表的报表：口径与公共 SQL 片段、数据权限、汇总维度 `JxcDimension` 及如何扩展、汇总 → 明细 → 单据的穿透、经营状况 / 商品分析 / RFM |
 
 ## 新功能的开发流程
 

@@ -26,9 +26,10 @@ order: 13
 | --- | --- | --- |
 | `BizRule` | `framework/rule` | 参数定义（record）：标识、所属模块（页签）、名称、类型（`BOOL` / `NUMBER` / `DECIMAL` / `SELECT` / `TABLE`）、默认值、下拉选项枚举、数字范围、小数位数、表格的列、说明 |
 | `BizRule.Column` | `framework/rule` | 表格型参数的一列：名称、小数位数、最小值、最大值、能否留空（表示不限） |
-| `BizRuleProvider` | `framework/rule` | 业务模块实现这个接口（声明为 Bean）：`rules()` 返回本模块的参数定义，`validate(key, value)` 做额外的校验（可选） |
+| `BizRuleProvider` | `framework/rule` | 业务模块实现这个接口（声明为 Bean）：`rules()` 返回本模块的参数定义，`validate(key, value)` 做额外的校验（可选），`publicKeys()` 声明登录用户都可以读取的参数（可选，前端按参数显示界面时用） |
 | `BizRules` | `framework/rule` | 业务代码读取当前租户的参数值（`bool`、`number`、`decimal`、`option`、`table`） |
-| `SysBizRuleService` | system 模块 | 实现 `BizRules`：汇总所有 `BizRuleProvider` 的定义，只保存修改过的值，按租户缓存 |
+| `SysBizRuleService` | system 模块 | 实现 `BizRules`：汇总所有 `BizRuleProvider` 的定义，只保存修改过的值，按租户缓存；`publicValues(keys)` 返回声明为前端可读的参数值 |
+| `useBizRules` | `lemon-web/src/composables/useBizRules.js` | 前端读取声明为前端可读的参数，见下文「前端按参数显示界面」 |
 
 业务模块只依赖 `lemon-framework` 中的接口，实现在 system 模块中，因此任何业务模块都可以登记和读取业务参数，不会形成反向依赖。
 
@@ -43,6 +44,8 @@ order: 13
 | `scm.purchaseIn.overRate` | 供应链 | 采购入库超收比例（%） | 数字 0~100 | 0 | `ScmTradeDocService`：采购入库时订单明细的已入库数量按比例放宽（`addDone` 的 `overRate`） |
 | `scm.salesOut.overRate` | 供应链 | 销售出库超发比例（%） | 数字 0~100 | 0 | 同上，销售出库 |
 | `scm.credit.control` | 供应链 | 客户信用额度控制 | 下拉（`CreditControl`） | `ALL` 审核和出库时控制 | `ScmOrderService`：`ALL` 时审核销售订单和出库都校验，`SHIPMENT` 只在出库时校验，`NONE` 不校验 |
+| `scm.directDoc.enabled` | 供应链 | 允许直接开单 | 是否 | true | `ScmTradeDocService.createDirect`：销售出库、采购入库及退货可以不选订单，生成隐式订单（见 [业务联动](../architecture/integration#直接开单与隐式订单)）；前端可读 |
+| `scm.salesOut.lineWarehouse` | 供应链 | 销售出库明细可选仓库 | 是否 | true | `ScmTradeDocService.create`：销售出库的明细行可以另选仓库；前端可读 |
 | `fin.voucher.selfAudit` | 财务 | 允许审核自己制单的凭证 | 是否 | false | `FinVoucherService`：关闭时制单人不能审核自己的凭证（超级管理员除外） |
 | `hr.pay.monthDays` | 人力资源 | 月计薪天数 | 小数（2 位）1~31 | 21.75 | 日工资 =（基本工资 + 岗位津贴）/ 月计薪天数；月计薪小时 `monthPayHours()` = 月计薪天数 × 每日工时，用于薪资档案的小时人工成本（项目成员小时成本） |
 | `hr.pay.dayHours` | 人力资源 | 每日工时 | 小数 1~24 | 8 | 小时工资 = 日工资 / 每日工时；请假跨天时每天按此计；请假流程变量 `days`、项目工时的全天请假判断（`PmTimesheetService`） |
@@ -308,7 +311,7 @@ evaluate(a, calendarService.shiftOf(e), calendarService.isWorkday(today), ruleSe
 a.setWorkHours(rules.workHours(Duration.between(a.getCheckIn(), a.getCheckOut()).toMinutes()));
 ```
 
-**前端需要参数值时提供只读的子集接口**。业务参数页面的读取接口要求 `sys:bizRule:list` 权限，业务人员通常没有；需要按参数估算时，由本模块提供一个只返回所需字段的接口，权限跟随业务页面，前端不写死这些数字。薪资档案页面的写法：
+**前端需要参数值时提供只读的子集接口**。业务参数页面的读取接口要求 `sys:bizRule:list` 权限，业务人员通常没有。只是按开关显示或隐藏界面时，用下文的 `publicKeys` + `useBizRules`；需要按一组计算参数估算（如工资、社保）时，由本模块提供一个只返回所需字段的接口，权限跟随业务页面，前端不写死这些数字。薪资档案页面的写法：
 
 ```java
 // hr/dto/SalaryRules：薪资档案页面估算用到的子集
@@ -336,6 +339,43 @@ const hourlyCost = (monthly) => (Number(payRules.value.monthPayHours) ? monthly 
 - 标识、默认值、类型转换和派生的计算（如 `monthPayHours()`、`cumulativeTax()`）都集中在 record 中，`BizRuleProvider` 只负责登记；
 - 计算方法接收 record 参数而不是自己读取参数，同一次计算中的取值一致，也可以用 `HrRules.DEFAULT` 单独验证；
 - 比例类参数按百分数保存（10.5 表示 10.5%），在 record 中提供换算为小数的方法。
+
+### 前端按参数显示界面：publicKeys + useBizRules
+
+有些参数决定页面怎么显示，例如「允许直接开单」关闭时出入库表单必须选择订单，「销售出库明细可选仓库」关闭时明细不显示仓库列。这类开关由登记它的模块在 `publicKeys()` 中声明为前端可读，登录用户（不需要 `sys:bizRule:list`）经 `GET /system/biz-rule/values?keys=a,b` 读取：
+
+```java
+// scm/service/ScmBizRules
+@Override
+public Set<String> publicKeys() {
+    return Set.of(DIRECT_DOC, SALES_OUT_LINE_WAREHOUSE);
+}
+```
+
+- `SysBizRuleService.publicValues(keys)` 只返回各模块 `publicKeys()` 的并集中的参数，未声明或不存在的标识直接忽略（不报错）；返回值为原始字符串（`BOOL` 为 `"true"` / `"false"`）；
+- 只声明界面需要的开关，**不要声明金额阈值、比例等不应公开的参数**；
+- 前端读取只用于显示，后端的业务方法仍然要用 `BizRules` 自己判断（如 `ScmTradeDocService.createDirect` 在参数关闭时抛 `scm.error.directDocDisabled`），不能依赖前端隐藏入口。
+
+前端用 `composables/useBizRules.js`：
+
+```js
+import { useBizRules } from '@/composables/useBizRules'
+
+// 参数标识 → 默认值（与后端默认值一致，读取完成前和读取失败时使用）
+const { rules, loaded, ready } = useBizRules({ 'scm.directDoc.enabled': true, 'scm.salesOut.lineWarehouse': true })
+const allowDirect = computed(() => rules['scm.directDoc.enabled'] === true)
+
+async function openCreate() {
+  await ready            // 需要按参数决定初始状态时，等读取完成
+  ...
+}
+```
+
+- `rules` 是响应式对象，读取完成后自动更新；`'true'` / `'false'` 转为布尔值，其他类型保留字符串；
+- 读取结果在当前会话内缓存（多个组件共用，已缓存的标识不再请求）；「业务参数」页面保存后、登录用户切换时调用 `clearBizRules()` 清空（已在 `views/system/biz-rule/index.vue` 和 `store/user.js` 中调用）；
+- 接口函数是 `api/system/customField.js` 中的 `bizRuleValues(keys)`，页面一般不直接调用。
+
+新增一个前端可读的开关：在 `*BizRules` 中登记参数并加入 `publicKeys()`，前端 `useBizRules({ 标识: 默认值 })` 读取。
 
 ### 4. 验证
 

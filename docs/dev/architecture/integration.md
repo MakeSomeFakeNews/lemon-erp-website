@@ -69,7 +69,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 
 | 事件 | 定义位置 | 发布时机 | 监听方 |
 | --- | --- | --- | --- |
-| `TradeDocConfirmedEvent` | scm | 采购入库 / 退货、销售出库 / 退货确认（库存已更新） | fin 生成应付 / 应收单；mes 处理委外 |
+| `TradeDocConfirmedEvent` | scm | 采购入库 / 退货、销售出库 / 退货确认（库存已更新） | fin 生成应付 / 应收单；mes 处理委外；scm 登记价格记忆（`ScmPriceMemoryService`） |
 | `OrderStatusChangedEvent` | scm | 订单反审核、关闭等状态变化 | mes 检查或关闭生产计划；scm 释放库存预留 |
 | `OrderDeletedEvent` | scm | 草稿订单删除 | crm 商机解除对订单的引用；scm 报价、询价、请购解除引用 |
 | `ShipmentShippedEvent` | scm | 物流发运单发货 | fin 生成运费应付单 |
@@ -90,10 +90,12 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 
 ```
 采购订单 ─审核─▶ 采购入库 / 退货 ──▶ 仓库入库 / 出库单（保存即确认，更新库存、批次、序列号）
-                       │ TradeDocConfirmedEvent
+（或直接开单：生成并审核隐式订单）│ TradeDocConfirmedEvent
+                       ├─▶ 价格记忆（采购入库）
                        ▼
                     应付单 ─▶ 付款核销 ─▶ 凭证
 销售订单 ─审核─▶ 销售出库 / 退货 ──▶ 仓库出库 / 入库单 ──▶ 物流发运
+（或直接开单）         ├─▶ 价格记忆（销售出库）
                        └─▶ 应收单 ─▶ 收款核销 ─▶ 凭证
 销售订单 ─▶ 生产计划 ─▶ MRP ─▶ 生产工单（领料 / 退料 / 补料 / 完工入库 ─▶ 仓库单据）
                             └▶ 采购订单（按默认供应商合并）
@@ -106,6 +108,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 线索 ─▶ 客户 + 商机 ─赢单─▶ 销售订单
 项目工时 + 项目领料 + 费用 ─▶ 项目成本；项目开票 ─▶ 应收单
 全部业务表 ─ETL─▶ 数据仓库（bi_fact_*）─▶ 多维分析 / 报表 / 仪表盘
+出入库单 + 成本核算单价 + 收付款 + 库存 ─实时查询─▶ 进销存报表（bi 模块，只读，不经数据仓库）
 报工 / 设备 / 出入库 / 发货通知 / 销售订单 / 收款 / 检验 / 不合格品 ─实时查询─▶ 数据大屏（只读，不经数据仓库）
 ```
 
@@ -119,6 +122,63 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 
 - 组装拆卸单在仓库模块内完成：确认时在同一事务中生成并确认出入库单（出入库类型 `ASSEMBLY`，来源单号为组装拆卸单号），成本核算按子件成本结转成套件。
 - 销售提成的代码在 fin（统计销售出库、成本、收款核销），工资表由 hr 直接调用 `FinCommissionService.confirmedAmounts(期间)` 取已确认的提成（hr 依赖 fin，属于「下游调用上游」）。
+
+## 出入库单：直接开单、明细仓库与价格记忆
+
+采购入库 / 退货、销售出库 / 退货（`scm_trade_doc`，`ScmTradeDocService.create`）有两种录入方式，最终都走同一条「按订单出入库」的链路：
+
+```
+TradeDocRequest（orderId 为空 = 直接开单）
+  │ ScmTradeDocService.createDirect
+  │   └─ ScmOrderService.createDirect：生成隐式订单（source = DIRECT）并直接审核
+  ▼
+ScmTradeDocService.create(kind, req, order)        引用订单时直接进入这一步
+  ├─ 回写订单明细的已完成 / 已退货数量（条件更新）
+  ├─ WmsStockDocService.createConfirmed：生成一张仓库出入库单并确认（明细可带各自的仓库）
+  ├─ 重新计算订单状态
+  └─ 发布 TradeDocConfirmedEvent ─▶ fin 应收应付、mes 委外、scm 价格记忆
+```
+
+### 直接开单与隐式订单
+
+业务参数 `scm.directDoc.enabled`（`ScmBizRules.DIRECT_DOC`，默认开启）打开时，`TradeDocRequest.orderId` 可以为空（`req.direct()`）。此时请求填写往来单位 `partnerId`、销售出库的业务员 `salesmanId`（可空），明细 `TradeDocItemRequest` 填写 `materialId`、`price`（含税单价）、`taxRate`，不填 `orderItemId`。
+
+`ScmTradeDocService.createDirect` 的处理：
+
+1. 参数关闭时抛 `scm.error.directDocDisabled`；没有往来单位、某行没有物料或单价时报错；直接开单的退货不支持补发 / 补收（`replenish`）。
+2. 每行明细转为一行 `OrderItemRequest`，调用 `ScmOrderService.createDirect(kind, req, salesmanId, returns)`。该方法声明为 `@Transactional(propagation = Propagation.MANDATORY)`，只能在出入库单的事务中调用：
+   - 与手工订单共用 `insertDraft`：套用采购合同价、校验限价（`checkPriceLimit`）；销售出库应用折扣、满减促销（`applied.withoutGifts()` 去掉买赠的赠品行，赠品不会随单出库），按业务参数校验信用额度（`creditChecker.checkOnApprove`）；业务员为空时取客户负责人，没有时为制单人；
+   - `approveDirect` 直接审核，不走审批流程；
+   - 退货（`returns = true`）时 `ScmOrderItemMapper.markAllDone` 把隐式订单的明细视为已全部出入库，只用于回写退货数量。
+3. 按插入顺序把隐式订单明细与请求明细一一对应，填上 `orderItemId`（销售出库保留各行的 `warehouseId`），再调用引用订单时的 `create(kind, req, order)`。
+
+因此信用额度、限价、促销、超发比例、序列号批次、应收应付、成本、提成、追溯、BI 都与引用订单完全相同，不需要为直接开单另写一套联动。隐式订单出现在订单列表中（标记「直接开单」），但随出入库单生成、已全部完成，**不能反审核、关闭、变更、预留、发货通知**：这些入口都先调用 `ScmOrderService.checkNotDirect(order)`（抛 `scm.error.directOrderReadOnly`），错误通过退货冲回。新增针对订单的操作时，同样要先调用 `checkNotDirect`。
+
+客户寄售结算（`ScmConsignService`，来源 `CONSIGN`）也是「先生成已审核订单、再按订单出库」的做法，直接开单与它一致。
+
+退货有两种方式：前端选择原出入库单时带出其订单（请求中 `orderId` 不为空，按原订单回写退货数量）；不选原单时为直接开单，生成的隐式订单只用于回写退货数量，库存按退货入库 / 出库，应收应付按退货金额冲减。
+
+### 销售出库的明细仓库
+
+业务参数 `scm.salesOut.lineWarehouse`（`ScmBizRules.SALES_OUT_LINE_WAREHOUSE`，默认开启）打开时，销售出库的每行可以另选仓库。**一张出入库单仍然只生成一张仓库单据**，仓库落在明细上：
+
+- `scm_trade_doc_item.warehouse_id`、`wms_stock_doc_item.warehouse_id` 只在与表头仓库不同时保存，为空表示取表头仓库（`ScmTradeDocService` 中设置，`WmsStockDocService.toItems` 再次规范化；调拨单忽略明细仓库）；
+- 仓库模块按「明细仓库，为空取表头仓库」处理：库存变动 `StockDocRules.toChanges` 用 `item.warehouseOr(doc.getWarehouseId())`，`StockDocValidator` 对明细仓库同样校验启用状态和寄售仓类型，库位必须属于本行的仓库；冲销（`StockDocReverser`）复制明细仓库；
+- 库存预留按本行仓库核销（`reservationService.consume(orderItemId, 本行仓库, qty)`）；
+- SQL 中一律写 `COALESCE(i.warehouse_id, d.warehouse_id)`：仓库单据明细、按仓库筛选单据（明细仓库匹配也算）、BI 的事实表、进销存报表都是这样；
+- 采购入库、采购退货、销售退货只有表头仓库（参数只对销售出库生效，其他种类传入的 `warehouseId` 被忽略）。
+
+新增按仓库统计出入库的查询时，记得用 `COALESCE(明细仓库, 表头仓库)`，否则从其他仓库出库的行会被算到表头仓库。
+
+### 价格记忆
+
+`ScmPriceMemoryService` 监听 `TradeDocConfirmedEvent`（`@EventListener`，与出入库**同一事务**），只处理销售出库、采购入库：读取单据明细，按 往来单位 × 物料 登记最新价（同一物料多行取最后一行）、最低价、最高价及各自日期，写入 `scm_price_memory`（种类 `SALES` / `PURCHASE`）。
+
+- 退货不登记，单价为 0 的行（赠品）不登记；
+- 价格为出入库明细的单价（含税、本位币）；
+- 按物料 ID 顺序逐个执行 `ScmPriceMemoryMapper.upsert`（`INSERT ... ON DUPLICATE KEY UPDATE`，唯一键 `kind + partner_id + material_id + tenant_id`），并发确认不会丢失更新，固定的加锁顺序避免死锁；单据日期不早于原最新日期时才更新最新价。
+
+价格记忆是开单默认价的来源之一（销售的「最近售价」、采购的「最近进价」），也是价格参考中「客户对比」「供商对比」的数据，见 [开单取价与价格参考](../guide/pricing)。
 
 ## 自动凭证的科目
 

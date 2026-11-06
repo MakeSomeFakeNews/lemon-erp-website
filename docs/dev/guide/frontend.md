@@ -16,7 +16,7 @@ order: 2
 | `src/components/` | 通用组件：`TableToolbar`、`SearchForm`、`FormDrawer`、`SubPage`、`DictTag`、`StatusSwitch`、`AttachmentPanel`、`ChangeLogPanel`、`ImportModal` |
 | `src/components/common/` | `LineItemsTable`（单据明细行表格）、`CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
 | `src/components/print/` | `PrintPreview`（全局打印预览窗口）、`OverlayDesigner`（套打设计器） |
-| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useCustomFields` |
+| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useCustomFields`、`useBizRules`（读取前端可读的业务参数） |
 | `src/constants/enums.js` | 由后端枚举生成的状态、类型常量（`npm run gen:enums`），见 [状态与类型常量](#状态与类型常量) |
 | `src/utils/number.js` | 金额、数量的格式化与舍入（`money`、`qty`、`round2` 等），见 [数字的显示与舍入](#数字的显示与舍入) |
 | `src/locales/<语言>/<模块>.js` | 界面文字的语言包（`zh-CN`、`en-US`，键一致），`en-US/menu.js`、`dict.js` 是菜单和字典的英文译文，见 [国际化](./i18n) |
@@ -581,4 +581,6 @@ html[data-theme='dark'] .workbench .hero {
 - 复用已有的格式化函数保持全站一致：金额、数量、单价用 `utils/number.js`（见 [数字的显示与舍入](#数字的显示与舍入)），金额大写 `components/fin/fin.js` 的 `moneyUpper`，文件大小、时长等用 `utils/format.js`。
 - 打印使用 `utils/print.js` 的 `printDocs`（后端生成 PDF，在全局的打印预览窗口中打印或下载），见 [单据编号与打印](./doc-no-print)。
 - 需要支持自定义字段的表单、列表、详情使用 `useCustomFields`、`CustomFieldsForm`、`useCustomColumns`、`CustomFieldsView`，见 [业务实体接入自定义字段](./custom-field)。
+- 界面要随业务参数变化（如是否允许直接开单）时用 `useBizRules`，不要把参数写死在页面里，也不要为一个开关单独加接口，见 [新增业务参数](./biz-rule#前端按参数显示界面-publickeys-usebizrules)。
+- 供应链单据需要带出单价、查看历史价格时复用 `defaultPrices`（`api/scm/pricing.js`）和 `components/scm/PriceReference.vue`，见 [开单取价与价格参考](./pricing)。
 - 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题、中英文两种语言和窄屏显示。

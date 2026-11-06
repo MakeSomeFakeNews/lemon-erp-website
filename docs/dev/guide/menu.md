@@ -48,7 +48,7 @@ INSERT INTO sys_menu (id, parent_id, name, type, path, component, perms, icon, s
 (5005, 5001, '用车申请提交', 'F', NULL,  NULL,           'oa:car:submit', NULL, 4, 1, 1, NOW(), NOW());
 ```
 
-- 菜单 ID 选一段不会与现有数据冲突的号段（现有内置菜单 ID 在 3600 以内，页面上新增的菜单从 10000 开始自增）；
+- 菜单 ID 选一段不会与现有数据冲突的号段（现有内置菜单 ID 都小于 4000，页面上新增的菜单从 10000 开始自增）；
 - 图标使用 Ant Design Vue 图标组件名（如 `CarOutlined`），可在菜单管理的图标选择器中查找；
 - `visible = 0` 的菜单不在侧边栏显示，但仍会注册路由（可用于只从其他页面跳转进入的页面）；
 - `status = 0` 的菜单停用，不会返回给前端。
@@ -135,6 +135,21 @@ WHERE NOT EXISTS (SELECT 1 FROM sys_menu WHERE id = m.id);
 - 新菜单需要在「系统管理 → 租户套餐」中加入对应套餐，租户才能使用；
 - 租户的 admin 角色（租户管理员）的菜单与套餐一致，随套餐修改自动同步；租户的其他角色由租户管理员在套餐范围内授权；
 - 平台专属功能（权限前缀 `sys:menu:`、`sys:dict:`、`sys:config:`、`sys:tenant`、`monitor:server:`、`monitor:cache:`、`monitor:job:`）不能加入套餐。新增平台专属功能时在 `PlatformFeatures` 中登记权限前缀。
+
+### 功能模块与行业模板
+
+新建租户、编辑套餐时，页面按「功能模块」勾选菜单，并可按行业模板（离散制造、流程制造、商贸批发、电商零售、工程项目、专业服务、全部功能）一键选择常用模块。功能模块定义在 system 模块的 `SysFeatureCatalog` 中：
+
+```java
+// 标识、名称、分类、说明（消息键）、包含的菜单 ID（含其下的全部菜单）、依赖的模块
+f(Key.JXC_REPORT, "system.label.jxcReport", "system.label.supplyChain", "system.label.jxcReportDesc", List.of(966L), Key.SALES, Key.PURCHASE),
+```
+
+- 模块按菜单 ID 定义，可以是模块目录、侧边栏分组或单个页面，包含其下的全部页面和按钮；勾选模块时一并勾选它依赖的模块；
+- 功能模块列出的是分组（或模块目录）时，**新页面放在该分组下会自动归入**，不需要修改；功能模块逐个列出页面 ID 时（如 `SALES`，同一个销售分组中的页面分属销售、渠道分销等模块），或页面放在新位置（新分组、直接放在模块目录下）时，要把它的菜单 ID 加入某个功能模块的 `menus`，或新建一个功能模块（在 `Key` 中加标识，名称、说明的消息键写在 `system.properties` / `system_en.properties`），并按需加入 `Industry` 行业模板的 `features`；
+- 集成测试 `TenantTests.industryTemplate` 检查每个页面都属于某个功能模块，漏登记时测试失败。
+
+例如进销存报表新建了分组 966（供应链下），因此新增功能模块 `JXC_REPORT`（依赖 `SALES`、`PURCHASE`），并加入商贸批发、电商零售两个行业模板；「商品价格」页面（365）放在销售分组（902）下，但 `SALES` 模块是按页面 ID 列出的，所以把 365 加入了 `SALES` 的菜单列表。
 
 ## 门户菜单
 

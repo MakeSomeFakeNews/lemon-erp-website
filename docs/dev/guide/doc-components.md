@@ -25,6 +25,8 @@ order: 4
 | 前端明细行 | `useLineItems` + `LineItemsTable` | `composables`、`components/common` |
 | 前端数字显示与舍入 | `money`、`qty`、`round2`、`sumBy` 等 | `lemon-web/src/utils/number.js` |
 | 前端单据表单与详情 | `useFormDrawer` + `<FormDrawer page>`、`<SubPage>` | `composables`、`components` |
+| 前端按业务参数显示界面 | `useBizRules` | `lemon-web/src/composables` |
+| 供应链：出入库明细、价格参考 | `TradeDocItems`、`PriceReference` | `lemon-web/src/components/scm` |
 
 ## 后端
 
@@ -148,6 +150,18 @@ BigDecimal tax = amount.multiply(taxRate).divide(Decimals.HUNDRED, Decimals.MONE
 | `utils/number.js` | 金额、数量的显示与舍入 | `money`、`moneyOrBlank`、`price`、`qty`、`num`、`round2`、`round4`、`sumBy` |
 | `<FormDrawer page>` | 单据表单（子页） | 占满内容区，返回后列表状态不变 |
 | `<SubPage>` | 单据详情（子页） | 用法同 `a-drawer`，`defineExpose({ reload })` |
+| `useBizRules({ 标识: 默认值 })` | 按业务参数显示或隐藏界面（如是否允许直接开单） | 只能读取后端在 `BizRuleProvider.publicKeys` 中声明的参数，见 [新增业务参数](./biz-rule#前端按参数显示界面-publickeys-usebizrules) |
+
+### 供应链的单据组件
+
+供应链中多张单据共用的明细与取价组件，新增类似的单据（如其他出入库类单据、需要带出单价的单据）时优先复用：
+
+| 组件 | 用途 | 用法 |
+| --- | --- | --- |
+| `components/scm/TradeDocItems.vue` | 采购入库 / 退货、销售出库 / 退货的明细（`TradeDocForm.vue` 中使用） | `<TradeDocItems :kind :form :direct :line-warehouse />`：`kind` 为 `salesOut`、`purchaseIn` 等（`scm.js` 的 `TRADE_KINDS`），直接修改 `form.items`。引用订单时按订单明细录入数量，可拆分库位、批次；`direct` 时选择商品、数量、含税单价、税率，选商品后按往来单位和日期带出开单默认价，单价下方可打开价格参考，销售出库预览促销；`line-warehouse` 时每行多一列仓库（为空取表头仓库，库位、序列号按本行仓库选择）。通过 ref 可调用 `addRow`、`fillPrices` |
+| `components/scm/PriceReference.vue` | 价格参考弹窗：报价、销售、进货历史，进货数量，供商 / 客户对比 | `<PriceReference ref pickable @pick="(price) => ..." />`，`ref.open({ materialId, materialName, partnerId, kind })`；没有权限的分区不显示 |
+
+取价链路、价格参考的后端实现和这两个组件的配合方式见 [开单取价与价格参考](./pricing)；直接开单、明细仓库的后端联动见 [业务联动](../architecture/integration#出入库单-直接开单、明细仓库与价格记忆)。
 
 ## 完整示例：带明细行的用车申请
 
