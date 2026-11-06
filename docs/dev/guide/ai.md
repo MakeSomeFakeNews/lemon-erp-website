@@ -15,7 +15,7 @@ order: 17
 | 依赖 | 业务模块只依赖 `lemon-framework`（`com.lemon.erp.framework.ai`），**不依赖 `lemon-ai`**，不注入 `LlmClient`、不自己调用模型接口；所有模型调用由 ai 模块经 `AiModelService` 完成 |
 | 位置 | 实现类放在本模块的 `ai` 包（`com.lemon.erp.modules.<模块>.ai`），注册为 `@Component`，AI 模块启动时自动收集，不需要登记 |
 | 标识 | 工具名称为小写字母开头的小写字母、数字、下划线（如 `oa_car_requests`），建议以模块名开头；录入目标、整理来源、报告来源为 `模块.名称`（如 `oa.car-request`）。全局唯一，格式不对或重复时**启动失败** |
-| 列表顺序 | 注册表按标识排序，目标列表、工具列表的顺序由标识决定（实现类上的 `@Order` 不影响顺序） |
+| 列表顺序 | 问数工具、整理来源按标识排序（发给模型的工具列表顺序固定，服务商的提示词缓存才能命中）；智能录入的目标单据按实现类上的 `@Order` 排序（页面中的显示顺序），没有 `@Order` 的排在最后；报告来源按 `order()` 排序 |
 | 只查询 | `AiTool.execute`、`prefill`、`page`、`snapshot` 都只查询；调用本模块 Service 的查询方法，数据权限（`@DataPermission`）、租户条件自动生效。只有 `AiCleanseSource.apply` / `disable` 写数据，并且必须调用本模块 Service 的修改方法 |
 | 不返回敏感字段 | 这些数据会发送给第三方模型服务：不返回密码、证件号、手机号、银行账号、个人薪资、小时成本等；需要时只给汇总值 |
 | 文字用消息键 | 名称、给模型的说明、参数说明、提示都写消息键，中英文写在本模块 `i18n/<模块>.properties` / `<模块>_en.properties`。给模型看的说明也要两种语言（按提问人的界面语言取） |
@@ -122,6 +122,7 @@ public class OaCarRequestTool implements AiTool {
 - **参数**：参数已按 schema 校验，类型不对时 `AiToolArgs` 的取值方法抛 `BizException`，错误信息回传给模型修正；业务上不合理的参数（如日期范围过大）也抛 `BizException`，用消息键说明原因；
 - **结果**：列表用 `AiToolResult.rows(行, 总数)`，单个汇总对象用 `AiToolResult.of(对象)`，也可以直接返回 record / List。最多 `AiTool.MAX_ROWS`（200）行，超出由 AI 模块截断；需要合计的汇总表，合计行放在第一行或最后一行，并在说明中写明；
 - **金额、比率**：金额单位为元，比率为百分数（字段名带 `Percent` 或 `Pct`），在说明中写明口径（订单币种还是本位币、含税与否）；
+- **表格列名**：结果表格按字段名在前端语言包 `locales/zh-CN/aiColumn.js`、`en-US/aiColumn.js` 中取列名（如 `orderNo` →「订单号」），新字段要在两个文件中补充，没有登记的直接显示字段名。常用字段（`materialCode`、`amount`、`qty`、`status` 等）已经登记，尽量复用已有的字段名；
 - **业务字典**：取值对模型没有意义，用 `DictLookup.options(字典)` 换成名称；汇总 SQL 中可以 JOIN `sys_dict_data` 直接返回名称。
 
 已有工具的公共写法可以参考：仓库、供应链、生产模块用 `wms/ai/AiQuerySupport`（`startDate` / `endDate` / `limit` 参数、日期范围校验、按编码或名称匹配基础资料 `pick`），财务、人事、商务智能各有 `FinAiSupport`、`HrAiSupport`、`BiAiSupport`；成对的工具写成一个类中的嵌套 `@Component`（如 `FinAgingTools.Receivable / Payable`）。

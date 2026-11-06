@@ -61,6 +61,7 @@ docker compose logs -f backend      # 查看后端日志
 | `DB_PASSWORD` | 必填 | 应用连接数据库的账号 `lemon` 的密码（该账号拥有 `lemon_erp` 库的全部权限） |
 | `REDIS_PASSWORD` | 必填 | Redis 密码 |
 | `JWT_SECRET` | 必填 | 登录令牌签名密钥，至少 32 字节，用 `openssl rand -base64 48` 生成 |
+| `LEMON_AI_SECRET_KEY` | 空 | 加密保存「AI 设置」中 API Key 的密钥，为空时使用 `JWT_SECRET`；更换后需要在 AI 设置中重新填写 API Key |
 | `LEMON_TENANT_ENABLED` | `false` | 开启 SaaS 多租户，开启后登录需要填写租户「柠檬科技」，见 [SaaS 多租户](../architecture/tenant) |
 | `LEMON_DEMO_ENABLED` | `false` | 开启演示模式（只能查看），见 [搭建演示环境](./demo) |
 | `LEMON_MINIAPP_APP_ID` | 空 | 微信小程序（`lemon-mp`）的 AppID，不用小程序时留空 |
@@ -102,7 +103,7 @@ Docker 默认网络的地址在 172.16.0.0/12 范围内，属于后端默认信�
 使用「智能」模块（AI 问数、智能录入、数据整理、智能报告）时，镜像和 `docker-compose.yml` 不需要额外的环境变量：模型的服务商、API Key 等在「智能 → AI 设置」页面中配置，保存在数据库中。部署上注意：
 
 - **出网**：后端容器要能访问所选服务商的 HTTPS 接口（如 `api.deepseek.com`，见 [生产环境配置](./production#ai)）。Docker 默认网络可以访问外网，宿主机需要经代理上网时，在 `.env` 的 `JAVA_OPTS` 中加上 JVM 代理参数，如 `JAVA_OPTS=-Xms512m -Xmx1g -Dhttps.proxyHost=10.0.0.2 -Dhttps.proxyPort=3128`（客户端不读取 `HTTPS_PROXY` 环境变量）；
-- **流式输出**：前端镜像的 `docker/nginx.conf` 中只有一段 `/api/`（读超时 120 秒，没有关闭代理缓冲），AI 问数的回答会被 Nginx 缓冲，等待较久后才一次性显示，智能录入等待模型超过 120 秒时会返回 504。使用 AI 时在 `docker/nginx.conf` 的 `location /api/` 之前加一段 `location /api/ai/`（`proxy_buffering off`、`proxy_read_timeout 300s`，写法见 [Nginx 配置](./nginx#ai-sse)，`proxy_pass` 写 `http://backend:8080`）后重新构建前端镜像；外层还有负责 HTTPS 的反向代理时同样要关闭缓冲；
+- **流式输出**：前端镜像的 `docker/nginx.conf` 中已为 `/api/ai/` 单独配置了一段（关闭代理缓冲、读超时 300 秒，与前端智能录入的等待时间一致），后端的流式接口也返回 `X-Accel-Buffering: no`，AI 问数的回答可以逐字显示。外层还有负责 HTTPS 的反向代理或 CDN 时，同样要关闭它们对 `/api/ai/` 的缓冲，见 [Nginx 配置](./nginx#ai-sse)；
 - **接入同一台机器或内网中私有化部署的模型**：接口地址要写容器内能访问的地址（如宿主机的内网 IP），不能写 `localhost`（指向后端容器自身）。
 
 ## 构建与推送镜像

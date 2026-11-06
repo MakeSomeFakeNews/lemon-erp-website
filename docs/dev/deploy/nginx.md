@@ -62,7 +62,7 @@ server {
 
 ## 智能（AI）的流式输出 {#ai-sse}
 
-「AI 问数」的回答通过 SSE（`text/event-stream`）逐段推送。Nginx 默认缓冲上游的响应（`proxy_buffering on`），攒满缓冲区（几 KB）或响应结束才发给浏览器，表现为长时间没有输出、最后一次性显示，失去流式输出的意义；智能录入、导入字段对应、预警分析等接口要等待模型完成，可能超过 120 秒。在 `/api/` 之前单独为 `/api/ai/` 加一段配置：
+「AI 问数」的回答通过 SSE（`text/event-stream`）逐段推送。Nginx 默认缓冲上游的响应（`proxy_buffering on`），攒满缓冲区（几 KB）或响应结束才发给浏览器，表现为长时间没有输出、最后一次性显示，失去流式输出的意义；智能录入、导入字段对应、预警分析等接口要等待模型完成，可能超过 120 秒。在 `/api/` 之前单独为 `/api/ai/` 加一段配置（仓库自带的 `docker/nginx.conf` 中已经包含）：
 
 ```nginx
     # 智能（AI）：SSE 流式输出不缓冲；等待模型的请求超时放宽到 300 秒（与前端智能录入的等待时间一致）
@@ -78,10 +78,10 @@ server {
     }
 ```
 
-- 后端没有设置 `X-Accel-Buffering` 响应头，关闭缓冲只能在 Nginx 中配置；前面还有其他代理或 CDN 时，同样要关闭它们对 `/api/ai/` 的缓冲和压缩；
+- 后端的流式接口返回 `X-Accel-Buffering: no` 响应头，Nginx 收到后不缓冲这个响应，即使没有上面的 `proxy_buffering off` 也能逐字输出；但超时仍要放宽。前面还有其他代理或 CDN 时，同样要关闭它们对 `/api/ai/` 的缓冲和压缩；
 - 示例中的 `gzip_types` 不包含 `text/event-stream`，不会压缩事件流；自行加入时会导致同样的缓冲问题；
 - 智能录入上传的文件一次最多 6 个（图片每张 5MB、PDF 10MB），在 `client_max_body_size 105m` 之内；
-- 仓库自带的 `docker/nginx.conf` 中只有 `/api/` 一段（读超时 120 秒，未关闭缓冲），使用 AI 问数时按上面的配置补充，见 [Docker 部署](./docker)。
+- 仓库自带的 `docker/nginx.conf` 已包含这段配置，见 [Docker 部署](./docker)。
 
 ## HTTPS
 

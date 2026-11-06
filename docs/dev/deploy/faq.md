@@ -153,7 +153,7 @@ JRXML 中的表达式是在服务器上执行的 Java 代码，SaaS 模式下只
 
 ### AI 问数的回答很久没有输出，最后一次性出现
 
-SSE 流式输出被反向代理缓冲了。在 Nginx 中为 `/api/ai/` 设置 `proxy_buffering off`，见 [Nginx 配置](./nginx#ai-sse)；前面还有 CDN 或其他代理时同样关闭缓冲。
+SSE 流式输出被反向代理缓冲了。后端已返回 `X-Accel-Buffering: no`，Nginx 会自动不缓冲；如果仍然一次性显示，检查前面是否还有 CDN 或其他代理（它们可能不认这个响应头），关闭它们对 `/api/ai/` 的缓冲。自建 Nginx 的推荐配置见 [Nginx 配置](./nginx#ai-sse)。
 
 ### 智能录入、测试连接提示超时或返回 504
 

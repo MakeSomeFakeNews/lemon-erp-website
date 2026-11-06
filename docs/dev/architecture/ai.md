@@ -137,7 +137,9 @@ AI 问数要查询仓库、供应链、生产、财务、人事等几乎所有�
 
 ### API Key 的存储
 
-- API Key **以明文**保存在 `ai_config.api_key`（`VARCHAR(255)`），代码中没有加密；调用模型时原样放在 `Authorization` 请求头中。数据库访问权限、数据库备份、只读账号的查询范围都要按密钥的级别保护；
+- API Key **加密**保存在 `ai_config.api_key`（`VARCHAR(512)`）：`AiKeyCipher` 用 AES-256-GCM 加密，库中为 `enc:` + Base64（12 字节随机 IV + 密文 + 认证标签），同一个 Key 每次保存的密文都不同。加密密钥取 `lemon.ai.secret-key`（环境变量 `LEMON_AI_SECRET_KEY`），为空时取 `lemon.jwt.secret`，经 SHA-256 得到 256 位密钥；
+- 读写都经过 `AiConfigService`：`find()` 返回解密后的配置（调用模型时放在 `Authorization` 请求头中），`save()` 保存前加密。升级前保存的明文 Key 在 `find()` 时仍可使用，并当场改写为密文；加密密钥更换后无法解密，Key 视为未设置（「AI 设置」显示未配置、各功能不可用），日志中有警告，管理员重新填写即可；
+- 加密只防止数据库备份、只读账号等渠道直接看到 Key；能同时拿到数据库和加密密钥（服务器环境变量）的人仍可解密，二者要分开保管；
 - 只写不读：实体字段 `@JsonProperty(access = WRITE_ONLY)`，查询接口只返回 `apiKeySet` 和脱敏的 `apiKeyMask`（保留前 3 位和后 4 位，10 位及以下全部显示为 `******`）；保存时 API Key 为空表示不修改；
 - 操作日志：`OperLogAspect.SECRET_FIELDS` 中加入了 `apiKey`，保存「AI 设置」时请求参数中的密钥完全隐藏；
 - 测试连接时 API Key 留空则使用已保存的，页面上不需要也看不到原密钥。
@@ -156,7 +158,7 @@ AI 问数要查询仓库、供应链、生产、财务、人事等几乎所有�
 
 | 线程池 | 线程数 | 队列 | 队列满时 |
 | --- | --- | --- | --- |
-| 问数（`ai-chat-*`） | `lemon.ai.stream-threads`（16） | 100 | 提示 `ai.error.busy`（「当前提问的人较多，请稍后再试」） |
+| 问数（`ai-chat-*`） | `lemon.ai.stream-threads`（16） | 100 | 提示 `ai.error.busy`（「当前提问的人较多，请稍后再试」）；保存提问前先检查，满了不保存，提交时仍被拒绝则删除刚保存的提问，不会留下没有回答的提问 |
 | 数据整理 | `lemon.ai.cleanse-threads`（2） | 20 | 任务标记为失败并提示 `ai.error.busy` |
 | 智能报告 | 4（代码中固定） | 50 | 报告标记为失败并提示 `ai.error.busy` |
 
@@ -284,7 +286,7 @@ SSE 流式回答结束时 Servlet 容器会进行一次 ASYNC 分派，此时 JW
 
 ### 导入字段对应
 
-Excel 导入（`components/ImportModal.vue`）上传的表头与模板不一致时显示「AI 对应字段」，归属「数据整理」功能（开关、用量都在 CLEANSE 下）。`POST /ai/import/mapping`（`AiImportController`，登录即可，导入本身仍由各业务接口校验权限）：表头（去掉表示必填的「*」）与模板名称规范化后相同的直接对应，全部对应上时不调用模型；否则把模板字段、表头和前 3 行样例（每格最多 50 字）交给模型，返回的对应逐条校验（表头存在、字段存在、每个字段 / 每列只对应一次）。前端 `components/ai/AiImportMapper.vue` 显示对应关系供用户调整，应用后用 `readExcel(file, columns, 字段 → 表头)` 按对应关系重新读取，继续原有的导入流程。
+Excel 导入（`components/ImportModal.vue`）上传的表头与模板不一致时显示「AI 对应字段」，归属「数据整理」功能（开关、用量都在 CLEANSE 下）。`POST /ai/import/mapping`（`AiImportController`，需要数据整理的查看权限 `ai:cleanse:list`——会消耗模型用量，不能只要求登录；导入本身仍由各业务接口校验权限，前端没有该权限时不显示按钮）：表头（去掉表示必填的「*」）与模板名称规范化后相同的直接对应，全部对应上时不调用模型；否则把模板字段、表头和前 3 行样例（每格最多 50 字）交给模型，返回的对应逐条校验（表头存在、字段存在、每个字段 / 每列只对应一次）。前端 `components/ai/AiImportMapper.vue` 显示对应关系供用户调整，应用后用 `readExcel(file, columns, 字段 → 表头)` 按对应关系重新读取，继续原有的导入流程。
 
 ## 智能报告
 
@@ -370,7 +372,7 @@ AI 问数、智能录入不记操作日志（它们只读），提问和用量�
 - 工具列表按名称排序、系统提示结构固定，便于命中服务商的提示词缓存；
 - 「单次最大输出 token」限制每次回答的长度。
 
-注意 `/ai/import/mapping` 登录即可调用（功能开关为数据整理），开启数据整理后任何能打开导入窗口的用户都可能消耗用量；控制成本时以月度上限为准。
+`/ai/import/mapping` 需要数据整理的查看权限（`ai:cleanse:list`），只有能使用数据整理的用户才能通过导入窗口消耗用量。
 
 ## 前端文件
 

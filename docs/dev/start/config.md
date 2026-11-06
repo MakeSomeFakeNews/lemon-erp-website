@@ -38,6 +38,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | `REDIS_PASSWORD` | `spring.data.redis.password` | 空 | 必填（没有密码时设为空字符串） |
 | `REDIS_DATABASE` | `spring.data.redis.database` | `0` | 默认 `0` |
 | `JWT_SECRET` | `lemon.jwt.secret` | 内置开发密钥 | 必填，至少 32 字节 |
+| `LEMON_AI_SECRET_KEY` | `lemon.ai.secret-key` | 空 | 可选，加密保存 AI 设置中 API Key 的密钥，为空时使用 `JWT_SECRET` |
 | `UPLOAD_PATH` | `lemon.upload.path` | `./uploads`（来自 application.yml） | 必填 |
 | `LEMON_TENANT_ENABLED` | `lemon.tenant.enabled` | `false` | 默认 `false` |
 | `LEMON_DEMO_ENABLED` | `lemon.demo.enabled` | `false` | 默认 `false`，搭建对外演示环境时设为 `true` |
@@ -139,6 +140,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
+| `lemon.ai.secret-key` | 空（环境变量 `LEMON_AI_SECRET_KEY`） | 加密保存「AI 设置」中 API Key 的密钥（AES-256-GCM），为空时使用 `lemon.jwt.secret`。更换后已保存的 API Key 无法解密，需要在页面重新填写 |
 | `lemon.ai.connect-timeout` | `10s` | 连接模型接口的超时 |
 | `lemon.ai.read-timeout` | `120s` | 等待模型响应的超时：非流式为整个回答，流式为收到响应头之前 |
 | `lemon.ai.max-retries` | `2` | 429（额度不足除外）、5xx、连接失败时的最多重试次数；流式请求只在收到数据前重试 |
