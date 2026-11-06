@@ -50,6 +50,29 @@ docker compose ps                   # 查看容器状态
 docker compose logs -f backend      # 查看后端日志
 ```
 
+## 使用预构建镜像
+
+每次发布版本（[Releases](https://github.com/MakeSomeFakeNews/lemon-erp/releases)）时，GitHub Actions 会自动构建镜像并推送到 GitHub Packages，同时支持 `linux/amd64` 和 `linux/arm64`，服务器上不需要源码，也不需要编译：
+
+| 镜像 | 标签 |
+| --- | --- |
+| `ghcr.io/makesomefakenews/lemon-erp-backend` | 版本号（如 `1.0.0`）、`1.0`、`latest` |
+| `ghcr.io/makesomefakenews/lemon-erp-web` | 同上 |
+
+从 Release 下载 `lemon-erp-docker-<版本>.zip`，其中只有 `docker/docker-compose.yml`、`docker/.env.example` 和 `sql/init.sql`，`.env.example` 已填好镜像地址和版本：
+
+```bash
+unzip lemon-erp-docker-1.0.0.zip && cd lemon-erp-docker-1.0.0/docker
+cp .env.example .env        # 修改其中的密码和 JWT_SECRET
+docker compose up -d
+```
+
+Release 中还有后端 jar（`lemon-erp-<版本>.jar`）、前端静态文件（`lemon-web-<版本>.zip`）和 `init.sql`，可用于不使用 Docker 的[传统部署](./production)。升级到新版本时把 `.env` 中的 `IMAGE_TAG` 改为新版本号，按下文[升级](#升级)中的说明执行数据库升级后 `docker compose pull && docker compose up -d`。
+
+::: tip 持续集成
+仓库的 `.github/workflows/ci.yml` 在推送到 main 和提交 Pull Request 时检查后端编译、前端与小程序构建、多语言与枚举一致性（Pull Request 还会构建 Docker 镜像）；`release.yml` 在发布 Release 时构建并推送镜像、上传发布文件。Fork 后发布 Release，镜像会推送到你自己账号下的 GitHub Packages。
+:::
+
 ## 配置（.env）
 
 `docker/.env` 由 `.env.example` 复制而来，已加入 `.gitignore`，不会提交到代码仓库。
