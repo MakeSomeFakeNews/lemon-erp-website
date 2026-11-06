@@ -64,7 +64,7 @@ const sidebarOf = (root: string, sections: [string, string][]) =>
 export default defineConfig({
   lang: 'zh-CN',
   title: '柠檬ERP',
-  description: '柠檬ERP（Lemon ERP）开源 ERP 系统：进销存、生产制造 MES、仓储 WMS、质量、财务、CRM、人力 HR、项目管理与 BI，Spring Boot + Vue 3，支持 SaaS 多租户、审批流、微信小程序',
+  description: '柠檬ERP（Lemon ERP）真正 100% 开源、无功能限制的 ERP 系统：进销存、生产制造 MES、仓储 WMS、质量、财务、CRM、人力 HR、项目管理与 BI，Spring Boot + Vue 3，支持 SaaS 多租户、审批流、微信小程序',
   base: BASE,
   cleanUrls: true,
   sitemap: { hostname: 'https://makesomefakenews.github.io/lemon-erp-website/' },
@@ -74,8 +74,8 @@ export default defineConfig({
     ['meta', { name: 'keywords', content: '柠檬ERP,Lemon ERP,开源ERP,ERP系统,ERP软件,免费ERP,进销存,生产管理,MES,WMS,仓库管理,财务软件,CRM,人力资源,HR,项目管理,BI,SaaS,多租户,审批流,微信小程序,Spring Boot,Vue3,Java,open source ERP' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:site_name', content: '柠檬ERP' }],
-    ['meta', { property: 'og:title', content: '柠檬ERP - 全功能开源 ERP 系统' }],
-    ['meta', { property: 'og:description', content: '进销存、生产制造、仓储、财务、CRM、人力、项目管理与 BI，一套系统全部打通。Spring Boot + Vue 3，Apache-2.0 开源免费商用。' }],
+    ['meta', { property: 'og:title', content: '柠檬ERP - 真正 100% 开源的 ERP 系统' }],
+    ['meta', { property: 'og:description', content: '进销存、生产制造、仓储、财务、CRM、人力、项目管理、BI 与 AI，一套系统全部打通。全部功能、全部源码开放，没有商业版、没有功能限制，Apache-2.0 免费商用。' }],
     ['meta', { property: 'og:image', content: 'https://makesomefakenews.github.io/lemon-erp-website/images/home/dashboard.jpg' }]
   ],
   markdown: { image: { lazyLoading: true } },
@@ -86,7 +86,8 @@ export default defineConfig({
       { text: '在线演示', link: DEMO },
       { text: '用户手册', link: '/manual/guide/', activeMatch: '^/manual/' },
       { text: '开发文档', link: '/dev/start/', activeMatch: '^/dev/' },
-      { text: '源码', link: REPO }
+      { text: '源码', link: REPO },
+      { text: '联系我们', link: '/#contact' }
     ],
     sidebar: {
       '/manual/': sidebarOf('manual', MANUAL),
@@ -116,6 +117,9 @@ export default defineConfig({
     sidebarMenuLabel: '菜单',
     returnToTopLabel: '回到顶部',
     notFound: { title: '页面不存在', quote: '你访问的页面不存在或已被移动。', linkText: '返回首页' },
-    footer: { message: '基于 Apache-2.0 协议开源', copyright: 'Copyright © 2026 柠檬ERP' }
+    footer: {
+      message: '真正 100% 开源、无功能限制的 ERP · 基于 Apache-2.0 协议<br />联系我们：电话 17701123202 · 微信 BG7LIF · 邮箱 <a href="mailto:zmissu@163.com">zmissu@163.com</a>',
+      copyright: 'Copyright © 2026 柠檬ERP'
+    }
   }
 })

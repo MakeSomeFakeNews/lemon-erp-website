@@ -6,7 +6,7 @@ const STATS = [
   { value: '13', label: '大业务模块' },
   { value: '150+', label: '功能页面' },
   { value: '20+', label: '可接入审批的业务单据' },
-  { value: '100%', label: '开源，可免费商用' }
+  { value: '100%', label: '开源，无功能限制' }
 ]
 
 const MODULES = [
@@ -159,6 +159,17 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
       </div>
     </section>
 
+    <section id="open-source" class="block">
+      <h2>真正 100% 开源</h2>
+      <p class="sub">不是「开源版 + 商业版」，你在演示环境和文档中看到的全部功能，都在 GitHub 上完整开源</p>
+      <div class="oss">
+        <div class="oss-item"><h4>全部功能开源</h4><p>供应链、仓储、生产、质量、财务、人力、客户、项目、商务智能、AI，没有任何模块收费或闭源</p></div>
+        <div class="oss-item"><h4>没有功能限制</h4><p>没有授权码和激活，系统本身不限制用户数、租户数和单据量（SaaS 模式下租户的账号上限由你自己设置），也没有隐藏的高级功能</p></div>
+        <div class="oss-item"><h4>免费商用</h4><p>基于 Apache-2.0 协议，个人与企业都可以免费使用、修改、二次开发和商业部署，保留版权声明即可</p></div>
+        <div class="oss-item"><h4>文档同样开放</h4><p>200 多页用户手册和开发文档、Docker 一键部署脚本全部公开，可以独立完成部署和二次开发</p></div>
+      </div>
+    </section>
+
     <section class="block cta">
       <h2>三步运行柠檬ERP</h2>
       <div class="steps">
@@ -175,6 +186,17 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
         <a class="btn primary" href="https://erp.dqq.me" target="_blank" rel="noreferrer">在线演示</a>
         <a class="btn" :href="withBase('/dev/start/')">阅读开发文档</a>
         <a class="btn" href="https://github.com/MakeSomeFakeNews/lemon-erp" target="_blank" rel="noreferrer">GitHub 源码</a>
+      </div>
+    </section>
+
+    <section id="contact" class="block">
+      <h2>联系我们</h2>
+      <p class="sub">商务合作、定制开发、部署实施或使用中遇到问题，欢迎联系</p>
+      <div class="contact">
+        <div class="contact-item"><span>电话</span><b>17701123202</b></div>
+        <div class="contact-item"><span>微信</span><b>BG7LIF</b></div>
+        <div class="contact-item"><span>邮箱</span><a href="mailto:zmissu@163.com"><b>zmissu@163.com</b></a></div>
+        <div class="contact-item"><span>问题反馈</span><a href="https://github.com/MakeSomeFakeNews/lemon-erp/issues" target="_blank" rel="noreferrer"><b>GitHub Issues</b></a></div>
       </div>
     </section>
   </div>
@@ -224,6 +246,15 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 .stack { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .stack span { padding: 10px 20px; border-radius: 10px; border: 1px solid var(--vp-c-divider); background: var(--vp-c-bg-soft); font-weight: 500; }
 
+.oss { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.oss-item { padding: 22px 20px; border-radius: 14px; background: linear-gradient(160deg, rgba(255, 212, 59, 0.14), rgba(105, 219, 124, 0.12)); border: 1px solid var(--vp-c-divider); }
+.oss-item h4 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+.oss-item p { margin: 0; font-size: 14px; line-height: 1.7; color: var(--vp-c-text-2); }
+.contact { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; max-width: 960px; margin: 0 auto; }
+.contact-item { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 12px; border-radius: 14px; background: var(--vp-c-bg-soft); }
+.contact-item span { font-size: 13px; color: var(--vp-c-text-2); }
+.contact-item b { font-size: 17px; color: var(--vp-c-text-1); }
+.contact-item a b { color: var(--vp-c-brand-1); }
 .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 32px; }
 .step { display: flex; gap: 14px; padding: 20px; border-radius: 12px; background: var(--vp-c-bg-soft); }
 .step b { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--vp-c-brand-1); color: #fff; }
@@ -239,10 +270,10 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 
 @media (max-width: 960px) {
   .module { grid-template-columns: 1fr; padding: 20px; }
-  .stats, .steps { grid-template-columns: repeat(2, 1fr); }
+  .stats, .steps, .oss, .contact { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 640px) {
-  .stats, .steps { grid-template-columns: 1fr; }
+  .stats, .steps, .oss, .contact { grid-template-columns: 1fr; }
   .block h2 { font-size: 24px; }
 }
 </style>
