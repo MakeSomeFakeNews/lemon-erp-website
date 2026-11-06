@@ -3,8 +3,8 @@ import { ref, computed } from 'vue'
 import { withBase } from 'vitepress'
 
 const STATS = [
-  { value: '13', label: '大业务模块' },
-  { value: '150+', label: '功能页面' },
+  { value: '14', label: '大业务模块' },
+  { value: '170', label: '功能页面' },
   { value: '20+', label: '可接入审批的业务单据' },
   { value: '100%', label: '开源，无功能限制' }
 ]
@@ -77,6 +77,36 @@ const MODULES = [
   }
 ]
 
+const COMPARE = [
+  ['费用', '按用户数、模块或年费收费，实施费另计', '开源版免费，常用的高级功能需要购买商业版', '完全免费，没有付费版本'],
+  ['功能范围', '按购买的模块开通', '开源版多为进销存等基础功能，生产、财务等常在商业版中', '全部 14 大模块开源，含生产、质量、财务、BI、AI'],
+  ['源码', '不提供', '只开放部分源码', '全部源码开放，可以审计、修改'],
+  ['数据归属', 'SaaS 版数据在厂商服务器', '自己部署', '私有化部署，数据在自己的服务器上'],
+  ['用户数、单据量', '按授权限制', '部分有限制', '没有授权码，系统本身不限制'],
+  ['二次开发', '依赖厂商或认证伙伴', '可以，但闭源部分改不了', '完全自主，有完整的开发文档和示例']
+]
+
+const ADVANTAGES = [
+  ['省钱', '软件本身零费用，没有按用户、按模块、按年收费，企业只需要一台服务器；软件服务商用它交付项目，不用再付授权费'],
+  ['一套系统管全业务', '采购、销售、仓储、生产、质量、财务、人力、客户、项目、BI 都在一个系统里，不用买多套软件再做接口集成，数据天然一致'],
+  ['业财一体，账实相符', '出入库自动更新库存、生成应收应付，业务单据一键生成凭证；生产领料、完工入库自动进入成本核算，月末结账一键完成'],
+  ['贴合国内企业', '小企业会计准则三大报表，数电票导入勾稽，个税累计预扣与专项附加扣除、社保公积金，钉钉 / 企业微信 / 飞书、微信小程序，国产大模型'],
+  ['数据自主可控', '私有化部署在自己的服务器或内网，源码完全开放可审计，不依赖任何厂商的云服务'],
+  ['拿来就能用', 'Docker 一条命令启动；内置示例基础资料、按行业模板开通功能、期初启用向导；中英文界面；用户手册覆盖每个页面的操作'],
+  ['容易二次开发', 'Spring Boot 4 + Vue 3 主流技术栈，Gradle 多模块、依赖单向，审批、状态流转、数据权限、明细行都有公共组件'],
+  ['多端协同', '电脑浏览器处理全部业务，微信小程序审批和外勤，手机 / PDA 扫码收发货和盘点，数据大屏投屏到车间和仓库'],
+  ['安全可靠', '菜单 / 按钮 / 接口三级权限和五种数据权限，操作日志与登录日志，强制下线，登录验证码与密码策略，审批留痕'],
+  ['可以做成 SaaS', '内置多租户、租户套餐和行业模板，软件服务商可以直接用它为多家客户提供在线 ERP 服务']
+]
+
+const AUDIENCE = [
+  ['中小制造企业', '从销售订单、MRP、生产工单、质量检验到成本核算的完整闭环，车间扫码报工、数据大屏'],
+  ['商贸、批发零售企业', '采购、销售、库存、多价格体系、客户价格等级、进销存报表、应收应付与资金管理'],
+  ['项目型、服务型企业', '项目计划与工时、成本核算、客户关系与服务工单、费用报销与审批'],
+  ['软件服务商、实施商', '免授权费的 ERP 底座，可二次开发后交付客户，或用多租户做成 SaaS 服务'],
+  ['开发者、学生', '完整的企业级 Java 项目：多模块架构、权限与多租户、工作流、AI 集成、Docker 部署']
+]
+
 const active = ref(MODULES[0].key)
 const current = computed(() => MODULES.find((m) => m.key === active.value)!)
 const img = (name: string) => withBase(`/images/home/${name}.jpg`)
@@ -111,6 +141,39 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
           <div class="row"><span></span><b>test</b> / <b>admin123</b>（普通用户，只读）</div>
         </div>
         <a class="btn primary" href="https://erp.dqq.me" target="_blank" rel="noreferrer">立即体验</a>
+      </div>
+    </section>
+
+    <section id="why" class="block">
+      <h2>为什么选择柠檬ERP</h2>
+      <p class="sub">同样是 ERP，柠檬ERP 不收一分钱授权费，也不把核心功能藏在商业版里</p>
+      <div class="compare-wrap">
+        <table class="compare">
+          <thead><tr><th></th><th>商业 ERP 软件</th><th>「开源版 + 商业版」的开源 ERP</th><th class="me">柠檬ERP</th></tr></thead>
+          <tbody>
+            <tr v-for="r in COMPARE" :key="r[0]"><th>{{ r[0] }}</th><td>{{ r[1] }}</td><td>{{ r[2] }}</td><td class="me">{{ r[3] }}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>核心优势</h2>
+      <p class="sub">省钱、全面、自主可控，同时足够好用、足够好改</p>
+      <div class="adv">
+        <div v-for="(a, i) in ADVANTAGES" :key="a[0]" class="adv-item">
+          <span class="no">{{ String(i + 1).padStart(2, '0') }}</span>
+          <h4>{{ a[0] }}</h4>
+          <p>{{ a[1] }}</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="block">
+      <h2>适合谁使用</h2>
+      <p class="sub">从几十人的小工厂到为多家客户服务的软件公司，都能找到合适的用法</p>
+      <div class="aud">
+        <div v-for="a in AUDIENCE" :key="a[0]" class="aud-item"><h4>{{ a[0] }}</h4><p>{{ a[1] }}</p></div>
       </div>
     </section>
 
@@ -166,7 +229,7 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
         <div class="oss-item"><h4>全部功能开源</h4><p>供应链、仓储、生产、质量、财务、人力、客户、项目、商务智能、AI，没有任何模块收费或闭源</p></div>
         <div class="oss-item"><h4>没有功能限制</h4><p>没有授权码和激活，系统本身不限制用户数、租户数和单据量（SaaS 模式下租户的账号上限由你自己设置），也没有隐藏的高级功能</p></div>
         <div class="oss-item"><h4>免费商用</h4><p>基于 Apache-2.0 协议，个人与企业都可以免费使用、修改、二次开发和商业部署，保留版权声明即可</p></div>
-        <div class="oss-item"><h4>文档同样开放</h4><p>200 多页用户手册和开发文档、Docker 一键部署脚本全部公开，可以独立完成部署和二次开发</p></div>
+        <div class="oss-item"><h4>文档同样开放</h4><p>250 多页用户手册和开发文档、Docker 一键部署脚本全部公开，可以独立完成部署和二次开发</p></div>
       </div>
     </section>
 
@@ -246,6 +309,23 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 .stack { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
 .stack span { padding: 10px 20px; border-radius: 10px; border: 1px solid var(--vp-c-divider); background: var(--vp-c-bg-soft); font-weight: 500; }
 
+.compare-wrap { overflow-x: auto; border-radius: 14px; border: 1px solid var(--vp-c-divider); }
+.home .compare { display: table; width: 100%; margin: 0; border-collapse: collapse; font-size: 14px; }
+.compare th, .compare td { padding: 14px 16px; border: 0; border-bottom: 1px solid var(--vp-c-divider); text-align: left; line-height: 1.6; vertical-align: top; }
+.compare tr { background: transparent !important; border: 0; }
+.compare tbody tr:last-child th, .compare tbody tr:last-child td { border-bottom: 0; }
+.compare thead th { background: var(--vp-c-bg-soft); font-weight: 600; white-space: nowrap; }
+.compare tbody th { width: 120px; white-space: nowrap; font-weight: 600; color: var(--vp-c-text-1); }
+.compare td { color: var(--vp-c-text-2); }
+.compare .me { background: linear-gradient(160deg, rgba(255, 212, 59, 0.16), rgba(105, 219, 124, 0.14)); color: var(--vp-c-text-1); font-weight: 600; }
+.adv { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.adv-item { padding: 20px 18px; border-radius: 14px; background: var(--vp-c-bg-soft); }
+.adv-item .no { display: block; font-size: 22px; font-weight: 700; line-height: 1; margin-bottom: 12px; background: linear-gradient(120deg, #f59f00, #40c057); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.adv-item h4 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.adv-item p, .aud-item p { margin: 0; font-size: 13px; line-height: 1.7; color: var(--vp-c-text-2); }
+.aud { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
+.aud-item { padding: 20px 18px; border-radius: 14px; border: 1px solid var(--vp-c-divider); border-top: 3px solid var(--vp-c-brand-1); }
+.aud-item h4 { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
 .oss { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .oss-item { padding: 22px 20px; border-radius: 14px; background: linear-gradient(160deg, rgba(255, 212, 59, 0.14), rgba(105, 219, 124, 0.12)); border: 1px solid var(--vp-c-divider); }
 .oss-item h4 { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
@@ -270,10 +350,10 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 
 @media (max-width: 960px) {
   .module { grid-template-columns: 1fr; padding: 20px; }
-  .stats, .steps, .oss, .contact { grid-template-columns: repeat(2, 1fr); }
+  .stats, .steps, .oss, .contact, .adv, .aud { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 640px) {
-  .stats, .steps, .oss, .contact { grid-template-columns: 1fr; }
+  .stats, .steps, .oss, .contact, .adv, .aud { grid-template-columns: 1fr; }
   .block h2 { font-size: 24px; }
 }
 </style>
