@@ -12,7 +12,7 @@
 - **模块只写自己的表**：只注入本模块的 Mapper，修改其他模块的数据调用所属模块的 Service 或 framework 契约；跨模块的 SQL JOIN 只用于只读的报表和统计。
 - **分层职责清晰**：Controller 只做参数、权限、日志；事务边界、业务规则在 Service；接口返回明确的类型（record / DTO），不返回 `Map`；状态、类型用枚举，前端常量由后端枚举生成。
 - **横切能力放在框架层，业务代码只做声明**：接口权限用 `@PreAuthorize`，操作日志用 `@OperLog`，数据权限用 `@DataPermission`，多租户由 MyBatis-Plus 拦截器自动追加条件，审批流程用 `FlowBusiness` 声明。
-- **业务模块不直接依赖第三方引擎**：工作流只通过 `framework/workflow` 的 `FlowApi` 和事件接入，Flowable 只出现在 `lemon-workflow` 模块中。
+- **业务模块不直接依赖第三方引擎**：工作流只通过 `framework/workflow` 的 `FlowApi` 和事件接入，Flowable 只出现在 `lemon-workflow` 模块中；大模型同样只在 `lemon-ai` 中调用，业务模块通过 `framework/ai` 的契约提供查询和数据。
 - **SQL 集中在 mapper XML**：Java 代码中不写 SQL 字符串，统计在数据库中完成，避免 N+1。
 
 ## 核心机制一览
@@ -36,6 +36,7 @@
 | 单据打印 | `modules/system/print`（JasperReports）+ `utils/print.js` | 页面调用 `printDocs`，在 `PRINT_TYPES` 中登记 | [单据编号与打印](../guide/doc-no-print) |
 | 业务参数 | `framework/rule` + `SysBizRuleService` | 实现 `BizRuleProvider` 登记，注入 `BizRules` 读取 | [新增业务参数](../guide/biz-rule) |
 | 自定义字段 | `SysCustomFieldService` + `useCustomFields` | 登记业务记录类型，表单 / 列表 / 详情接入 | [业务实体接入自定义字段](../guide/custom-field) |
+| 智能（AI） | `framework/ai`（契约）+ `lemon-ai`（`AiModelService`、`OpenAiCompatibleClient`、注册表） | 实现 `AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource` 注册为 Bean；不直接调用模型 | [智能（AI）](./ai)、[AI 能力扩展开发](../guide/ai) |
 | 国际化 | 前端 vue-i18n（`src/locales`）；后端 `MessageSource` 资源包（各模块 `i18n/*.properties`）+ `I18nConfig`（`Accept-Language`） | 页面文字用 `$t`，提示和校验用消息键，内置菜单和字典加英文译文 | [国际化](../guide/i18n) |
 
 ## MyBatis-Plus 拦截器链

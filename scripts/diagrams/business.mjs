@@ -64,6 +64,10 @@ const LANES = [
     [3, 0, '薪酬核算', 'CalculatorOutlined'], [4, 0, '销售提成', 'RiseOutlined'], [5, 0, '项目列表', 'ProjectOutlined'], [6, 0, '计划进度', 'ScheduleOutlined'],
     [7, 0, '工时管理', 'FieldTimeOutlined'], [8, 0, '项目核算', 'AccountBookOutlined']
   ] },
+  { key: 'ai', name: '智能（AI）', icon: 'RobotOutlined', rows: 1, nodes: [
+    [0, 0, 'AI 设置', 'SettingOutlined'], [1, 0, 'AI 问数', 'MessageOutlined'], [3, 0, '智能录入', 'ScanOutlined'],
+    [5, 0, '数据整理', 'ClearOutlined'], [7, 0, '智能报告', 'FileSearchOutlined']
+  ] },
   { key: 'bi', name: '商务智能', icon: 'PieChartOutlined', rows: 1, nodes: [
     [0, 0, '数据仓库', 'CloudSyncOutlined'], [1, 0, '多维分析', 'TableOutlined'], [2, 0, '自定义报表', 'FileTextOutlined'],
     [3, 0, '自定义仪表盘', 'DashboardOutlined'], [4, 0, '经营驾驶舱', 'FundOutlined'], [5, 0, '决策支持', 'BulbOutlined'],
@@ -115,7 +119,7 @@ const FLOWS = [
   ['base', '规格属性', '物料管理'], ['base', '会计科目', '凭证科目设置'], ['base', '打印模板', '套打设计'], ['fin', '应付管理', '往来对账单'],
   ['fin', '应收管理', '收款单'], ['fin', '应付管理', '付款单'], ['fin', '凭证管理', '账簿查询'], ['fin', '账簿查询', '财务报表'], ['fin', '财务报表', '期末结账'],
   ['hr', '招聘管理', '员工档案'], ['hr', '员工档案', '考勤管理'], ['hr', '考勤管理', '薪酬核算'], ['hr', '销售提成', '薪酬核算'],
-  ['hr', '项目列表', '计划进度'], ['hr', '计划进度', '工时管理'], ['hr', '工时管理', '项目核算'],
+  ['ai', 'AI 设置', 'AI 问数'], ['hr', '项目列表', '计划进度'], ['hr', '计划进度', '工时管理'], ['hr', '工时管理', '项目核算'],
   ['bi', '数据仓库', '多维分析'], ['bi', '多维分析', '自定义报表'], ['bi', '自定义报表', '自定义仪表盘'], ['bi', '自定义仪表盘', '经营驾驶舱'], ['bi', '经营驾驶舱', '决策支持'], ['bi', '决策支持', '预警规则']
 ]
 

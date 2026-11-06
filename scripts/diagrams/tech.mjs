@@ -30,7 +30,8 @@ const MODULES = [
   ['InboxOutlined', '仓库管理', 'lemon-wms'], ['ShoppingCartOutlined', '供应链', 'lemon-scm'],
   ['BuildOutlined', '生产与质量', 'lemon-mes'], ['PayCircleOutlined', '财务管理', 'lemon-fin'],
   ['SolutionOutlined', '人力资源', 'lemon-hr'], ['IdcardOutlined', '客户关系', 'lemon-crm'],
-  ['ProjectOutlined', '项目管理', 'lemon-pm'], ['PieChartOutlined', '商务智能', 'lemon-bi']
+  ['ProjectOutlined', '项目管理', 'lemon-pm'], ['PieChartOutlined', '商务智能', 'lemon-bi'],
+  ['RobotOutlined', '智能（AI）', 'lemon-ai']
 ]
 
 const FRAMEWORK = [
@@ -49,6 +50,7 @@ const FRAMEWORK = [
   ['EyeOutlined', '演示模式', '只读访问'],
   ['GlobalOutlined', 'IP 归属地', 'ip2region 离线库'],
   ['ControlOutlined', '业务参数', '按租户配置业务规则'],
+  ['RobotOutlined', 'AI 契约', '问数工具、录入、整理、报告'],
   ['FileExcelOutlined', 'Excel 导入导出', '模板、校验、批量导入']
 ]
 
@@ -102,13 +104,13 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
   ${layer('DeploymentUnitOutlined', '后端', 'lemon-admin<br/>Spring Boot 可执行 jar', `
     <div class="group">
       <div class="group-title"><b>业务模块</b><span>lemon-modules，按业务域拆分，依赖单向</span></div>
-      <div class="row" style="grid-template-columns: repeat(6, 1fr)">
+      <div class="row" style="grid-template-columns: repeat(7, 1fr)">
         ${MODULES.map(([ic, t, d]) => card(ic, t, d)).join('')}
       </div>
     </div>
     <div class="group">
       <div class="group-title"><b>框架层</b><span>lemon-framework，安全、数据隔离与各模块共用的基础能力</span></div>
-      <div class="row" style="grid-template-columns: repeat(8, 1fr)">
+      <div class="row" style="grid-template-columns: repeat(6, 1fr)">
         ${FRAMEWORK.map(([ic, t, d]) => card(ic, t, d)).join('')}
       </div>
     </div>
@@ -121,10 +123,11 @@ const html = `<!doctype html><html><head><meta charset="utf-8"><style>
       <div class="chips">${['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.5', 'Flowable 8', 'JasperReports 7', 'Jackson', 'OSHI', 'ip2region', 'Gradle 多模块'].map(chip).join('')}</div>
     </div>`, 'backend')}
   ${arrow('JDBC / Redis 协议 / 文件读写')}
-  ${layer('HddOutlined', '数据存储', '', `<div class="row" style="grid-template-columns: repeat(3, 1fr)">
+  ${layer('HddOutlined', '数据存储', '', `<div class="row" style="grid-template-columns: repeat(4, 1fr)">
     ${card('DatabaseOutlined', 'MySQL 8', '业务数据、流程引擎表（ACT_*）')}
     ${card('ThunderboltOutlined', 'Redis', '登录会话、权限、字典、参数、验证码与登录失败计数')}
     ${card('FolderOpenOutlined', '文件存储', '头像等公开文件、业务附件')}
+    ${card('RobotOutlined', '大模型服务', 'DeepSeek、通义千问等（OpenAI 兼容）')}
   </div>`, 'data')}
 </div></body></html>`
 

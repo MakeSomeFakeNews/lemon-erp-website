@@ -151,6 +151,18 @@ Nginx 默认请求体上限为 1MB，设置 `client_max_body_size 105m;`（不�
 
 JRXML 中的表达式是在服务器上执行的 Java 代码，SaaS 模式下只有平台租户可以上传，其他租户提示「SaaS 模式下租户不能上传 JRXML 模板」，只能用可视化配置和套打调整版式。见 [单据编号与打印](../guide/doc-no-print#上传-jrxml)。
 
+### AI 问数的回答很久没有输出，最后一次性出现
+
+SSE 流式输出被反向代理缓冲了。在 Nginx 中为 `/api/ai/` 设置 `proxy_buffering off`，见 [Nginx 配置](./nginx#ai-sse)；前面还有 CDN 或其他代理时同样关闭缓冲。
+
+### 智能录入、测试连接提示超时或返回 504
+
+模型（尤其是识图模型）响应较慢，或 JSON 输出不合格时重试了一次，等待时间超过了 Nginx 的 `proxy_read_timeout`（示例为 120 秒）。把 `/api/ai/` 的读超时调到 300 秒，见 [Nginx 配置](./nginx#ai-sse)。提示「无法连接模型服务」时检查服务器能否访问模型接口，需要代理时设置 JVM 代理参数，见 [生产环境配置](./production#ai)。
+
+### 「AI 设置」提示「接口地址不能指向内网或本机地址」
+
+SaaS 模式下非平台租户的接口地址不能指向本机或内网，防止借「测试连接」探测服务器所在的网络。由平台租户使用私有化部署的模型，或设置 `lemon.ai.allow-private-network=true` 放开（所有租户都可以填写内网地址）。
+
 ### 只想快速体验，不想装 Redis
 
 设置 `LEMON_CACHE_TYPE=memory` 使用进程内缓存（仍需要 MySQL）。仅限单实例体验，重启后所有用户需要重新登录。

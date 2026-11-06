@@ -29,7 +29,8 @@ lemon-erp
 │   ├── lemon-hr                人力资源：员工、招聘培训、考勤、请假、薪酬、绩效、员工自助
 │   ├── lemon-crm               客户关系：客户、线索、商机、跟进、合同、市场活动、服务工单
 │   ├── lemon-pm                项目管理：项目、WBS 计划、工时、成本、项目核算
-│   └── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
+│   ├── lemon-bi                商务智能：数据仓库 ETL、多维分析、报表与仪表盘、驾驶舱、数据大屏与投屏链接、决策支持
+│   └── lemon-ai                智能：大模型客户端（OpenAI 兼容）、AI 设置与用量、AI 问数、智能录入、数据整理、智能报告（只依赖 framework）
 ├── lemon-admin                 启动模块：组装全部业务模块，打包为 lemon-erp.jar
 ├── lemon-web                   前端（Vite + Vue 3 + Ant Design Vue）
 ├── lemon-mp                    微信小程序（uni-app + Vue 3）：审批、员工自助、销售外勤、扫码作业
@@ -69,6 +70,9 @@ com.lemon.erp.common
 
 ```
 com.lemon.erp.framework
+├── ai            业务模块向智能模块提供能力的契约：AiTool（问数工具）、AiExtractTarget / AiPrefill / AiPrefillBuilder（智能录入）、
+│                 AiCleanseSource 等（数据整理）、AiReportSource / AiReportPeriod / AiReportMetrics（智能报告）、AiAlertSource，
+│                 AiSchema（构造 JSON Schema）、AiToolArgs、AiToolResult
 ├── cache         CacheService 及 Redis / 内存两种实现
 ├── code          DocNoCatalog：模块声明的单据编号类型
 ├── config        MyBatis-Plus（含自动填充制单人的 CreateByInnerInterceptor）、Security、JWT、Jackson、异步 / 定时 / 重试、上传目录、静态资源映射；I18nConfig（messageSource、按 Accept-Language 解析语言）
@@ -123,6 +127,22 @@ lemon-modules/lemon-scm
         └── i18n            消息资源包：scm.properties（默认，简体中文）、scm_en.properties（英文）
 ```
 
+向智能模块提供能力的业务模块另有 `ai` 包（如 `scm/ai/ScmOrderAiTools`、`ScmPurchaseOrderExtractTarget`、`ScmSupplierCleanseSource`），放 `framework/ai` 契约的实现，见 [AI 能力扩展开发](../guide/ai)。
+
+`lemon-ai` 模块的包结构与业务模块不同：
+
+```
+com.lemon.erp.modules.ai
+├── AiProperties、AiModuleConfig   平台级参数 lemon.ai.*
+├── client        LlmClient、OpenAiCompatibleClient（OpenAI 兼容协议）、请求 / 响应 / 用量等 record、JsonSchemaValidator
+├── registry      收集 framework/ai 契约 Bean 的注册表：AiToolRegistry、AiExtractRegistry、AiCleanseRegistry、AiReportRegistry
+├── service       AiModelService（调用模型的唯一入口）、AiConfigService、AiUsageService，以及问数、录入、整理、报告的 Service
+├── controller / entity / mapper / dto / model
+resources
+├── mapper/ai     AiConfigMapper.xml、AiUsageMapper.xml、AiCleanse*Mapper.xml、AiReportMapper.xml
+└── i18n          ai.properties、ai_en.properties（含给模型的提示词 ai.prompt.*）
+```
+
 ## 启动模块 lemon-admin
 
 ```
@@ -151,11 +171,14 @@ lemon-web
     ├── api/<模块>/*.js          接口封装，基于 utils/request.js
     ├── views/<模块>/<页面>/index.vue   页面，菜单的「组件路径」即相对 views 的路径（不含 .vue）
     │                           views/screen 数据大屏（静态路由 /screen/:key、免登录的 /screen-share/:token）
+    │                           views/ai 智能：chat（AI 问数）、extract（智能录入）、cleanse（数据整理）、report（智能报告）、settings（AI 设置）
     ├── components              通用组件（TableToolbar、SearchForm、FormDrawer、SubPage、DictTag、
     │                           AttachmentPanel、ChangeLogPanel、ImportModal 等）与各模块的单据表单、详情
     │                           print/ 打印预览与套打设计器，common/ 单据明细行表格 LineItemsTable、自定义字段的表单与显示，
-    │                           charts/ ECharts 封装，screen/ 数据大屏外壳、指标卡、面板、滚动列表
-    ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useCustomFields
+    │                           charts/ ECharts 封装，screen/ 数据大屏外壳、指标卡、面板、滚动列表，
+    │                           ai/ 智能录入的输入与预览、「AI 识别」按钮、预填提示、导入字段对应、Markdown 渲染
+    ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useCustomFields、
+    │                           useAiPrefill（智能录入预填到新增表单）
     ├── constants/enums.js      由后端枚举生成的状态、类型常量（不要手工修改）
     ├── directives/perm.js      按钮权限指令 v-perm
     ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）
@@ -164,7 +187,8 @@ lemon-web
     ├── router/index.js         静态路由 + 按菜单动态注册路由
     ├── store                   user（用户、权限、菜单）、config（公开配置）、dict（字典缓存）、app（主题等）
     └── utils                   request、number（金额、数量的格式化与舍入）、print（提交后端生成 PDF）、printTemplates（打印模板目录与套用）、
-                                labels（条码标签）、excel、dict、format、ellipsisTitle 等工具
+                                labels（条码标签）、excel、dict、format、ellipsisTitle、sse（POST + SSE 流式读取）、
+                                markdown（marked + DOMPurify 安全渲染）、aiInput（智能录入的文件解析）等工具
 ```
 
 ## 小程序 lemon-mp
@@ -193,4 +217,4 @@ lemon-mp
 
 ## 数据库脚本
 
-`sql/init.sql` 用 `-- ------ 模块名` 注释分段：前半部分先删除再按模块建表（系统、工作流、仓库、供应链、生产、财务、质量、人力、客户、项目、商务智能），后半部分按模块插入菜单与按钮权限、字典、内置角色授权、示例数据和内置流程模型，末尾是后续功能追加的段落。新增表、菜单、字典时在对应模块的段落中追加，并保证脚本在 MySQL 8 上可以完整执行。
+`sql/init.sql` 用 `-- ------ 模块名` 注释分段：前半部分先删除再按模块建表（系统、工作流、仓库、供应链、生产、财务、质量、人力、客户、项目、商务智能、智能），后半部分按模块插入菜单与按钮权限、字典、内置角色授权、示例数据和内置流程模型，末尾是后续功能追加的段落。新增表、菜单、字典时在对应模块的段落中追加，并保证脚本在 MySQL 8 上可以完整执行。

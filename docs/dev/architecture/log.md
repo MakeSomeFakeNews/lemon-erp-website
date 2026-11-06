@@ -40,7 +40,7 @@ public R<Void> create(@Validated(Create.class) @RequestBody WmsWarehouse warehou
 
 | 字段 | 处理 |
 | --- | --- |
-| `password`、`oldPassword`、`newPassword` | 完全隐藏为 `******` |
+| `password`、`oldPassword`、`newPassword`；第三方集成的 `appSecret`、`robotWebhook`、`robotSecret`；大模型的 `apiKey` | 完全隐藏为 `******` |
 | 薪资类金额：`baseSalary`、`salary`、`postAllowance`、`otherAllowance`、`perfBonusBase`、`socialBase`、`housingBase`、`grossPay`、`netPay`、`fromSalary`、`toSalary` | 完全隐藏 |
 | `idCard`、`bankAccount`、`phone`、`mobile`、`emergencyPhone` | 保留前 3 位和后 4 位，中间用 `*` 代替；7 位及以下全部隐藏 |
 

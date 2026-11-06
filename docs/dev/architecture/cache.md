@@ -70,7 +70,9 @@ private String failKey(String username) {
 
 ## 进程内缓存
 
-除 `CacheService` 外，少数只读且与租户无关的数据使用进程内缓存，例如 `FlowMetaService` 按流程定义 ID 缓存流程设计（流程定义发布后不会变化）；`PrintService` 按报表设计内容的 SHA-256 缓存编译后的 JasperReports 报表（最多 256 个，`JasperReport` 不可序列化，内容相同即结果相同）。各模块登记的业务参数定义（`BizRuleProvider`）、业务记录类型（`RecordTypeProvider`）在首次使用时汇总后保存在 Bean 中。这类缓存在多实例下天然一致，不需要登记到缓存监控。
+除 `CacheService` 外，少数只读且与租户无关的数据使用进程内缓存，例如 `FlowMetaService` 按流程定义 ID 缓存流程设计（流程定义发布后不会变化）；`PrintService` 按报表设计内容的 SHA-256 缓存编译后的 JasperReports 报表（最多 256 个，`JasperReport` 不可序列化，内容相同即结果相同）。各模块登记的业务参数定义（`BizRuleProvider`）、业务记录类型（`RecordTypeProvider`）在首次使用时汇总后保存在 Bean 中。智能模块的四个注册表（`AiToolRegistry` 等）在启动时收集各模块的 AI 契约 Bean，同样保存在 Bean 中。这类缓存在多实例下天然一致，不需要登记到缓存监控。
+
+智能（AI）模块没有使用 `CacheService`，也没有新增缓存前缀：「AI 设置」每次调用模型时从数据库读取（修改后立即生效），月度用量每次调用前用 `SUM` 统计，预警的 AI 分析结果不缓存（依据的数据随查看人的权限变化）。
 
 ## 前端缓存
 
@@ -78,6 +80,7 @@ private String failKey(String username) {
 - 公开配置：`store/config.js` 在进入页面前加载 `/auth/config`；
 - 打印模板：`utils/printTemplates.js` 在首次打印时加载当前租户已保存的模板，打开打印模板管理页时重新加载；
 - 自定义字段定义：`composables/useCustomFields.js` 按业务类型缓存启用的字段，同一页面只请求一次，自定义字段管理页修改定义后清理；
+- AI 功能状态：`composables/useAiPrefill.js` 的 `loadAiStatus` 把 `/ai/config/status`（各 AI 功能是否可用）在内存中缓存 1 分钟，各页面共用，「AI 设置」修改后很快生效；智能录入跳转到业务页面时的识别结果也只保存在内存中（10 分钟内有效、只用一次）；
 - 列设置、侧边栏折叠等个人偏好保存在 `localStorage`（`utils/storage.js`）。
 
 新增缓存的开发步骤见 [新增缓存](../guide/cache)。

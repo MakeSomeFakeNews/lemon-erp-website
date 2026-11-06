@@ -41,6 +41,7 @@ dependencies {
     'system',
     // ...
     'bi',
+    'ai',
     'oa',         // 行政办公
 ].each { include "lemon-modules:lemon-${it}" }
 ```
@@ -51,6 +52,7 @@ dependencies {
 dependencies {
     // ...
     implementation project(':lemon-modules:lemon-bi')
+    implementation project(':lemon-modules:lemon-ai')
     implementation project(':lemon-modules:lemon-oa')
 }
 ```
@@ -932,3 +934,4 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 | 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除 |
 | 定时提醒 | [新增定时任务](./job) |
 | 新租户需要的基础数据 | [新租户初始化](./tenant-init) |
+| AI 问数、智能录入、数据整理、智能报告 | 在本模块的 `ai` 包中实现 `framework/ai` 的契约（`AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource`），不依赖 `lemon-ai`，见 [AI 能力扩展开发](./ai) |

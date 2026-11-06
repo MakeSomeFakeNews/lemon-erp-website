@@ -35,12 +35,13 @@ order: 1
 | `lemon-crm` | fin、scm、wms | 客户关系（校验负责人通过 framework 的 `UserLookup`，不依赖 system） |
 | `lemon-pm` | fin、hr、scm、wms | 项目管理（system 经 hr 传递；校验项目经理、成员通过 `UserLookup`） |
 | `lemon-bi` | fin、scm | 商务智能 |
+| `lemon-ai` | framework | 智能（另依赖 OpenPDF），不依赖任何业务模块；各业务模块提供的 AI 能力通过 `framework/ai` 契约收集，见 [智能（AI）](./ai) |
 
-可以概括为两条主线和一个独立模块：
+可以概括为两条主线和两个独立模块：
 
 - 业务主线：`wms ← scm ← mes ← fin ← hr / crm / pm / bi`（箭头指向被依赖方，`pm` 还依赖 `hr`）；
 - 系统主线：`system ← monitor ← dashboard`，`hr` 也依赖 `system`（`pm` 经 `hr` 传递）；
-- `workflow` 只依赖 framework，与所有业务模块解耦。
+- `workflow`、`ai` 只依赖 framework，与所有业务模块解耦：业务模块接入审批、向 AI 提供能力时都只实现框架层的契约（`framework/workflow`、`framework/ai`），不依赖这两个模块。
 
 `lemon-admin` 依赖全部业务模块，启动类 `LemonErpApplication` 位于 `com.lemon.erp` 包，组件扫描覆盖所有模块；`@MapperScan("com.lemon.erp.modules.*.mapper")` 扫描各模块的 Mapper，`mybatis-plus.mapper-locations: classpath*:mapper/**/*.xml` 加载各模块的 mapper XML。
 
@@ -68,16 +69,17 @@ order: 1
 | `portal.PortalAccounts` | 管理供应商 / 经销商门户账号 | system（`SysPortalAccountService`） |
 | `org.UserAccountProvisioner` | 为新员工开通登录账号 | system |
 | `org.UserLookup` | 按 ID 查询登录账号的简要信息（`find`、`require`、`requireActive`、`nameOf`），客户关系、项目校验负责人、成员 | system（`SysUserLookup`） |
-| `dict.DictLookup` | 按当前租户的字典校验业务字典的取值（`contains`、`check(字典, 值, 字段名称键)`） | system（`SysDictService`） |
+| `dict.DictLookup` | 按当前租户的字典校验业务字典的取值（`contains`、`check(字典, 值, 字段名称键)`），`options(字典)` 返回启用的取值 → 名称 | system（`SysDictService`） |
 | `finance.PartnerBalanceProvider` | 客户应收余额（信用额度校验） | fin |
 | `finance.ExchangeRateProvider` | 外币记账汇率 | fin（`FinCurrencyService`） |
 | `period.BizPeriodGuard` | 会计期间已结账时禁止新增 / 确认业务单据 | fin（`FinBizPeriodGuard`） |
 | `quality.SupplierQualityProvider` | 供应商来料合格率、索赔统计 | mes（`MesSupplierQualityProvider`） |
 | `org.LaborCostProvider` | 生产岗位平均小时人工成本 | hr（`HrSalaryService`） |
+| `ai.AiAlertSource` | 经营预警的 AI 分析材料 | bi（`BiAlertAiSource`） |
 
 框架层还提供了不需要业务模块实现、直接注入使用的通用组件，如审批的 `workflow.ApprovalSupport`（基于 `FlowApi`）、`data.StatusTransitions`、`data.DetailLines`、`data.Queries`、`security.datascope.DataScopes`，见 [单据开发公共组件](../guide/doc-components)。
 
-另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`TenantInitializer`（新租户基础数据）、`BizRuleProvider`（业务参数定义）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
+另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总（`framework/ai` 的 `AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource` 由智能模块汇总，见 [AI 能力扩展开发](../guide/ai)）：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`TenantInitializer`（新租户基础数据）、`BizRuleProvider`（业务参数定义）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
 
 ## 新增模块
 

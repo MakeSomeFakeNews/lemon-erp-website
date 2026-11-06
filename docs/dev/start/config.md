@@ -133,6 +133,31 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 | --- | --- | --- |
 | `lemon.bi.etl-cron` | `0 30 1 * * *` | 定时任务「数据仓库同步」的默认 Cron（每天 01:30），设为 `-` 时该任务首次登记为停用。只在任务首次登记到 `sys_job` 时生效，之后以「定时任务」页面的设置为准 |
 
+### lemon.ai：智能（AI） {#lemon-ai}
+
+对应 `modules/ai/AiProperties`，`application.yml` 中没有配置，全部使用代码中的默认值，按需添加或用环境变量覆盖（如 `LEMON_AI_READTIMEOUT=180s`、`LEMON_AI_ALLOWPRIVATENETWORK=true`）。这里只有平台级的超时、并发和批量参数；**大模型服务商、接口地址、API Key、模型、功能开关、每月 token 上限都在「智能 → AI 设置」中按租户配置**，配置文件和环境变量中没有对应项，见 [智能（AI）](../architecture/ai#config)。
+
+| 配置项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `lemon.ai.connect-timeout` | `10s` | 连接模型接口的超时 |
+| `lemon.ai.read-timeout` | `120s` | 等待模型响应的超时：非流式为整个回答，流式为收到响应头之前 |
+| `lemon.ai.max-retries` | `2` | 429（额度不足除外）、5xx、连接失败时的最多重试次数；流式请求只在收到数据前重试 |
+| `lemon.ai.retry-backoff` | `1s` | 第一次重试前的等待时间，之后每次翻倍（服务商返回 `Retry-After` 时按它等待，最多 30 秒） |
+| `lemon.ai.max-tool-rounds` | `6` | AI 问数一次提问中「模型 → 工具 → 模型」的最多轮数，最后一轮不再提供工具 |
+| `lemon.ai.history-messages` | `20` | AI 问数发送给模型的最近历史消息条数 |
+| `lemon.ai.stream-idle-timeout` | `60s` | 流式回答开始后超过这么久没有新数据视为超时 |
+| `lemon.ai.stream-timeout` | `5m` | 一次流式回答（SSE）的最长时间 |
+| `lemon.ai.stream-threads` | `16` | 同时进行的流式回答数，超出时排队（队列 100，满时提示稍后再试） |
+| `lemon.ai.allow-private-network` | `false` | SaaS 模式下非平台租户的接口地址是否允许指向本机 / 内网地址（防止借「测试连接」探测内网）；平台租户和单租户部署不受限制 |
+| `lemon.ai.cleanse-max-records` | `2000` | 数据整理：一个任务最多读取的记录数，超出时只分析前面的部分 |
+| `lemon.ai.cleanse-batch-size` | `40` | 数据整理：规范化建议每次发给模型的记录数 |
+| `lemon.ai.cleanse-max-groups` | `100` | 数据整理：一个任务最多交给模型判断的疑似重复组数 |
+| `lemon.ai.cleanse-groups-per-call` | `10` | 数据整理：疑似重复每次发给模型的组数 |
+| `lemon.ai.cleanse-threads` | `2` | 数据整理：同时执行的任务数，超出时排队 |
+| `lemon.ai.cleanse-stale-after` | `30m` | 数据整理：进行中的任务超过这么久没有进展（如服务重启）视为中断，可以重新发起 |
+
+时长的写法为 Spring Boot 的 `Duration` 格式（`90s`、`3m`）。智能报告的线程数（4）、定时生成的时间（周报每周一 7:00、月报每月 1 日 7:30）不是配置项：前者在代码中固定，后者在「系统监控 → 定时任务」中修改（任务 `ai.weeklyReport`、`ai.monthlyReport`）。访问外网模型接口需要的代理、Nginx 超时等部署要求见 [生产环境配置](../deploy/production#ai)。
+
 ### lemon.im：第三方集成
 
 对应 `modules/system/im/ImProperties`，只有钉钉、企业微信、飞书开放接口的地址，默认为官方地址，`application.yml` 中只有注释掉的示例，一般不需要配置。应用凭证（AppKey、Secret、AgentId 等）在「系统管理 → 第三方集成」中按租户配置，不放在配置文件中，也没有对应的环境变量。

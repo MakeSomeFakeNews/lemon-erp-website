@@ -52,6 +52,7 @@ logging:
 | `LEMON_MINIAPP_APP_ID` / `LEMON_MINIAPP_APP_SECRET` | 否 | `wx0123456789abcdef` / `***` | 微信小程序的 AppID / AppSecret，不用小程序时不设置 |
 | `LEMON_MINIAPP_SUBSCRIBE_TEMPLATE_ID` | 否 | 公众平台中的模板 ID | 审批提醒的订阅消息模板，不设置时不推送 |
 | `LEMON_JOB_ENABLED` | 否 | `true` | 多实例部署时只在一个实例上为 true |
+| `LEMON_AI_*` | 否 | `LEMON_AI_READTIMEOUT=180s` | 智能模块的超时、并发等参数（`lemon.ai.*`），一般不需要设置；模型和密钥在页面中配置，见下文「智能（AI）」 |
 | `SERVER_PORT` | 否 | `8080` | 后端端口 |
 | `TZ` | 建议 | `Asia/Shanghai` | 进程时区，影响 `LocalDate.now()`、定时任务的执行时间 |
 
@@ -141,7 +142,7 @@ journalctl -u lemon-erp -f
 
 | 参数 | 建议 |
 | --- | --- |
-| `-Xms` / `-Xmx` | 一般 1~2GB；MRP 运算、数据仓库同步、大批量导出、批量打印（一次最多 1000 张单据、2 万行明细）时内存占用较高，按数据量调整 |
+| `-Xms` / `-Xmx` | 一般 1~2GB；MRP 运算、数据仓库同步、大批量导出、批量打印（一次最多 1000 张单据、2 万行明细）、智能录入（上传的图片和 PDF 在内存中处理，一次最多 5 张 5MB 的图片，以 base64 发给模型）时内存占用较高，按数据量和并发调整 |
 | `-XX:+UseG1GC` | Java 17 默认即为 G1，可省略 |
 | `-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/var/log/lemon-erp/` | 便于排查内存溢出 |
 | `-Duser.timezone=Asia/Shanghai` | 不方便设置 `TZ` 环境变量时使用 |
@@ -199,6 +200,7 @@ fc-list :lang=zh
 | 流程引擎 | Flowable 共用同一个数据库，多实例之间由引擎的乐观锁保证一致 |
 | 第三方集成 | 授权登录的 state（`im:state:`）和应用 access_token 在缓存中，发起授权与回调可能落在不同实例，必须使用 Redis |
 | 微信小程序 | 登录会话（`mp:session:`）和 access_token（`mp:token`）在缓存中，登录与选择租户、绑定可能落在不同实例，必须使用 Redis |
+| 智能（AI） | 问数的流式回答、数据整理任务、报告生成都在接收请求的实例的进程内线程池中执行，不需要会话保持；服务重启时进行中的任务中断（30 分钟后显示为已中断，可重新发起）。定时生成的周报、月报跟随定时任务，只在开启定时任务的实例上执行 |
 
 ## 第三方集成
 
@@ -231,6 +233,26 @@ fc-list :lang=zh
 | 多实例 | 必须使用 Redis，见上文「多实例部署」 |
 
 AppSecret 只通过环境变量提供，不要写入配置文件或提交到代码仓库；在公众平台重置 AppSecret 后要同步更新环境变量并重启后端。小程序的编译、上传、审核见 [微信小程序开发 → 发布](../guide/miniapp#发布)。
+
+## 智能（AI） {#ai}
+
+「智能」模块（AI 问数、智能录入、数据整理、智能报告）调用外部的大模型服务。大模型的服务商、接口地址、API Key、模型在「智能 → AI 设置」中按租户配置，部署上需要满足：
+
+| 项目 | 要求 |
+| --- | --- |
+| 服务器出口 | 后端要能以 HTTPS 访问所选服务商的接口：DeepSeek `api.deepseek.com`、通义千问 `dashscope.aliyuncs.com`、智谱 `open.bigmodel.cn`、Kimi `api.moonshot.cn`、豆包 `ark.cn-beijing.volces.com`（默认地址见 `AiProvider`，页面中填写了接口地址时以填写的为准）。处在防火墙之后时放行这些域名的 443 端口。浏览器不直接访问模型服务 |
+| 代理 | 模型客户端使用 JDK `HttpClient` 和 JVM 默认的代理设置，**不读取 `HTTPS_PROXY` 等环境变量**。需要经代理访问外网时在 JVM 参数中设置 `-Dhttps.proxyHost=代理地址 -Dhttps.proxyPort=端口`，不走代理的地址用 `-Dhttp.nonProxyHosts`（多个地址之间用竖线分隔，支持 `*` 通配，如 `localhost`、`127.*`）；也可以用 `-Djava.net.useSystemProxies=true` 使用操作系统的代理设置。需要账号密码的代理，JDK 默认禁止 HTTPS 隧道使用 Basic 认证（`jdk.http.auth.tunneling.disabledSchemes`），建议使用不需要认证的出口代理 |
+| 私有化部署的模型 | 服务商选「其他」并填写接口地址（OpenAI 兼容，不含 `/chat/completions`）。SaaS 模式下普通租户的接口地址不能指向本机、内网地址，只有平台租户可以；确实需要让普通租户接入内网模型时设置 `lemon.ai.allow-private-network=true` |
+| 超时 | 后端连接超时 10 秒、等待响应 120 秒、流式回答 60 秒无数据视为超时、一次流式回答最长 5 分钟（`lemon.ai.*`，见 [配置说明](../start/config#lemon-ai)）。前端等待智能录入 300 秒、测试连接和导入字段对应 150 秒，Nginx 的读超时要与之匹配，见下文 |
+| Nginx | AI 问数是 SSE 流式输出，经 Nginx 转发时**必须关闭响应缓冲**，否则回答会攒到最后一次性显示；`/api/ai/` 的 `proxy_read_timeout` 建议 300 秒，见 [Nginx 配置](./nginx#ai-sse) |
+| 时区 | 月度用量按服务器时区的自然月统计；周报、月报按定时任务的时间生成 |
+| 多实例 | 见上文「多实例部署」 |
+
+数据与费用：
+
+- 开启 AI 功能后，提问相关的查询结果、上传的单据、主数据记录、报告的指标快照会发送给所配置的模型服务商，上线前确认符合企业的数据合规要求；只授权需要的角色，并在「AI 设置」中设置每月 token 上限；
+- API Key 以明文保存在数据库 `ai_config` 表中（接口只写不读、操作日志隐藏），备份数据库和授予数据库只读账号时注意保护；
+- 问数的会话记录（含发送给模型的查询结果）保存在 `ai_message`，报告的快照保存在 `ai_report`，数据量随使用增长，纳入数据库备份与容量规划。
 
 ## 安全建议
 

@@ -97,6 +97,14 @@ docker compose logs -f backend      # 查看后端日志
 
 Docker 默认网络的地址在 172.16.0.0/12 范围内，属于后端默认信任的内网代理，Nginx 传入的 `X-Forwarded-For` 能被正确识别，登录日志、操作日志中记录的是用户的真实 IP。
 
+## 智能（AI）
+
+使用「智能」模块（AI 问数、智能录入、数据整理、智能报告）时，镜像和 `docker-compose.yml` 不需要额外的环境变量：模型的服务商、API Key 等在「智能 → AI 设置」页面中配置，保存在数据库中。部署上注意：
+
+- **出网**：后端容器要能访问所选服务商的 HTTPS 接口（如 `api.deepseek.com`，见 [生产环境配置](./production#ai)）。Docker 默认网络可以访问外网，宿主机需要经代理上网时，在 `.env` 的 `JAVA_OPTS` 中加上 JVM 代理参数，如 `JAVA_OPTS=-Xms512m -Xmx1g -Dhttps.proxyHost=10.0.0.2 -Dhttps.proxyPort=3128`（客户端不读取 `HTTPS_PROXY` 环境变量）；
+- **流式输出**：前端镜像的 `docker/nginx.conf` 中只有一段 `/api/`（读超时 120 秒，没有关闭代理缓冲），AI 问数的回答会被 Nginx 缓冲，等待较久后才一次性显示，智能录入等待模型超过 120 秒时会返回 504。使用 AI 时在 `docker/nginx.conf` 的 `location /api/` 之前加一段 `location /api/ai/`（`proxy_buffering off`、`proxy_read_timeout 300s`，写法见 [Nginx 配置](./nginx#ai-sse)，`proxy_pass` 写 `http://backend:8080`）后重新构建前端镜像；外层还有负责 HTTPS 的反向代理时同样要关闭缓冲；
+- **接入同一台机器或内网中私有化部署的模型**：接口地址要写容器内能访问的地址（如宿主机的内网 IP），不能写 `localhost`（指向后端容器自身）。
+
 ## 构建与推送镜像
 
 `docker/build.sh` 单独构建镜像，适合在构建机上打包、推送到镜像仓库，再在服务器上拉取运行：

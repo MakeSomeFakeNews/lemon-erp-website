@@ -68,6 +68,8 @@ order: 2
 
 未登录访问需要认证的接口时返回 HTTP 401 和 `{"code":401,"msg":"未登录或登录已过期"}`，前端拦截器清除令牌并跳转登录页。安全过滤器链中输出的 401 / 403 提示同样按请求头 `Accept-Language` 返回中文或英文（`I18nConfig` 中的过滤器在安全过滤器之前设置语言，见 [国际化](../guide/i18n#语言的传递与解析)）。
 
+SSE 流式输出（AI 问数）结束时 Servlet 容器会对原请求做一次 ASYNC 分派，此时 JWT 过滤器（`OncePerRequestFilter`）不再执行，`SecurityConfig` 用 `.dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()` 放行——原请求已经鉴权，这不会开放任何新的入口。
+
 不需要登录的接口只有：`/auth/login`、`/auth/config`、`/auth/captcha`、`/error`，GET `/files/**`（头像等公开文件），GET `/screen-share/**`（数据大屏投屏链接，见下文），`/auth/im/**`（钉钉、企业微信、飞书授权登录，见下文），以及微信小程序登录的 `/auth/miniapp/config`、`/auth/miniapp/login`、`/auth/miniapp/choose`、`/auth/miniapp/bind`（`/auth/miniapp/unbind` 需要登录，见下文）。新增公开接口需要修改 `SecurityConfig`，一般不建议。
 
 ### 投屏链接（免登录）

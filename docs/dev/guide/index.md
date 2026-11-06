@@ -1,6 +1,6 @@
 # 开发指南
 
-本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序等专题。
+本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序、AI 能力扩展等专题。
 
 ## 内容清单
 
@@ -21,6 +21,7 @@
 | [新增业务参数](./biz-rule) | 用 `BizRuleProvider` 登记按租户的业务控制和计算规则（开关、整数、小数、下拉、表格），业务代码通过 `BizRules` 读取，一组参数用 record 类型化读取 |
 | [业务实体接入自定义字段](./custom-field) | 自定义字段的存储与权限，`useCustomFields` / `CustomFieldsForm` / `useCustomColumns` / `CustomFieldsView` 接入表单、列表、详情 |
 | [国际化](./i18n) | 前端 vue-i18n 语言包与 `$t`、菜单和字典译文，后端 `MessageSource` 资源包、`BizException` 消息键、校验注解 `{键}`、`Accept-Language`，新增语言与检查脚本 |
+| [AI 能力扩展开发](./ai) | 业务模块实现 `framework/ai` 契约：新增问数工具（`AiTool`、`AiSchema`、`AiToolResult`）、可智能录入的单据（`AiExtractTarget`、`AiPrefillBuilder`，前端 `useAiPrefill` / `AiExtractButton`）、可整理的资料（`AiCleanseSource`）、报告指标（`AiReportSource`、`AiReportMetrics`） |
 | [微信小程序开发](./miniapp) | `lemon-mp`（uni-app + Vue 3）的项目结构、本地开发与配置、微信登录与绑定、订阅消息审批提醒、新增页面与工作台入口（`pages.json` 分包、`config/entries`、`l-*` 组件、`usePaged` / `runAction` / `useTitle`）、多语言、发布 |
 
 ## 新功能的开发流程
@@ -33,7 +34,7 @@
 4. **审批**：在 `XxxFlowBusinesses` 中声明 `FlowBusiness`，Service 中声明 `ApprovalFlow`，提交时 `approvalSupport.submit`，在 `FlowFinishedEvent` 监听器中用 `FLOW.onFinished` 回写状态；在 `init.sql` 中内置一个未发布的流程模型。
 5. **前端**：`npm run gen:enums` 生成状态常量 → `api/<模块>/*.js` 接口 → `views/<模块>/<页面>/index.vue` 列表页（单条操作用 `useAction`）→ 表单（`FormDrawer`，明细用 `useLineItems` + `LineItemsTable`）和详情（`SubPage`）组件 → 打印（`printDocs` + `PRINT_TYPES`）；页面文字用 `$t`，键加到 `locales/zh-CN`、`locales/en-US` 两个语言包。
 6. **菜单与授权**：登记模块目录、分组、页面和按钮权限，给需要的内置角色授权；内置菜单和字典在 `locales/en-US/menu.js`、`dict.js` 中加英文译文。
-7. **扩展点**（按需）：首页待办 `TodoProvider`、附件与自定义字段 `RecordTypeProvider`、主数据引用检查 `ReferenceChecker`、定时提醒 `JobHandler`、新租户基础数据 `TenantInitializer`、业务控制规则 `BizRuleProvider`。
+7. **扩展点**（按需）：首页待办 `TodoProvider`、附件与自定义字段 `RecordTypeProvider`、主数据引用检查 `ReferenceChecker`、定时提醒 `JobHandler`、新租户基础数据 `TenantInitializer`、业务控制规则 `BizRuleProvider`、AI 问数工具 `AiTool` 与智能录入目标 `AiExtractTarget`（见 [AI 能力扩展开发](./ai)）。
 8. **自测**：用 admin 和只有部分权限、不同数据权限的账号分别验证菜单、按钮、接口权限和数据隔离；开启 `LEMON_TENANT_ENABLED=true` 验证多租户；运行 `npm run i18n:check`（同时检查枚举常量是否与后端一致）、`python3 scripts/check_i18n.py`，并切换为英文界面检查。
 
 ## 代码风格要点

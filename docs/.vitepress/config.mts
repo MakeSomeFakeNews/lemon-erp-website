@@ -19,6 +19,7 @@ const MANUAL: [string, string][] = [
   ['pm', '项目管理'],
   ['hr', '人力资源'],
   ['bi', '商务智能'],
+  ['ai', '智能（AI）'],
   ['workflow', '流程中心'],
   ['portal', '供应商与经销商门户'],
   ['mobile', '移动作业'],

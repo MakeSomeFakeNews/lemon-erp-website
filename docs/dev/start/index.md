@@ -16,6 +16,7 @@
 | 后端 | 缓存 | Redis（可切换为进程内缓存） | 6.2 及以上 |
 | 后端 | 数据库 | MySQL | 8.0 及以上 |
 | 后端 | 单据打印 | JasperReports（生成 PDF；PDF 导出使用 OpenPDF，报表表达式用 Eclipse ECJ 编译） | 7.0.8（OpenPDF 1.3.43、ECJ 3.40.0） |
+| 后端 | 大模型 | 自行实现的 OpenAI Chat Completions 兼容客户端（JDK HttpClient + Jackson，不引入服务商 SDK），接入 DeepSeek、通义千问、智谱 GLM、Kimi、豆包等；智能录入用 OpenPDF 提取 PDF 文字 | - |
 | 后端 | 其他 | ip2region（IP 归属地离线库）、OSHI（服务器监控） | 3.3.7、6.12.0 |
 | 后端 | 构建 | Gradle（项目自带 Wrapper） | 9.7.1 |
 | 前端 | 框架 | Vue、Vue Router、Pinia | 3.5、4.5、3.0 |
@@ -23,6 +24,7 @@
 | 前端 | UI 组件 | Ant Design Vue、@ant-design/icons-vue | 4.2、7.0 |
 | 前端 | 国际化 | vue-i18n（Composition API 模式；后端为 Spring `MessageSource` 资源包） | 11.4 |
 | 前端 | 其他 | Axios、ECharts、Day.js、ExcelJS、JsBarcode、qrcode | - |
+| 前端 | Markdown | marked（AI 回答与报告的渲染）、DOMPurify（渲染前清理） | 18.1、3.4 |
 | 小程序 | 框架 | uni-app（Vue 3），编译为微信小程序 | uni-app 3.0、Vue 3.4 |
 | 小程序 | 构建 | Vite、Sass | 5.2、1.77 |
 
@@ -41,9 +43,10 @@ Spring Boot 4 默认使用 Jackson 3，`ObjectMapper` 等类位于 `tools.jackso
 | 前端 `lemon-web` | 登录后按菜单动态注册路由；请求统一走 `/api`，由拦截器处理统一返回结构 |
 | 小程序 `lemon-mp` | 微信小程序，审批、员工自助、销售外勤、扫码作业等轻量功能；微信绑定已有账号后免密登录，接口与 Web 端共用，见 [微信小程序开发](../guide/miniapp) |
 | 启动模块 `lemon-admin` | 启动类 `LemonErpApplication`、`application*.yml`，组装全部业务模块并打包为 `lemon-erp.jar` |
-| 业务模块 `lemon-modules/*` | system、monitor、workflow、dashboard、wms、scm、mes、fin、hr、crm、pm、bi，每个模块包含自己的 Controller、Service、Mapper 和 mapper XML |
+| 业务模块 `lemon-modules/*` | system、monitor、workflow、dashboard、wms、scm、mes、fin、hr、crm、pm、bi、ai，每个模块包含自己的 Controller、Service、Mapper 和 mapper XML |
 | 框架层 `lemon-framework` | 安全认证、数据权限、多租户、缓存、日志、文件、Excel 导入、定时任务契约、演示模式、业务参数契约，以及业务模块之间的契约接口和事件 |
 | 通用层 `lemon-common` | 统一返回 `R`、业务异常、全局异常处理、实体基类、校验分组、工具类 |
+| 外部服务（可选） | 大模型服务（OpenAI 兼容接口），由「智能」模块按租户配置后调用，见 [智能（AI）](../architecture/ai) |
 | 基础设施 | MySQL（业务表 + Flowable 的 `ACT_*` 表）、Redis（会话、权限、字典、参数缓存）、本地磁盘（头像、业务附件） |
 
 一次请求的处理过程：
