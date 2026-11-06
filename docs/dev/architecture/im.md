@@ -32,7 +32,7 @@ order: 12
 | `sys_im_user` | 系统用户与平台成员 userid 的绑定 | `(platform, im_user_id, tenant_id)`、`(user_id, platform, tenant_id)` |
 | `sys_im_dept` | 同步通讯录自动创建部门时，系统部门与平台部门 ID 的对应 | `(platform, im_dept_id, tenant_id)` |
 
-已有数据库升级执行 `sql/upgrade/20261119_im_integration.sql`（建表、菜单 350「第三方集成」及按钮 `sys:im:edit`、`sys:im:sync`、字典 `sys_im_platform`）。菜单在初始数据中只授予超级管理员；SaaS 模式下它属于「基础平台」，租户管理员按套餐获得。
+已有数据库升级执行 `sql/upgrade/20261106_v1.0.0.sql`（建表、菜单 350「第三方集成」及按钮 `sys:im:edit`、`sys:im:sync`、字典 `sys_im_platform`）。菜单在初始数据中只授予超级管理员；SaaS 模式下它属于「基础平台」，租户管理员按套餐获得。
 
 ## ImClient 接口
 

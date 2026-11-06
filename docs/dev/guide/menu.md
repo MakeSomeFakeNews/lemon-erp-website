@@ -102,7 +102,7 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 
 ## 已有环境的增量脚本
 
-`init.sql` 会删除并重建全部表，已有环境不能重新执行，需要另写增量 SQL。增量脚本要能重复执行、不依赖自增 ID：
+`init.sql` 会删除并重建全部表，已有环境不能重新执行，需要在 `sql/upgrade` 中按日期另写增量 SQL（见 [升级与数据备份](../deploy/upgrade#数据库变更)）。增量脚本要能重复执行、不依赖自增 ID：
 
 ```sql
 -- 菜单：按权限标识判断是否已存在

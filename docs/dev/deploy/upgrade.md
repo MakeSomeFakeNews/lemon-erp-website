@@ -83,14 +83,33 @@ redis-cli -a 密码 del settings:all
 
 ### 数据库变更
 
-`sql/init.sql` 是全量的建表与初始数据脚本，**不能在已有数据的库上执行**（会删除全部表）。升级时需要把新旧版本之间的差异整理为增量 SQL：
+`sql/init.sql` 是全量的建表与初始数据脚本，**不能在已有数据的库上执行**（会删除全部表）。已有数据库的升级使用仓库 [`sql/upgrade`](https://github.com/MakeSomeFakeNews/lemon-erp/tree/main/sql/upgrade) 目录中的增量脚本（每个 [Release](https://github.com/MakeSomeFakeNews/lemon-erp/releases) 的附件和 Docker 部署包中也有）：
+
+| 脚本 | 说明 |
+| --- | --- |
+| `20261106_v1.0.0.sql` | 开源首版（2026-10-16）升级到 v1.0.0，这段时间内任一版本的代码部署的数据库都可以直接执行 |
+
+之后的变更按 `YYYYMMDD_名称.sql`（变更当天的日期）新增。升级时按文件名顺序执行**部署之后**新增的脚本：
 
 ```bash
-# 对比两个版本之间 init.sql 的变化
+mysqldump -uroot -p lemon_erp > lemon_erp_backup.sql          # 先备份
+mysql -uroot -p lemon_erp < sql/upgrade/20261106_v1.0.0.sql
+
+# Docker 部署（在 docker 目录中执行）
+docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" lemon_erp' < ../sql/upgrade/20261106_v1.0.0.sql
+```
+
+官方升级脚本都可以重复执行，已经执行过的部分会自动跳过，不确定是否执行过时直接再执行一次即可。每个脚本发布前都会验证：用旧版本的 `init.sql` 建库后执行升级脚本，得到的表结构、索引和菜单、字典、参数等初始数据与新版本 `init.sql` 完全一致。
+
+#### 二次开发时编写增量脚本
+
+自己修改了表结构时，同样在 `sql/upgrade` 中按日期新增脚本，并同步修改 `init.sql`。可以对比两个版本之间 `init.sql` 的变化：
+
+```bash
 git diff v旧版本 v新版本 -- sql/init.sql
 ```
 
-按差异编写增量脚本，要求：
+编写要求：
 
 - **可以重复执行**：建表用 `CREATE TABLE IF NOT EXISTS`；加列、加索引前先判断是否已存在（MySQL 8 的 `ALTER TABLE ... ADD COLUMN` 不支持 `IF NOT EXISTS`，可以查询 `information_schema.COLUMNS` 后再执行，或在脚本说明中注明只执行一次）；插入菜单、字典等数据用 `INSERT ... SELECT ... WHERE NOT EXISTS`；
 - **不依赖自增 ID**：菜单的上级、角色授权按路由地址、权限标识、角色编码查询关联，而不是写死 ID；
@@ -116,11 +135,11 @@ Flowable 的 `ACT_*` 表不需要手工处理：新版本的引擎在启动时�
 ### 升级步骤
 
 1. 停止后端：`systemctl stop lemon-erp`；
-2. 执行增量 SQL；
+2. 按顺序执行 `sql/upgrade` 中部署之后新增的升级脚本；
 3. 替换 `lemon-erp.jar`，按需更新环境变量；
 4. 启动后端，查看日志确认启动成功（`journalctl -u lemon-erp -f`）；
 5. 替换 Nginx 静态目录中的前端文件（先上传到新目录，再切换目录或替换，避免替换过程中出现部分新文件、部分旧文件）；
-6. 清理权限、字典缓存（`login:perms:*`、`dict:*`），使新的菜单、权限、字典立即生效；
+6. 在「系统监控 → 缓存监控」中清空「用户权限」「字典数据」「系统参数」缓存（Redis 中的 `login:perms:*`、`dict:*`、`settings:all`），使新的菜单、权限、字典立即生效；
 7. 用管理员和普通账号登录验证主要功能。
 
 `index.html` 设置为不缓存（见 [Nginx 配置](./nginx)），用户刷新页面即可加载新版本的前端；`assets` 中的文件名带内容哈希，不会读到旧缓存。

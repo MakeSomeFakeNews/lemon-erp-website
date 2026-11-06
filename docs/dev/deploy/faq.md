@@ -48,7 +48,7 @@ JSON 中的日期时间统一输出为 `yyyy-MM-dd HH:mm:ss`（服务器时区�
 
 ### 能在已有数据的库上重新执行 init.sql 吗？
 
-不能。`init.sql` 开头会 `DROP TABLE IF EXISTS` 删除全部业务表。已有环境的结构变更需要编写增量 SQL，见 [升级与数据备份](./upgrade)。
+不能。`init.sql` 开头会 `DROP TABLE IF EXISTS` 删除全部业务表。已有环境升级执行 `sql/upgrade` 中的升级脚本，自己的结构变更也要另写增量 SQL，见 [升级与数据备份](./upgrade)。
 
 ## 认证与安全
 

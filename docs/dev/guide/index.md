@@ -30,7 +30,7 @@
 
 一个典型的业务功能（带审批的单据）从零到上线的步骤：
 
-1. **建表**：在 `sql/init.sql` 中建表（带 `tenant_id`、`dept_id`、`create_by`，唯一约束带 `tenant_id`），插入字典（程序按取值判断的用系统字典，租户可扩充的分类用业务字典）；已有环境另写增量 SQL。
+1. **建表**：在 `sql/init.sql` 中建表（带 `tenant_id`、`dept_id`、`create_by`，唯一约束带 `tenant_id`），插入字典（程序按取值判断的用系统字典，租户可扩充的分类用业务字典）；已有环境另写增量 SQL（`sql/upgrade/<日期>_<名称>.sql`，见 [升级与数据备份](../deploy/upgrade#数据库变更)）。
 2. **后端**：枚举（`model` 包，与系统字典对应）→ 实体（继承 `BaseEntity`，状态字段用枚举）→ Mapper 与 mapper XML → Service（`@Transactional`、`DataScopes` 数据权限、`StatusTransitions` 状态流转、`DetailLines` 明细、`DictLookup` 业务字典校验、取单据号）→ Controller（只做 `@PreAuthorize`、`@OperLog`、校验和调用 Service）；提示和校验信息用消息键，登记在本模块的 `i18n/<模块>.properties`、`<模块>_en.properties` 中。
 3. **单据编号**：在本模块的 `XxxDocNos` 中声明 `DocNoCatalog`。
 4. **审批**：在 `XxxFlowBusinesses` 中声明 `FlowBusiness`，Service 中声明 `ApprovalFlow`，提交时 `approvalSupport.submit`，在 `FlowFinishedEvent` 监听器中用 `FLOW.onFinished` 回写状态；在 `init.sql` 中内置一个未发布的流程模型。
