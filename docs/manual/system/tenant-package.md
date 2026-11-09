@@ -18,7 +18,7 @@ order: 7
 
 ## 列表
 
-工具栏左侧可按套餐名称搜索，「新增套餐」新增。
+工具栏左侧可按套餐名称搜索，「新增套餐」新增。系统初始没有套餐，列表为空，需要先新增套餐再开通使用套餐的租户。
 
 | 列 | 说明 |
 | --- | --- |
@@ -30,7 +30,7 @@ order: 7
 
 ## 新增 / 编辑套餐
 
-![编辑套餐](/images/manual/system/tenant-package-edit.jpg)
+![新增套餐](/images/manual/system/tenant-package-edit.jpg)
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
