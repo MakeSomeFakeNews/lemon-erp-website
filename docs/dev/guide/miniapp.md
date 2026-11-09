@@ -15,8 +15,8 @@ order: 16
 | 审批：待办 / 已办 / 我发起的 / 抄送我的，同意、拒绝、转交、撤回；发起申请（流程中心设计的表单）；审批提醒（微信订阅消息） | 系统配置：菜单、角色、字典、参数、租户、打印模板、编码规则、第三方集成 |
 | 工作台（待办汇总、经营概览）、站内消息 | 流程设计器、表单设计、BI 多维分析、自定义报表、数据大屏 |
 | 员工自助：打卡、考勤日历、假期余额、请假加班申请与撤销、工资条、绩效自评与评分；项目工时填报与审核 | 字段多、明细行多的单据录入：采购 / 销售订单、BOM、工艺路线、凭证、工资表、MRP、成本核算、结账 |
-| 销售与服务：客户、联系人拨号、写跟进（拍照）、今日待跟进、线索录入与转化、商机推进、服务工单受理与处理、销售订单进度 | 打印、Excel 导入导出、供应商 / 经销商门户 |
-| 仓储生产：库存查询、扫码收货、上架、拣货、盘点、生产报工 | 工单指派、配件领用、不合格品评审处置、检验方案维护 |
+| 销售与服务：客户、联系人拨号、写跟进（拍照）、今日待跟进、线索录入与转化、商机推进、服务工单受理与处理、销售订单进度、快速开单（销售出库直接开单） | 打印、Excel 导入导出、供应商 / 经销商门户 |
+| 仓储生产：库存查询（均价、库存金额）与经营历史、扫码收货、上架、拣货、盘点（盘盈成本价）、生产报工 | 工单指派、配件领用、不合格品评审处置、检验方案维护 |
 | 设备与质量：设备台账（扫码）、保养维修登记与处理、检验录入、不合格品登记 | |
 
 新增功能时按同样的原则取舍：需要大屏幕、大量录入、复杂配置的留在 Web 端；小程序中遇到这类操作时提示「请在电脑端处理」。
@@ -30,7 +30,8 @@ order: 16
 | 员工自助 | `/hr/self/*`、`/hr/perf/appraisal/{id}` | 登录即可（需关联员工档案） |
 | 项目工时 | `/pm/my/timesheet`、`/pm/my/tasks`、`/pm/timesheet`、`/pm/timesheet/review` | 填报登录即可（须为项目成员）；审核 `pm:timesheet:list` |
 | 销售与服务 | `/crm/*`、`/scm/sales/order`、`/bi/trace/order/sales/{id}`、`/system/attachment/*` | `crm:customer:list`、`crm:followup:list`、`crm:lead:list`、`crm:opp:list`、`crm:ticket:list`、`scm:sales:list` |
-| 扫码作业 | `/wms/*`、`/scm/purchaseIn`、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
+| 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`POST /scm/salesOut`、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
+| 扫码作业 | `/wms/*`（含经营历史 `/wms/stock/history`）、`/scm/purchaseIn`、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
 | 设备与质量 | `/mes/equipment`、`/mes/maintenance/*`、`/mes/inspection/*`、`/qms/plan/match`、`/qms/ncr` | `mes:equipment:list`、`mes:maintain:list`、`mes:qc:list`、`qms:ncr:list` |
 
 为小程序补充的后端能力：
@@ -68,14 +69,15 @@ lemon-mp
     ├── pkg-hr                  分包：打卡、考勤、请假加班、工资条、绩效
     ├── pkg-pm                  分包：我的工时、填报、工时审核
     ├── pkg-crm                 分包：客户、跟进、商机、销售订单、线索、服务工单（photos.js 跟进照片）
-    ├── pkg-wms                 分包：库存、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑）
+    ├── pkg-wms                 分包：库存、经营历史、快速开单、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
+    │                           sale/ 快速开单的明细行 SaleRow.vue、lines.js、gifts.js；components/ 搜索弹层、价格参考弹层）
     ├── pkg-mes                 分包：设备、保养维修、质量检验、不合格品
     ├── api/<区>.js              接口封装：auth、workflow、dashboard、message、hr、pm、crm、wms、mes
     ├── config/entries          工作台入口登记：index.js 汇总，<区>.js 每个功能区一个文件
     ├── components/l-*          通用组件（easycom 自动引入）
     ├── composables             usePaged、useAction（runAction、scanCode、vibrate）、useTitle
     ├── locales                 index.js 最小多语言实现；zh-CN/、en-US/ 下按区的 <区>.js
-    ├── store                   user（当前用户、权限 hasPerm）、dict（字典缓存 useDict）
+    ├── store                   user（当前用户、权限 hasPerm）、dict（字典缓存 useDict）、bizRules（前端可读的业务参数）
     ├── utils                   request（请求封装）、auth（令牌）、session（登录后处理、登录检查）、subscribe（订阅消息）、
     │                           tabbar（底部导航文字与未读角标）、format（金额、数量、时间格式化）
     └── static                  logo、底部导航图标 tab/、l-cell 使用的白色线条图标 icons/
@@ -501,6 +503,15 @@ onReachBottom(() => paged.more())
 | `perm` | 有任一权限即显示（字符串或数组）；**不写**表示登录即可。注意写成空数组 `[]` 时任何人都看不到（超级管理员除外） |
 | `permAll` | 还必须同时具备的权限，例如报工入口 `perm: 'mes:wo:report'`、`permAll: ['mes:wo:list']`（报工页要查询工单） |
 | `links` | 对应的 Web 端路由前缀 |
+| `rule` | 布尔型业务参数的键，参数关闭时不显示入口，例如快速开单 `rule: 'scm.directDoc.enabled'`。参数读取完成前按开启处理，所以页面自身仍要检查参数 |
+
+**业务参数**：`store/bizRules.js` 与 Web 端 `useBizRules` 使用同一个接口 `GET /system/biz-rule/values?keys=...`，只能读到后端在 `BizRuleProvider.publicKeys()` 中声明为前端可读的参数（如 `ScmBizRules` 的 `scm.directDoc.enabled`、`scm.salesOut.lineWarehouse`）。`loadBizRules(keys)` 读取尚未缓存的参数（失败时不抛出），`bizRule(key, 默认值)` 响应式读取，默认值要与后端默认值一致；缓存在切换账号（`resetUser`）时清空。工作台加载时 `loadEntryRules()` 读取所有入口用到的参数。
+
+```js
+// pkg-wms/sale/index.vue：参数关闭时显示提示，不能开单
+await loadBizRules(['scm.directDoc.enabled', 'scm.salesOut.lineWarehouse'])
+disabled.value = bizRule('scm.directDoc.enabled', true) === false
+```
 
 入口的权限要与页面实际调用的接口权限一致，否则用户能看到入口、进入后接口返回 403。
 
@@ -544,7 +555,22 @@ npm run i18n:check
 runAction(() => changeOpportunityStage(o.id, data), { success: t('crm.opportunity.stageChanged'), then: () => paged.refresh() })
 ```
 
-其他工具：`utils/format.js` 的 `money`（千分位两位小数）、`qty`（最多 4 位小数）、`shortMoney`（中文按万 / 亿，英文按 K / M）、`shortTime`、`today(offsetDays)`、`period()`（`yyyyMM` 整数）；`utils/request.js` 的 `fileUrl(path)` 把后端文件地址（头像等）转为完整地址。
+其他工具：`utils/format.js` 的 `money`（千分位两位小数）、`price`（单价，千分位、2 到 4 位小数）、`qty`（最多 4 位小数）、`shortMoney`（中文按万 / 亿，英文按 K / M）、`shortTime`、`today(offsetDays)`、`period()`（`yyyyMM` 整数）；`utils/request.js` 的 `fileUrl(path)` 把后端文件地址（头像等）转为完整地址。
+
+## 快速开单与成本显示
+
+快速开单（`pkg-wms/sale/index.vue`）与 Web 端销售出库的「直接开单」调用同一个接口 `POST /scm/salesOut`（不传 `orderId`），后端生成并审核隐式订单后出库，规则全部在后端，小程序只负责录入：
+
+| 要点 | 实现 |
+| --- | --- |
+| 辅助单位 | 行上的 `qty`、`price` 是所选录入单位的数量和含税单价；默认价、促销预览、库存比较和提交都折算为基本单位（`lines.js` 的 `baseQty` / `basePrice`，基本单价保留 4 位小数），`unitName` 只用于显示。扫包装条码新增的行默认按该包装单位录入；序列号物料和赠品只按基本单位 |
+| 默认价 | `GET /scm/pricing/default`（`kind=SALES`，按行传 `materialIds`、`qtys`），按行返回，同一物料多行时各自按数量匹配起订量；只覆盖没有手工改过（`priceAuto`）的单价，客户、日期、数量、单位变化时重新带出 |
+| 价格参考 | `components/PriceRefSheet.vue` 只取 `/scm/pricing/reference` 的销售历史分区（该客户、全部客户），后端按权限裁剪分区，没有 `sales` 分区时显示没有权限 |
+| 促销与赠品 | 明细变化后 500 ms 调 `POST /scm/promotion/preview`（只传普通行），预览返回前不能保存；赠品行由 `gifts.js` 按预览重建，`scm.salesOut.lineWarehouse` 开启时可拆成多行从不同仓库出，提交前校验各组数量合计等于预览的赠品数量。没有预览权限时不显示赠品，由后端保存时从表头仓库先到期先出补上（序列号赠品除外） |
+| 库位批次 | 每行按 `/wms/stock` 的可用库存先到期先出排序（过期的排最后），默认第一项；赠品所选库位批次不够时提交时自动拆到其他库位批次 |
+| 整单优惠 | 基数为扣除促销优惠后的合计，抹分 / 抹角 / 抹元按分计算差额累加到 `wholeDiscount` |
+
+成本金额只在后端控制：没有「查看成本金额」（`wms:stock:cost`）权限时，`/wms/stock/summary` 不返回 `unitCost`、`amount`，`/wms/stock/history` 返回 `costVisible: false` 且不带单价金额；盘点单详情的 `costVisible` 在有 `wms:stock:cost`、`wms:check:add` 或 `wms:check:edit` 时为真（小程序盘点入口要求 `wms:check:edit`，因此盘盈行总能填成本价）。页面按字段是否返回或 `costVisible` 显示，不自己判断权限。
 
 ## 与 Web 端共用的内容
 

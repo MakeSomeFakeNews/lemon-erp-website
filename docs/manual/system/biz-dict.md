@@ -78,6 +78,7 @@ order: 5.5
 | --- | --- | --- | --- |
 | 流程分类 | wf_category | [流程模型](../workflow/model)的分类，「发起申请」按分类分组 | 初始的全部分类 |
 | 客户等级 | scm_customer_level | [客户](../scm/customer)、客户关系的客户，促销与价格表可按等级设置 | 潜在客户 |
+| 客户区域 | scm_region | [客户](../scm/customer#区域)的区域（经销商为授权区域）、客户关系中客户和线索的地区；[销售报表](../scm/jxc-sales)按区域汇总 | 无 |
 | 承运商 | scm_carrier | [发货单](../scm/shipment)、[发货通知](../scm/delivery) | 无 |
 | 补料原因 | mes_supplement_reason | [补料申请](../mes/supplement) | 无 |
 | 资产类别 | fin_asset_category | [固定资产](../fin/asset) | 电子设备 |

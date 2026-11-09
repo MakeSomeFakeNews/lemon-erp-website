@@ -13,7 +13,7 @@ order: 18
 | 价格列（零售价、批发价1–8） | `wms_material.retail_price`、`wholesale_price1`–`8` | 物料表单、「销售 → 商品价格」批量调价 | `wms/model/PriceLevels`（0 零售价，1–8 批发价，`price(material, level)` / `setPrice`） |
 | 价格列设置（名称、是否启用） | `wms_price_level`（按租户） | 「物料管理 → 价格列设置」（`wms:material:priceLevel`） | `WmsPriceLevelService`：`list()`、`enabledLevels()`；新租户由 `WmsTenantInitializer` 初始化，默认启用零售价、批发价1–3 |
 | 客户价格等级 | `scm_customer.price_level`（0–8，对应价格列） | 客户表单 | 为空按零售价 |
-| 客户执行价（客户 × 物料） | `scm_customer_price` | 客户列表「执行价」（`CustomerPriceDrawer.vue`） | `ScmCustomerPriceService.ofMaterials(customerId, materialIds)` |
+| 客户执行价（客户 × 物料） | `scm_customer_price` | 客户列表「执行价」（`CustomerPriceDrawer.vue`），Excel 导入导出（`customerPrices.js`） | `ScmCustomerPriceService.ofMaterials(customerId, materialIds)`、`export`、`importRows` |
 | 销售价目表（客户专属 / 客户等级、有效期、起订量） | `scm_price_list` | 「销售 → 价目表」 | `ScmPriceListService.quote(materialId, customerId, qty, date)` |
 | 采购合同价 | `scm_purchase_contract_item` | 「采购寻源 → 采购合同」 | `ScmPurchaseContractService.active(supplierId, date)` |
 | 供货价格（阶梯价） | `scm_supplier_price` | 供应商「供货价格」 | `ScmQueryService.supplierPrice(supplierId, materialId)` + `effectivePrice(price, qty)` |
@@ -24,9 +24,10 @@ order: 18
 
 ## 开单默认价
 
-接口 `GET /scm/pricing/default?kind=SALES|PURCHASE&partnerId=&materialIds=&qtys=&date=`（`ScmPricingController.defaults`），返回每个物料一行 `PricingViews.DefaultPrice(materialId, price, taxRate, source)`：
+接口 `GET /scm/pricing/default?kind=SALES|PURCHASE&partnerId=&materialIds=&qtys=&date=`（`ScmPricingController.defaults`），**按行返回** `PricingViews.DefaultPrice(materialId, price, taxRate, source)`：结果与 `materialIds` 一一对应（顺序、个数相同），`materialIds` 可以重复：
 
-- `qtys` 与 `materialIds` 一一对应，用于价目表起订量和供货阶梯价，缺少或不大于 0 时按 1；`date` 为空取今天；
+- `qtys` 与 `materialIds` 一一对应，用于价目表起订量和供货阶梯价，缺少或不大于 0 时按 1（`lineQty`）；同一物料多行、数量不同时按各行数量分别匹配；`date` 为空取今天；
+- 同一「物料 + 数量」只计算一次（循环内用 `物料ID|数量` 作键缓存）；
 - 没有任何价格时 `price`、`source` 为空；`taxRate` 为空表示该来源没有税率，前端保持行上原来的税率；
 - `source` 是枚举 `scm/model/PriceSource`，前端显示为单价下方的来源文字。
 
@@ -52,10 +53,13 @@ public List<DefaultPrice> defaults(OrderKind kind, Long partnerId, List<Long> ma
     Map<Long, WmsMaterial> materials = materialService.mapByIds(ids);
     Map<Long, ScmPriceMemory> memory = memoryService.ofMaterials(kind, partnerId, ids);
     ...
-    // 2. 逐个物料按顺序取价
-    for (Long id : ids) {
-        result.add(salesPrice(id, materials.get(id), customerPrices.get(id), partnerId, qtyOf.get(id), day, level,
-                enabledLevels, memory.get(id)));
+    // 2. 按行取价：结果与 materialIds 一一对应，同一物料 + 数量只算一次
+    Map<String, DefaultPrice> cache = new HashMap<>();
+    for (int i = 0; i < materialIds.size(); i++) {
+        Long id = materialIds.get(i);
+        BigDecimal qty = lineQty(qtys, i);
+        result.add(cache.computeIfAbsent(id + "|" + qty.toPlainString(), k -> salesPrice(id, materials.get(id),
+                customerPrices.get(id), partnerId, qty, day, level, enabledLevels, memory.get(id))));
     }
 }
 
@@ -80,7 +84,7 @@ private DefaultPrice salesPrice(...) {
 
 `api/scm/pricing.js` 的 `defaultPrices({ kind, partnerId, materialIds, qtys, date })`。销售订单（`OrderForm.vue`）、销售报价（`QuotationForm.vue`）、出入库直接开单（`TradeDocItems.vue`）的约定相同：
 
-- 选择商品后带出该行的单价、税率，并在行上记 `priceAuto = true`、`priceSource = source`；多行一次请求；
+- 选择商品后带出该行的单价、税率，并在行上记 `priceAuto = true`、`priceSource = source`；多行一次请求，按下标取结果（`res[i]?.materialId === row.materialId ? res[i] : undefined`），不要按物料 ID 建 `Map`，否则同一物料多行会拿到同一个价格；
 - 默认价是基本单位、本位币，销售订单按行上的单位和订单币种换算后填入（`OrderForm.vue` 的 `fetchSalesPrices`）；采购订单目前不调用这个接口，仍按合同价、供货价取价；
 - 往来单位或单据日期变化时，对 `priceAuto` 仍为 `true` 的行重新取价（只覆盖没有手工改过的单价）；
 - 用户手工修改单价、或在价格参考中选用价格后，`priceAuto = false`，不再自动覆盖；
@@ -94,12 +98,13 @@ private DefaultPrice salesPrice(...) {
 | --- | --- | --- | --- |
 | `quotations` 报价历史 | `scm_quotation_item` | `scm:sales:list`、`scm:salesOut:list`、`scm:quotation:list` | 报价单的制单人部门 + 制单人 |
 | `sales` 销售历史 | 销售出库明细 | 同上 | 出入库单的制单人部门 + 制单人（`ScmConstants.TRADE_RULE`） |
-| `customerCompare` 客户对比 | 价格记忆（`SALES`） | 同上 | 汇总结果，按功能权限整体裁剪 |
+| `customerCompare` 客户对比 | 「全部数据」时取价格记忆（`SALES`），否则按销售出库单计算 | 同上 | 见下文 |
 | `purchases` 进货历史 | 采购入库明细 | `scm:purchase:list`、`scm:purchaseIn:list` | 出入库单的制单人部门 + 制单人 |
 | `purchaseQty` 进货数量 | 采购入库按供应商汇总（次数、数量、金额、均价、最近日期） | 同上 | 同上 |
-| `supplierCompare` 供商对比 | 价格记忆（`PURCHASE`） | 同上 | 汇总结果，按功能权限整体裁剪 |
+| `supplierCompare` 供商对比 | 「全部数据」时取价格记忆（`PURCHASE`），否则按采购入库单计算 | 同上 | 见下文 |
 
 - 没有某一方向查看权限时，对应分区返回 `null`（不是空数组），前端据此隐藏标签页；
+- 供商 / 客户对比（`ScmPricingService.compare`）：`SecurityUtils.getDataScope().all()` 为真时直接查价格记忆（`ScmPriceMemoryMapper.selectCompare`）；否则在 `DataPermissionContext.execute(ScmConstants.TRADE_RULE, ...)` 中按看得到的销售出库 / 采购入库单现算（`ScmPricingMapper.selectTradeCompare`，口径同价格记忆：最新、最低、最高价及日期，不含退货和单价为 0 的赠品行），只列出这些单据的往来单位，价格也只来自这些单据，避免价格记忆这种汇总结果泄露其他人的成交价。前端在这两个标签页下方显示 `pricing.reference.compareScope` 说明；
 - 数据权限用 `DataPermissionContext.execute(rule, () -> mapper.selectXxx(q))` 在 Service 内部启用（同一个方法里不同分区的规则不同，不能用方法注解）；
 - `kind` 是 `partnerId` 的种类：客户与供应商的 ID 不在同一张表，指定 `kind = SALES` 时 `partnerId` 只用于销售方向的分区，采购方向的分区不按往来单位筛选（`withoutPartner`），反之亦然；
 - 查询写在 `ScmPricingMapper.xml`（报价、出入库历史、进货数量）和 `ScmPriceMemoryMapper.xml`（`selectCompare`）中，往来单位的编码 / 名称筛选是公共片段 `partnerFilter`。
@@ -119,6 +124,12 @@ function onReferencePick(price) {
   Object.assign(currentRow, { price, priceAuto: false, priceSource: undefined })
 }
 ```
+
+## 客户执行价导入导出
+
+- 导出 `GET /scm/customer-price/export?customerId=&keyword=`（`scm:customer:list`）：`customerId` 为空导出全部客户，`keyword` 按客户编码 / 名称筛选；返回 `ScmCustomerPrice`（带客户、物料的编码名称、规格、单位），SQL 在 `ScmCustomerPriceMapper.xml`。
+- 导入 `POST /scm/customer-price/import`（`scm:customer:edit`，`@OperLog` 类型 `IMPORT`），请求体为通用的 `ImportRequest<CustomerPriceImportRow>`（客户编码、物料编码、执行价、税率、备注，校验消息 `scm.valid.customerPrice*`）。`ScmCustomerPriceService.importRows` 用通用的 `ImportExecutor.run` 逐行处理：校验客户 / 物料编码存在（物料按编码批量预加载，客户按编码缓存）、文件内 客户 × 物料 不重复，再按 客户 × 物料 新增或更新（`upsert`，税率、备注为空时清空）；任何一行出错时返回按行号的错误、整批不导入。文件中没有的执行价不变。
+- 前端 `components/scm/customerPrices.js`：`CUSTOMER_PRICE_COLUMNS(withCustomer)` 是导入导出共用的列（客户列表的批量导入导出含客户编码列，单个客户的抽屉中不含，导入时由抽屉补上当前客户编码），`exportCustomerPriceRows(params, name)` 在导入列之后追加客户名称、物料名称、规格、单位，用 `writeExcel` 生成文件，导出的文件改完可以直接导入。
 
 ## 新增一种价格来源
 
