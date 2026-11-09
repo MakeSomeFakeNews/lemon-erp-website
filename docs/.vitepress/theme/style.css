@@ -160,3 +160,70 @@
     font-size: 12px;
   }
 }
+
+/* Mermaid 流程图：居中，按站点主题色上色（深色模式随变量自动切换） */
+.vp-doc .mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 16px 0;
+  padding: 16px;
+  border-radius: 8px;
+  background: var(--vp-c-bg-soft);
+  overflow-x: auto;
+}
+
+.vp-doc .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* 节点文字是 <p>：VitePress 正文段落的行高 28px 和上下外边距会让多行文字超出 Mermaid 计算的高度而被截掉 */
+.vp-doc .mermaid p {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.vp-doc .mermaid .node rect,
+.vp-doc .mermaid .node polygon,
+.vp-doc .mermaid .node circle,
+.vp-doc .mermaid .node path {
+  fill: var(--vp-c-bg) !important;
+  stroke: var(--vp-c-brand-1) !important;
+  stroke-width: 1.2px !important;
+}
+
+.vp-doc .mermaid .node .label,
+.vp-doc .mermaid .nodeLabel {
+  color: var(--vp-c-text-1) !important;
+  fill: var(--vp-c-text-1) !important;
+}
+
+.vp-doc .mermaid .cluster rect {
+  fill: var(--vp-c-brand-soft) !important;
+  stroke: var(--vp-c-divider) !important;
+}
+
+.vp-doc .mermaid .cluster-label .nodeLabel,
+.vp-doc .mermaid .cluster-label span {
+  color: var(--vp-c-text-2) !important;
+  font-weight: 600;
+}
+
+.vp-doc .mermaid .flowchart-link,
+.vp-doc .mermaid .edgePath .path {
+  stroke: var(--vp-c-text-3) !important;
+}
+
+.vp-doc .mermaid marker path,
+.vp-doc .mermaid .arrowheadPath {
+  fill: var(--vp-c-text-3) !important;
+  stroke: var(--vp-c-text-3) !important;
+}
+
+.vp-doc .mermaid .edgeLabel,
+.vp-doc .mermaid .edgeLabel p,
+.vp-doc .mermaid .edgeLabel rect {
+  background-color: var(--vp-c-bg-soft) !important;
+  fill: var(--vp-c-bg-soft) !important;
+  color: var(--vp-c-text-2) !important;
+}

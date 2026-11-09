@@ -10,7 +10,9 @@
   },
   "devDependencies": {
     "@ant-design/icons-svg": "^4.4.2",
+    "mermaid": "11.17.2",
     "puppeteer-core": "^23.11.1",
-    "vitepress": "1.6.3"
+    "vitepress": "1.6.3",
+    "vitepress-plugin-mermaid": "2.0.17"
   }
 }

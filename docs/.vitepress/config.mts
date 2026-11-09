@@ -2,6 +2,7 @@ import { defineConfig, type DefaultTheme } from 'vitepress'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileTree } from './fileTree'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
 const DOCS = path.resolve(__dirname, '..')
 const BASE = '/lemon-erp-website/'
@@ -62,7 +63,8 @@ function group(root: string, dir: string, text: string, collapsed: boolean): Def
 const sidebarOf = (root: string, sections: [string, string][]) =>
   sections.map(([dir, text], i) => group(root, dir, text, i > 0)).filter((g): g is DefaultTheme.SidebarItem => !!g)
 
-export default defineConfig({
+// withMermaid：文档中的 ```mermaid 代码块渲染为流程图（只在用到的页面加载 mermaid）
+export default withMermaid(defineConfig({
   lang: 'zh-CN',
   title: '柠檬ERP',
   description: '柠檬ERP（Lemon ERP）真正 100% 开源、无功能限制的 ERP 系统：进销存、生产制造 MES、仓储 WMS、质量、财务、CRM、人力 HR、项目管理与 BI，Spring Boot + Vue 3，支持 SaaS 多租户、审批流、微信小程序',
@@ -122,5 +124,10 @@ export default defineConfig({
       message: '真正 100% 开源、无功能限制的 ERP · 基于 Apache-2.0 协议<br />联系我们：电话 17701123202 · 微信 BG7LIF · 邮箱 <a href="mailto:zmissu@163.com">zmissu@163.com</a>',
       copyright: 'Copyright © 2026 柠檬ERP'
     }
+  },
+  // 字体与页面一致，否则测量的文字宽度与实际不符，节点中的文字会被截掉；换行在图中用 <br/> 控制
+  mermaid: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+    flowchart: { htmlLabels: true, curve: 'basis', wrappingWidth: 480, padding: 12, nodeSpacing: 36, rankSpacing: 48 }
   }
-})
+}))

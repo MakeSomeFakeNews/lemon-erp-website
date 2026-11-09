@@ -88,28 +88,88 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 
 ## 主要联动链路
 
+下面按业务分几张图说明单据之间的自动联动：实线是保存 / 审核时自动生成，虚线是另一种录入方式，「确认事件」指出入库单确认后发布的 `TradeDocConfirmedEvent`（各模块监听后生成应收应付、登记价格记忆等）。
+
+### 采购与销售
+
+```mermaid
+flowchart LR
+  subgraph 采购
+    direction LR
+    PD(["直接开单<br/>生成并审核隐式订单"]) -.-> PI
+    PO[采购订单] -- 审核 --> PI[采购入库 / 退货]
+    PI --> WI["仓库入库 / 出库单<br/>保存即确认<br/>更新库存、批次、序列号"]
+    PI -- 确认事件 --> PM1[价格记忆]
+    PI -- 确认事件 --> AP[应付单] --> PAY[付款核销] --> V1[凭证]
+    IN1["进项发票"] -- 勾稽 --> AP
+  end
+  subgraph 销售
+    direction LR
+    SDD([直接开单]) -.-> SD
+    SO[销售订单] -- 审核 --> SD[销售出库 / 退货]
+    SD --> WO[仓库出库 / 入库单] --> SH[物流发运]
+    SD -- 确认事件 --> PM2[价格记忆]
+    SD -- 确认事件 --> AR[应收单] --> REC[收款核销] --> V2[凭证]
+    IN2["销项发票"] -- 勾稽 --> AR
+  end
 ```
-采购订单 ─审核─▶ 采购入库 / 退货 ──▶ 仓库入库 / 出库单（保存即确认，更新库存、批次、序列号）
-（或直接开单：生成并审核隐式订单）│ TradeDocConfirmedEvent
-                       ├─▶ 价格记忆（采购入库）
-                       ▼
-                    应付单 ─▶ 付款核销 ─▶ 凭证
-销售订单 ─审核─▶ 销售出库 / 退货 ──▶ 仓库出库 / 入库单 ──▶ 物流发运
-（或直接开单）         ├─▶ 价格记忆（销售出库）
-                       └─▶ 应收单 ─▶ 收款核销 ─▶ 凭证
-销售订单 ─▶ 生产计划 ─▶ MRP ─▶ 生产工单（领料 / 退料 / 补料 / 完工入库 ─▶ 仓库单据）
-                            └▶ 采购订单（按默认供应商合并）
-组装拆卸单 ─确认─▶ 仓库出库单（子件 / 成套件）+ 入库单（成套件 / 子件）
-期初库存导入 ─▶ 期初入库单 ─▶ 存货期初数量；期初往来导入 ─▶ 手工应收 / 应付单
-仓库流水 + 采购金额 + 工单料工费 ─▶ 成本核算（按物料的计价方法）─▶ 成本结转凭证
-销售出库 / 退货 + 当期成本 + 收款核销 ─▶ 销售提成（fin）─确认─▶ 工资表的「销售提成」
-考勤 + 请假 + 绩效 + 报工计件 + 销售提成 ─▶ 工资表 ─▶ 计提凭证 / 发放凭证
-发票（手工登记 / 导入数电票 XML、发票清单）─勾稽─▶ 应收 / 应付单
-线索 ─▶ 客户 + 商机 ─赢单─▶ 销售订单
-项目工时 + 项目领料 + 费用 ─▶ 项目成本；项目开票 ─▶ 应收单
-全部业务表 ─ETL─▶ 数据仓库（bi_fact_*）─▶ 多维分析 / 报表 / 仪表盘
-出入库单 + 成本核算单价 + 收付款 + 库存 ─实时查询─▶ 进销存报表（bi 模块，只读，不经数据仓库）
-报工 / 设备 / 出入库 / 发货通知 / 销售订单 / 收款 / 检验 / 不合格品 ─实时查询─▶ 数据大屏（只读，不经数据仓库）
+
+发票可以手工登记，也可以导入数电票 XML 或发票清单，勾稽后计入应收 / 应付单的已开票金额。
+
+### 生产与库存
+
+```mermaid
+flowchart LR
+  SO[销售订单] --> PP[生产计划] --> MRP[MRP 运算]
+  MRP --> WO[生产工单] --> WOD["领料 / 退料 / 补料 / 完工入库"] --> WD[仓库单据]
+  MRP --> PO["采购订单<br/>按默认供应商合并"]
+  AS[组装拆卸单] -- 确认 --> ASD["仓库出库单（子件 / 成套件）<br/>+ 入库单（成套件 / 子件）"]
+  OS[期初库存导入] --> OI[期初入库单] --> OQ[存货期初数量]
+  OP[期初往来导入] --> OB[手工应收 / 应付单]
+```
+
+### 成本与薪酬
+
+```mermaid
+flowchart LR
+  subgraph 成本核算
+    direction LR
+    FL[仓库流水] --> CC["成本核算<br/>按物料的计价方法"]
+    PA[采购金额] --> CC
+    WC[工单料工费] --> CC
+    CC --> CV[成本结转凭证]
+  end
+  subgraph 销售提成与工资
+    direction LR
+    SD[销售出库 / 退货] --> CM["销售提成<br/>fin 模块"]
+    CU[当期成本] --> CM
+    RV[收款核销] --> CM
+    CM -- 确认 --> PR[工资表]
+    HR["考勤、请假<br/>绩效、报工计件"] --> PR
+    PR --> PV["计提凭证<br/>发放凭证"]
+  end
+```
+
+### 客户与项目
+
+```mermaid
+flowchart LR
+  L[线索] --> C[客户]
+  L --> OP[商机]
+  OP -- 赢单 --> SO[销售订单]
+  PT[项目工时] --> PC[项目成本]
+  PM[项目领料] --> PC
+  EX[费用] --> PC
+  PB[项目开票] --> AR[应收单]
+```
+
+### 数据分析
+
+```mermaid
+flowchart LR
+  ALL[全部业务表] -- ETL --> DW["数据仓库<br/>bi_fact_*"] --> OLAP["多维分析 / 报表 / 仪表盘"]
+  JS["出入库单、库存<br/>成本、收付款"] -- 实时查询 --> JXC["进销存报表<br/>只读，不经数据仓库"]
+  SS["报工、设备、出入库<br/>发货、订单、收款、检验"] -- 实时查询 --> SCR["数据大屏<br/>只读，不经数据仓库"]
 ```
 
 联动的约定：
@@ -127,16 +187,19 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 
 采购入库 / 退货、销售出库 / 退货（`scm_trade_doc`，`ScmTradeDocService.create`）有两种录入方式，最终都走同一条「按订单出入库」的链路：
 
-```
-TradeDocRequest（orderId 为空 = 直接开单）
-  │ ScmTradeDocService.createDirect
-  │   └─ ScmOrderService.createDirect：生成隐式订单（source = DIRECT）并直接审核
-  ▼
-ScmTradeDocService.create(kind, req, order)        引用订单时直接进入这一步
-  ├─ 回写订单明细的已完成 / 已退货数量（条件更新）
-  ├─ WmsStockDocService.createConfirmed：生成一张仓库出入库单并确认（明细可带各自的仓库）
-  ├─ 重新计算订单状态
-  └─ 发布 TradeDocConfirmedEvent ─▶ fin 应收应付、mes 委外、scm 价格记忆
+```mermaid
+flowchart TD
+  REQ["TradeDocRequest<br/>orderId 为空 = 直接开单"] --> CD[ScmTradeDocService.createDirect]
+  CD --> OD["ScmOrderService.createDirect<br/>生成隐式订单并直接审核"]
+  OD --> C["ScmTradeDocService.create<br/>(kind, req, order)"]
+  REF([引用订单]) --> C
+  C --> A1["回写订单明细的<br/>已完成 / 已退货数量"]
+  C --> A2["WmsStockDocService.createConfirmed<br/>生成并确认仓库出入库单"]
+  C --> A3[重新计算订单状态]
+  C --> EV[发布 TradeDocConfirmedEvent]
+  EV --> F1[fin 应收应付]
+  EV --> F2[mes 委外]
+  EV --> F3[scm 价格记忆]
 ```
 
 ### 直接开单与隐式订单
