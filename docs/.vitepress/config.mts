@@ -1,6 +1,7 @@
 import { defineConfig, type DefaultTheme } from 'vitepress'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileTree } from './fileTree'
 
 const DOCS = path.resolve(__dirname, '..')
 const BASE = '/lemon-erp-website/'
@@ -78,7 +79,7 @@ export default defineConfig({
     ['meta', { property: 'og:description', content: '进销存、生产制造、仓储、财务、CRM、人力、项目管理、BI 与 AI，一套系统全部打通。全部功能、全部源码开放，没有商业版、没有功能限制，Apache-2.0 免费商用。' }],
     ['meta', { property: 'og:image', content: 'https://makesomefakenews.github.io/lemon-erp-website/images/home/dashboard.jpg' }]
   ],
-  markdown: { image: { lazyLoading: true } },
+  markdown: { image: { lazyLoading: true }, config: (md) => fileTree(md) },
   themeConfig: {
     logo: '/logo.svg',
     nav: [

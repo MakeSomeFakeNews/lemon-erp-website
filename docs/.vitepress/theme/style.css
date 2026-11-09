@@ -23,9 +23,22 @@
   margin: 12px 0;
 }
 
-.vp-doc table {
-  display: table;
-  width: 100%;
+/* 表格在宽屏上占满正文宽度；窄屏保留 VitePress 默认的横向滚动，避免撑宽整页 */
+@media (min-width: 768px) {
+  .vp-doc table {
+    display: table;
+    width: 100%;
+  }
+
+  /* 说明列中很长的配置项、路径、代码不能撑破表格；首列（名称）保持完整 */
+  .vp-doc td:not(:first-child),
+  .vp-doc td:not(:first-child) code {
+    overflow-wrap: anywhere;
+  }
+
+  .vp-doc td:first-child code {
+    white-space: nowrap;
+  }
 }
 
 .vp-doc th {
@@ -35,4 +48,115 @@
 /* 首页特性卡片 */
 .VPFeature .title {
   font-size: 17px;
+}
+
+/* 自适应宽度：VitePress 默认首页最宽 1152px、正文最宽 688px，大屏上显得很窄，按屏幕宽度分档放宽 */
+:root {
+  --site-max-width: 1152px;
+  --doc-max-width: 688px;
+}
+
+@media (min-width: 1440px) {
+  :root {
+    --vp-layout-max-width: 1600px;
+    --site-max-width: 1280px;
+    --doc-max-width: 860px;
+  }
+}
+
+@media (min-width: 1920px) {
+  :root {
+    --vp-layout-max-width: 1920px;
+    --site-max-width: 1440px;
+    --doc-max-width: 1000px;
+  }
+}
+
+@media (min-width: 2400px) {
+  :root {
+    --vp-layout-max-width: 2240px;
+    --site-max-width: 1680px;
+    --doc-max-width: 1120px;
+  }
+}
+
+.VPHero .container,
+.VPFeatures .container {
+  max-width: var(--site-max-width) !important;
+}
+
+/* 首页 Markdown 内容区（HomeShowcase 所在）：VPHomeContent 默认最宽 1280px，含左右各 64px 内边距 */
+.VPHome .vp-doc.container {
+  max-width: calc(var(--site-max-width) + 128px);
+}
+
+@media (min-width: 960px) {
+  .VPHero.has-image .main {
+    max-width: min(640px, 52%);
+  }
+}
+
+.VPDoc.has-aside .content-container {
+  max-width: var(--doc-max-width) !important;
+}
+
+@media (min-width: 1440px) {
+  .VPDoc:not(.has-sidebar) .container {
+    max-width: calc(var(--doc-max-width) + 320px) !important;
+  }
+
+  .VPDoc:not(.has-sidebar) .content {
+    max-width: var(--doc-max-width) !important;
+  }
+}
+
+/* 目录树（.vitepress/fileTree.ts 渲染）：左列树形线 + 文件名，右列说明可换行 */
+.vp-doc .file-tree {
+  display: grid;
+  grid-template-columns: fit-content(55%) minmax(0, 1fr);
+  column-gap: 24px;
+  margin: 16px 0;
+  padding: 16px 20px;
+  border-radius: 8px;
+  background: var(--vp-code-block-bg);
+  font-size: 13px;
+  line-height: 1.75;
+  overflow-x: auto;
+}
+
+.vp-doc .file-tree .ft-name {
+  display: flex;
+  min-width: 0;
+  font-family: var(--vp-font-family-mono);
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc .file-tree .ft-prefix {
+  flex: none;
+  white-space: pre;
+  color: var(--vp-c-text-3);
+}
+
+.vp-doc .file-tree .ft-file {
+  overflow-wrap: anywhere;
+}
+
+.vp-doc .file-tree .ft-desc {
+  color: var(--vp-c-text-2);
+  overflow-wrap: anywhere;
+}
+
+.vp-doc .file-tree .ft-gap {
+  grid-column: 1 / -1;
+  height: 12px;
+}
+
+@media (max-width: 640px) {
+  .vp-doc .file-tree {
+    margin: 16px -24px;
+    border-radius: 0;
+    grid-template-columns: fit-content(60%) minmax(0, 1fr);
+    column-gap: 12px;
+    font-size: 12px;
+  }
 }

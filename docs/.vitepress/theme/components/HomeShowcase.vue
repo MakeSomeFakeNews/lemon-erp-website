@@ -266,7 +266,7 @@ const STACK = ['Java 17', 'Spring Boot 4.1', 'Spring Security', 'MyBatis-Plus 3.
 </template>
 
 <style scoped>
-.home { max-width: 1152px; margin: 0 auto; padding: 0 24px 96px; }
+.home { max-width: var(--site-max-width); margin: 0 auto; padding: 0 24px 96px; }
 .browser { border-radius: 12px; overflow: hidden; border: 1px solid var(--vp-c-divider); box-shadow: 0 24px 64px rgba(15, 23, 42, 0.14); background: var(--vp-c-bg); }
 .browser .bar { height: 30px; display: flex; align-items: center; gap: 7px; padding: 0 14px; background: var(--vp-c-bg-soft); border-bottom: 1px solid var(--vp-c-divider); }
 .browser .bar i { width: 11px; height: 11px; border-radius: 50%; background: #ff5f57; }
