@@ -62,9 +62,9 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 采购入库 / 退货 | 行不含税金额（本位币，含促销、返利、整单优惠分摊）/ 数量，同时作为业务单价；退货按退货单价冲减 | scm `ScmStockCosts.enrich` |
 | 销售出库 | 当前均价（`unitCost` 为空），业务单价为不含税售价 | `ScmStockCosts.enrich` |
 | 销售退货 | 该订单原销售出库的实际成本（`StockCostService.docUnitCosts`），没有时按均价 | `ScmStockCosts.originalOutCosts` |
-| 其他入库 | 表单填写的成本价，前端默认 `GET /wms/stock/unit-cost` 返回的均价，保存成本为 0 的行前二次确认 | `StockDocForm.vue` |
+| 其他入库 | 表单填写的成本价（4 位小数）；有 `wms:stock:cost` 时前端默认 `GET /wms/stock/unit-cost` 返回的均价，没有时不带出、为空按确认时的均价；保存成本为 0 的行前二次确认 | `StockDocForm.vue` |
 | 期初入库 | 导入行的 `costPrice`，为空取参考成本价 | `WmsOpeningStockService` |
-| 盘点 | 盘盈 `wms_check_item.cost_price`（空则均价），盘亏均价 | `WmsCheckService` |
+| 盘点 | 盘盈 `wms_check_item.cost_price`（空则确认时的均价；前端输入 4 位小数，有 `wms:stock:cost` 时以均价作为输入提示），盘亏均价 | `WmsCheckService` |
 | 组装 / 拆卸 | 组装：成套件 = 子件出库成本合计（`docAmount`）/ 数量；拆卸：成套件出库成本按 子件数量 × 均价 的权重 `allocate` 到子件 | `WmsAssemblyService` |
 | 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`） | `StockDocReverser` |
 | 生产领料 / 补料、其他出库、各类领用 | 当前均价 | — |
@@ -102,17 +102,22 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 功能 | 接口 / 代码 |
 | --- | --- |
 | 库存查询的均价、库存金额 | `WmsStockMapper.xml` 的 `avgCost` 片段（没有成本记录或数量为 0 且无单价时取参考成本价），寄售仓为空；合计 `GET /wms/stock/total` |
-| 当前均价（表单默认值） | `GET /wms/stock/unit-cost?materialIds=`，权限 `wms:stock:cost` 或入库单 / 盘点单的新增、修改 |
+| 当前均价（表单默认值） | `GET /wms/stock/unit-cost?materialIds=`，只要求 `wms:stock:cost`（均价是系统计算的成本，只能新增 / 修改入库单、盘点单的人拿不到）；前端没有该权限时不调用 |
 | 经营历史 | `GET /wms/stock/history`（`WmsStockQueryService.history`，前端 `components/wms/StockHistory.vue`）：期初 + 日期范围内的流水（最多 5000 条），不选仓库时排除调拨和寄售仓；日期取单据业务日期 |
 | 库存流水 | 流水分页返回 `bizPrice`、`costPrice`、`costAmount`、`partnerName`、`costEstimated` |
 
-单价和金额由按钮权限 `wms:stock:cost`（「查看成本金额」）控制，**后端不返回**（置空），不是只在前端隐藏；前端用 `hasPerm('wms:stock:cost')` 决定是否显示列。盘点单详情另外允许盘点单新增 / 修改权限查看（`costVisible`），入库单详情允许入库单新增 / 修改权限查看明细成本价。
+单价和金额由按钮权限 `wms:stock:cost`（「查看成本金额」）控制，**后端不返回**（置空），不是只在前端隐藏；前端用 `hasPerm('wms:stock:cost')` 决定是否显示列。系统计算的成本（当前均价、出库成本、确认后的实际入库成本、盘点差异金额）只给有该权限的人；没有该权限、但要录入成本价的人只能看到自己填写的值：
+
+- **盘点单详情**（`WmsCheckService.detail`）：`costVisible` = 有 `wms:stock:cost`，或盘点单**未完成**且有 `wms:check:add` / `wms:check:edit`；为假时置空 `costPrice`。当前均价 `avgCost`（`fillAvgCost`）和已完成单据的差异金额 `diffAmount`（按流水 `selectSlotCosts` 汇总）只在有 `wms:stock:cost` 时填充；按库存生成明细时同样只对有该权限的人带出均价。前端差异金额列按 `hasPerm('wms:stock:cost')` 显示；已完成单据没填成本价的盘盈行，成本价列显示 `diffAmount ÷ 盘盈数量`（实际计价单价），不再显示「默认当前均价」。
+- **出入库单详情**（`WmsStockDocService.detail`）：没有 `wms:stock:cost` 时总是置空 `bizPrice`；`costPrice` 只在入库单为**草稿**且有 `wms:in:add` / `wms:in:edit` 时保留（填写其他入库的成本价），确认后的入库单、出库单都置空。
 
 进销存报表（bi 模块 `BiJxcMapper.xml`）：`flowCost` 片段按 `wms_doc_id` 关联库存流水，汇总单据各物料的成本金额与数量；`saleUnitCost` = `COALESCE(实时出库成本单价, 当月核算单价, 参考成本价)`。资产状况、商品分析的库存金额用 `latestCost`（实时均价 → 最近一期核算单价 → 参考成本价）。详见 [进销存报表开发](./jxc-report)。
 
 ## 近似成本与升级
 
-升级前的流水没有实时计价。升级脚本按以下方式回填并标记 `cost_estimated = 1`：采购入库 / 退货取单据不含税单价，其他流水取所在月份及之前最近一期的成本核算单价，没有时取参考成本价。物料的实时成本按当前库存 × 最近一期核算单价初始化，历史完工入库的流水成本回填为材料成本（工费为 0，`cost_basis` 为空）。前端在这些行的成本价前显示「近似」标签；经营历史的期初含这类流水时返回 `openingEstimated`。
+升级前的流水没有实时计价。升级脚本按以下方式回填并标记 `cost_estimated = 1`：采购入库 / 退货取单据不含税单价，其他流水取所在月份及之前最近一期的成本核算单价，没有时取参考成本价。物料的实时成本按当前库存 × 最近一期核算单价初始化，历史完工入库的流水成本回填为材料成本（工费为 0，`cost_basis` 为空）。前端在这些行的成本价前显示「近似」标签；经营历史的期初含这类流水时返回 `openingEstimated`。工单详情的「领料 / 完工记录」（`WoDocsTab.vue`）中，`cost_basis` 为空但 `material_cost` 不为空的完工入库显示料工费合计和橙色「近似」标签（`mes.wo.cost.estimated` / `estimatedTip`），不再显示「-」。
+
+采购入库按各自的业务单价回填、出库和物料成本按核算单价，两者累计会有差额，导致经营历史的结余金额与库存查询的库存金额不一致。因此升级脚本最后把物料库存金额与流水成本累计对齐：对流水全部是回填近似成本（没有升级后业务、没有成本为空的流水）、且流水累计数量（不含供应商寄售仓）等于 `wms_material_cost.qty` 的物料，`amount` 取流水 `cost_amount` 累计，`unit_cost` 重算为 `amount / qty`（6 位小数）。已对齐的不再变化，可重复执行；累计数量为 0、金额为负的物料不处理。
 
 ## 与月末成本核算的关系
 

@@ -119,7 +119,7 @@ private DefaultPrice salesPrice(...) {
 // 打开：kind 为 SALES / PURCHASE，决定默认打开的标签页和 partnerId 的种类；传了 partnerId 时默认只看该往来单位
 referenceRef.value.open({ materialId: row.materialId, materialName: row.materialLabel, partnerId: form.partnerId, kind: 'SALES' })
 
-// pickable 时单价可点击，选中后触发 pick(price) 并关闭弹窗
+// pickable 时单价可点击，选中后触发 pick(price) 并关闭弹窗；订单、报价、出入库直接开单（TradeDocItems.vue）都传了 pickable
 function onReferencePick(price) {
   Object.assign(currentRow, { price, priceAuto: false, priceSource: undefined })
 }

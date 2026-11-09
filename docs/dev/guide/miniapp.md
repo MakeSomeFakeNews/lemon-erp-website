@@ -570,7 +570,7 @@ runAction(() => changeOpportunityStage(o.id, data), { success: t('crm.opportunit
 | 库位批次 | 每行按 `/wms/stock` 的可用库存先到期先出排序（过期的排最后），默认第一项；赠品所选库位批次不够时提交时自动拆到其他库位批次 |
 | 整单优惠 | 基数为扣除促销优惠后的合计，抹分 / 抹角 / 抹元按分计算差额累加到 `wholeDiscount` |
 
-成本金额只在后端控制：没有「查看成本金额」（`wms:stock:cost`）权限时，`/wms/stock/summary` 不返回 `unitCost`、`amount`，`/wms/stock/history` 返回 `costVisible: false` 且不带单价金额；盘点单详情的 `costVisible` 在有 `wms:stock:cost`、`wms:check:add` 或 `wms:check:edit` 时为真（小程序盘点入口要求 `wms:check:edit`，因此盘盈行总能填成本价）。页面按字段是否返回或 `costVisible` 显示，不自己判断权限。
+成本金额只在后端控制：没有「查看成本金额」（`wms:stock:cost`）权限时，`/wms/stock/summary` 不返回 `unitCost`、`amount`，`/wms/stock/history` 返回 `costVisible: false` 且不带单价金额；盘点单详情的 `costVisible` 在有 `wms:stock:cost`，或盘点单未完成且有 `wms:check:add` / `wms:check:edit` 时为真（小程序盘点入口要求 `wms:check:edit` 且只列草稿盘点单，因此盘盈行总能填成本价）；当前均价 `avgCost` 只在有 `wms:stock:cost` 时返回，没有时输入框提示「默认按确认时的当前均价」，不显示「默认均价 X」。页面按字段是否返回或 `costVisible` 显示，不自己判断权限。
 
 ## 与 Web 端共用的内容
 

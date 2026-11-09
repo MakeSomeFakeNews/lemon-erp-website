@@ -45,7 +45,7 @@ order: 20
 - 同一张收付款单只能核销同一往来单位、同一币种的单据；核销合计（`fin_settlement.amount_fc`）**不能小于 0**，可以为 0（红字冲账单、退货恰好抵消欠款）；
 - 收付款单的 `amount` / `amount_fc` 只是核销合计（实收实付），折让合计记 `discount_amount` / `discount_fc`，多收部分记 `advance_amount`（原币），都不含在 `amount` 中；
 - 不走审批时立即调用 `settle` 核销：`addSettled(本位币核销 + 本位币折让)`、`addSettledFc(原币核销 + 原币折让)`、`addDiscount`，然后 `toAdvance`；
-- 付款审批（`fin_payment`，`ApprovalFlow` `PAYMENT_FLOW`）时保存只校验未核销金额，审批通过后（`onPaymentFinished`）才核销并生成预付单；审批变量 `amount` 为核销合计的本位币；
+- 付款审批（`fin_payment`，`ApprovalFlow` `PAYMENT_FLOW`）时保存只校验未核销金额，审批通过后（`onPaymentFinished`）才核销并生成预付单；审批变量 `amount` 为实际付出的本位币 = `s.amount`（核销合计，外币为原币 × 收付款汇率）+ `advance × settleRate`（多付转预付），不能只取核销合计，否则可以把大额付款做成预付绕过金额条件；
 - 删除（未生成凭证）时按明细反向 `addSettled` / `addSettledFc` / `addDiscount`，并 `FinAdvanceService.delete(advanceId)` 删除转入的预收预付单（已冲抵或凭证已审核时会失败，整体回滚）。
 
 ### 自动核销（前端）
@@ -54,11 +54,13 @@ order: 20
 
 「自动核销」调用 `components/fin/fin.js` 的 `allocateSettle(bills, target, remainingOf)`：
 
-1. 红字单据（`remainingOf(b) < 0`）全额冲抵，目标金额相应增加；
+1. 红字单据（`remainingOf(b) < 0`）由内部的 `offsetRed` 冲抵：冲抵总额不超过蓝字单据（`remainingOf(b) > 0`）的余额合计，按 单据日期 → 到期日 → ID 从早到晚冲抵，冲不完的红字单据（或其剩余部分）不填，留待下次核销；目标金额按冲抵额相应增加；
 2. 蓝字单据按 单据日期 → 到期日 → ID 从早到晚分配，直到目标金额用完；
 3. 返回各单据的核销金额和剩余（多收）金额。
 
-`remainingOf` 传入「未核销 − 已填折让」，所以先填折让再自动核销时折让保留。票据收票、背书的 `BillSettleTable.vue` 共用这个函数。页面按 `diff = 本次金额 − 核销合计` 显示「多收」提示和「转为预收 / 预付款」勾选框，`diff < 0` 时禁止提交。
+「全部核销」调用 `settleAllAmounts(bills, remainingOf)`：蓝字单据全部按余额填满，红字单据同样经 `offsetRed` 冲抵，核销合计不会为负数；页面随后把本次金额同步为核销合计。因此冲账、退货金额大于勾选的欠款时，两个按钮都会得到核销合计为 0 的结果，可以直接提交，不需要手工改红字单据的金额。
+
+`remainingOf` 传入「未核销 − 已填折让」，所以先填折让再自动核销时折让保留。票据收票、背书的 `BillSettleTable.vue` 共用 `allocateSettle`。页面按 `diff = 本次金额 − 核销合计` 显示「多收」提示和「转为预收 / 预付款」勾选框，`diff < 0` 时禁止提交。
 
 ### 折让记录
 
@@ -96,7 +98,7 @@ order: 20
 | 操作 | 接口 | 权限 | 说明 |
 | --- | --- | --- | --- |
 | 列表 / 详情 | `GET /fin/offset`、`/{id}` | `fin:offset:list` | `FinOffsetMapper.selectPageList` / `selectDetail` 关联红字单据的核销金额、凭证号和状态 |
-| 新增 / 修改 | `POST` / `PUT /{id}` | `fin:offset:add` / `edit` | `OffsetRequests.Save`；修改用条件更新，只能改待复核的 |
+| 新增 / 修改 | `POST` / `PUT /{id}` | `fin:offset:add` / `edit` | `OffsetRequests.Save`；修改用条件更新，只能改待复核的。`handlerId` 不传时：新增取当前用户，修改保留原经办人（原来也没有时取当前用户） |
 | 删除 | `DELETE /{ids}` | `fin:offset:remove` | 只能删待复核的 |
 | 复核 | `POST /{id}/review` | `fin:offset:review` | 见下文 |
 | 取消复核 | `POST /{id}/cancel-review` | `fin:offset:review` | 见下文 |
@@ -146,7 +148,7 @@ order: 20
 | `model/AccountRole`、`model/BillSource`、`model/OffsetStatus` | 凭证用途、单据来源 `OFFSET`、冲账单状态 |
 | `service/FinBizRules` | `fin.offset.reviewSeparate` |
 | `mapper/fin/FinSettlementItemMapper.xml`、`FinOffsetMapper.xml`、`FinBillMapper.xml`、`FinAdvanceMapper.xml`、`FinPartnerLedgerMapper.xml` | 折让记录、冲账单列表、核销条件更新、账龄、往来对账 |
-| 前端 `components/fin/SettlementPage.vue`、`SettlementForm.vue`、`SettlementDiscounts.vue`、`fin.js`（`allocateSettle`） | 收付款列表、新增、折让记录、自动核销 |
+| 前端 `components/fin/SettlementPage.vue`、`SettlementForm.vue`、`SettlementDiscounts.vue`、`fin.js`（`allocateSettle`、`settleAllAmounts`） | 收付款列表、新增、折让记录、自动核销 / 全部核销 |
 | 前端 `views/fin/advance/index.vue`、`views/fin/offset/index.vue`、`components/fin/BillPage.vue` | 预收预付、冲账单、应收应付（坏账按钮） |
 
 ## 扩展
