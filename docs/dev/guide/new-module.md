@@ -885,7 +885,7 @@ const rowActions = (record) => [
 - 删除等单条操作用 `useAction`，失败时请求拦截器已提示，不需要 catch；
 - 操作列用 `TableActions` + `actionColumn`：编辑、删除显示为图标（悬停显示文字），按状态用 `show`、按权限用 `perm` 控制；不常用的操作写 `more: true` 放进「更多」，规则见 [前端开发 → 操作列](./frontend#操作列)；
 - `scroll.x` 用 `useColumns` 返回的 `scrollX`；所有列默认显示，一列只放一项信息，宽度不够时横向滚动；
-- 列表列的 `dict` 让导出 Excel 时输出字典标签。
+- 列表列的 `dict` 让导出 Excel 时输出字典标签，`useColumns` 还会按当前语言最长的标签自动加宽该列（英文标签较长时不从单词中间断开）；单元格中随语言变化较大的说明文字用 `subTextWidth` 测量列宽，见 [前端开发 → 列表页](./frontend#列表页)。
 
 有明细行、字段多的单据，表单改为 `<FormDrawer page>` 子页并封装为 `components/oa/CarRequestForm.vue`，明细行用 `useLineItems` + `LineItemsTable`，详情用 `SubPage` 封装为 `CarRequestDetail.vue`，完整写法见 [单据开发公共组件](./doc-components)。
 

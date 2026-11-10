@@ -144,7 +144,7 @@ detailRef.value.open({ params: params() })
 | 商品分析 | `BiJxcAnalysisService` 的 `top`（排序依据 `GoodsRankBy`）、`slow`（阈值 `slowQty`，默认 0）、`overstock`（可销天数阈值 `overstockDays`，默认 90）、`shortage`（当前可用库存 vs 安全库存 + 未出库的销售订单，列出在途采购）、`turnover`（期初期末按库存流水推算）；均为分页查询 |
 | 客户 RFM | `selectRfm` 取期间有销售出库的客户的最近订货日期、出库单数、净销售额（不含税）；`ScmRfmService.settings(params)` 合并页面传入的参数（`mode`、`recencyDays`、`frequency`、`monetary`，不传的取业务参数 `scm.rfm.*`）并校验范围；`RfmCalculator.calculate(metrics, settings, months)` 计算：R = 最近订货距今天数、F = 每月订货次数（出库单数 ÷ `months`，`months(begin, asOf)` = 天数 ÷ 30.4375）、M = 平均每次订货金额（净销售额 ÷ 出库单数）；固定阈值（`RfmMode.THRESHOLD`）下 R ≤ 天数、F ≥ 次 / 月、M ≥ 元 / 次为高，平均分（`AVERAGE`）下五分位得分（⌈5 × 不优于它的客户占比⌉，并列同分，按单数和净额打分）不低于平均分为高；`RfmSegment.of(recent, frequent, valuable)` 分为八类。返回结果带实际使用的 `settings` 和统计月数 `months` |
 
-`RfmCalculator` 是不依赖 Spring 的纯计算类，修改打分规则时可以单独验证。客户关系的客户分析（`CrmAnalysisService.rfm`，`GET /crm/analysis/rfm?mode=&recencyDays=&frequency=&monetary=`）用同一个计算类和参数，统计近一年、金额为含税价税合计，分层返回 `RfmSegment` 枚举（前端按 `jxc.rfm.seg.*` 翻译）。前端两个页面共用分群参数条 `components/bi/RfmSettingsBar.vue`：切换方式、修改阈值后 `@apply(params)` 重新查询，「恢复默认」传 `{}`，有 `sys:bizRule:edit` 时「保存为默认」写入业务参数。
+`RfmCalculator` 是不依赖 Spring 的纯计算类，修改打分规则时可以单独验证。客户关系的客户分析（`CrmAnalysisService.rfm`，`GET /crm/analysis/rfm?mode=&recencyDays=&frequency=&monetary=`）用同一个计算类和参数，统计近一年，金额不含税（价税合计 − 税额）扣除退货，与进销存报表的客户 RFM 一致（两处共用同一个 M 阈值），分层返回 `RfmSegment` 枚举（前端按 `jxc.rfm.seg.*` 翻译）。客户分析的成交趋势（`CrmAnalysisMapper.selectMonthlySales`）、行业分布（近一年，期间与 RFM 一致：今天往前一年 + 1 天）和客户详情的近一年销售额（`CrmCustomerMapper.selectSummary`）与 RFM 同一口径：不含税净销售额 = 销售出库的（价税合计 − 税额）− 销售退货的（价税合计 − 税额），界面上标注「不含税」。前端两个页面共用分群参数条 `components/bi/RfmSettingsBar.vue`：切换方式、修改阈值后 `@apply(params)` 重新查询，「恢复默认」传 `{}`，有 `sys:bizRule:edit` 时「保存为默认」写入业务参数。
 
 ## 新增一张进销存报表
 

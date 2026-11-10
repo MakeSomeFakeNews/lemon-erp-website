@@ -77,6 +77,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 | `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（借 存货 / 贷 应付账款） |
 | `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 返利结算 / 撤销（红字单据方式；事件带 `kind`、`partnerId`） | fin 生成 / 删除红字应收单（销售返利）或红字应付单（采购返利） |
 | `WorkOrderClosedEvent` | mes | 生产工单关闭 | mes 撤销未完成的补料申请 |
+| `WorkOrderCompletedEvent` | mes | 生产工单完工（完工入库满数量，或已有完工入库且 完工 + 报废 达到工单数量而自动完工；与完工同一事务同步发布） | mes 撤销审批中、待发料的补料申请（审批中的同时撤销流程） |
 | `MaintenanceFinishedEvent` | mes | 设备维修保养完成 | fin 生成费用凭证 |
 | `SupplierClaimConfirmedEvent` / `SupplierClaimCancelledEvent` | mes | 供应商质量索赔确认 / 撤销 | fin 冲减应付 |
 | `VoucherDeletedEvent` | fin | 删除凭证 | hr 工资表、培训，fin 资产、费用，pm 项目月结解除与凭证的关联 |

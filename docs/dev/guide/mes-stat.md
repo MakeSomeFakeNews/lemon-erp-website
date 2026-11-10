@@ -29,6 +29,8 @@ WHERE id = #{id} AND status IN ('RELEASED', 'STARTED')
 | 报工有报废（`WoReportService.report`） | `completeIfDone` | 不经完工入库而完工：`MesStockCosts.applyClose` 把未转入产品的成本按关闭规则追加到已完工产品，写 `close_cost` / `close_stock_cost` |
 | 改量（`WoChangeService.changeQty`） | `completeIfDone` | 同上 |
 
+`markCompleted` 改为已完工时，在同一事务中同步发布 `WorkOrderCompletedEvent(woId)`（`mes/model`），三个入口都会走到这里。`MesSupplementService.onWorkOrderCompleted` 监听该事件，与工单关闭（`WorkOrderClosedEvent`）共用 `cancelActive`：审批中、待发料的补料申请改为已撤销，审批中且流程仍在运行的同时 `flowApi.cancel` 撤销审批流程（撤销意见「工单已完工」，存库保持中文）；已发料的不受影响。
+
 `markCompleted` 返回是否由本次改为已完工，之后照旧检查生产计划：计划下全部工单的**完工数量**达到计划数量时计划关闭——报废不算完成计划。前端 `WoDetail.vue` 对已完工工单的 `close_cost` 显示为「完工补转成本」（已关闭的仍为「关闭转出成本」）。
 
 ### 已完工工单的报废入库
@@ -40,6 +42,8 @@ WHERE id = #{id} AND status IN ('RELEASED', 'STARTED')
 报废的产品不会再生产出来，各处的在制产出改为 `qty − finished_qty − scrap_qty`（`MesWorkOrderMapper.xml`）：MRP 的在途、齐套分析的在途、可承诺量的生产在制。
 
 工序级的剩余数量由 `WoOpQty` 计算（纯函数）：`fillUpstreamScrap` 按工单分组、工序号排序后填写每道工序的前序报废合计（`MesWoOp.upstreamScrap`，非表字段），`left(woQty, op)` = 工单数量 − 前序报废 − 本工序合格 − 本工序报废。`MesBoardService`（生产看板）、`MesScheduleService`（产能负荷与排程）使用；排程按工作中心筛选时，要先对工单的**全部工序**计算前序报废再筛选。
+
+报工时本工序累计（合格 + 报废）不能超过上道工序的累计合格数（第一道为工单数量）。工单详情的工序返回还可报工的数量 `reportableQty`（`WoOpQty.fillReportable`，与报工校验一致，前序有报废时小于看板的剩余数量），Web 报工弹窗（`WoReportModal.vue`）和小程序报工页（`pkg-wms/report`）的默认合格数取它。需要首件检验的工序：`MesWoOpMapper.selectByWo` 返回 `firstArticlePending`（非表字段：`first_article = 1` 且没有已确认、结论不是不合格的首件检验单，与 `WoReportService` 的首件校验一致），为 true 时 `reportableQty` 累计不超过 1 件（默认 1，已报过 1 件为 0），两端在报工页面提示「首件检验合格前，该工序累计只能报工 1 件」；单元测试 `WoOpQtyTest` 覆盖首件上限。
 
 完工入库表单（`components/mes/WoDocForm.vue`）的默认数量也改为 `qty − finishedQty − scrapQty`；后端的上限仍是累计不超过工单数量。
 
