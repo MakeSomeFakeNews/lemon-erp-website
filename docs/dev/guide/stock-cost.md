@@ -131,6 +131,8 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 结果 | `wms_material_cost`、流水的 `cost_price` / `cost_amount` | `fin_material_cost`、成本结转凭证 |
 | 用途 | 库存金额、经营历史、进销存报表毛利 | 财务报表、毛利分析、存货科目 |
 
+月末成本结转凭证中，项目领料（`biz_type = 'PROJECT'` 的出库单，来源单号为项目编号）借记合同履约成本时按项目辅助核算：`FinCostSourceMapper.selectProjectMovements` 按 物料 × 项目 汇总领用数量（出库单 `source_no` 关联 `pm_project.code`），`CostVoucherWriter.splitByProject` 按「数量 × 本期单价」拆分，对应不到项目的部分不带项目，数量全部对应到项目时舍入尾差计入最后一个项目，每个项目一条借方分录（`VoucherLine.withProject`），与项目月结按项目贷记合同履约成本的口径一致。
+
 两者互不读取对方的结果：月末核算按流水数量和单据金额重新计价，不使用流水上的成本价。口径差异（月末一次加权的出库单价要到月末才确定、没有报工工时的工序、关闭工单的处理等）会导致金额不一致，账面以月末核算为准。
 
 ## 新增一种出入库业务时

@@ -78,6 +78,7 @@ private DefaultPrice salesPrice(...) {
 
 - `ScmPricingService` 只负责「从哪里取、按什么顺序」，各来源的查询仍在所属的 Service 中（价目表 `ScmPriceListService`、合同 `ScmPurchaseContractService`、价格列 `WmsPriceLevelService` 等）；物料、价格列来自 wms，scm 依赖 wms，属于下游调用上游。
 - 能按物料批量查询的来源（执行价、价格记忆、合同）在循环之前一次加载成 `Map`，循环中只取值；价目表（`quote`）、供货价格（`supplierPrice`）沿用原有的单物料查询，在循环中按物料调用。
+- 后端也直接复用 `defaults`：客户寄售结算（`ScmConsignService`，按结算的业务日期、各行售出数量一次取价）和外部订单导入（`ScmOrderImportService`，按下单日期、行数量逐行取价）不填单价时调用 `defaults(OrderKind.SALES, ...)`，与开单默认价一致（以前只查价目表，不认客户执行价和价格等级）；`price` 为空时报 `scm.error.materialHasNoDefaultSalesPrice` / `materialHasNoDefaultSalesPrice2`；`taxRate` 不为空时覆盖行税率。经销商门户订货仍只按价目表（`ScmPriceListService.quote`）取价，可订货清单就是价目表。
 - 开单默认价只给出建议价格，**不做校验**：最低售价 / 最高采购价的控制仍在订单保存或直接开单生成隐式订单时由 `ScmOrderPricingService.checkPriceLimit` 执行。
 
 ### 前端调用

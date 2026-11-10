@@ -138,6 +138,21 @@ order: 20
 
 前端 `components/fin/BillPage.vue` 按 `kind` 取按钮文字和弹窗说明（应付为「无法支付转销」），按钮权限 `` `fin:${kind}:baddebt` ``。
 
+## 固定资产购置与现金流量表
+
+新增固定资产（`FinAssetService`，请求 `AssetRequest`）有三种入账方式，只对新增的非期初资产生效：
+
+- 填 `supplierId`：生成来源 `ASSET` 的应付单（借 固定资产、进项税额 / 贷 应付账款），之后照常收付款核销；
+- 不填供应商、填 `payAccountId`（库存现金 / 银行存款范围内的末级科目，`FinAccountService.requireCashAccount` 校验）：直接生成未审核的购置凭证（`VoucherSource.ASSET`，日期为开始使用日期，借 固定资产（带使用部门）、进项税额 / 贷 付款账户）；与供应商同填或用于期初资产时报 `fin.error.assetPayAccountOnlyWithoutSupplier`；
+- 都不填（捐赠、投资投入、自建转入）：不生成单据，由财务手工做凭证。
+
+现金流量表（`FinAnalysisService.cashFlow`）按对方科目归类，以下两处与资产购置有关：
+
+- 付款凭证的对方科目是应付账款时，按 `FinAnalysisMapper.selectAssetPayments`（已记账付款凭证中，核销来源为 `ASSET` 的应付单金额 / 核销总额）的比例拆出一部分归入「购建固定资产、无形资产和其他长期资产支付的现金」，其余仍为「购买商品、接受劳务支付的现金」；
+- 现金流出凭证中借记了长期资产（固定资产、在建工程、无形资产）时，同一凭证中的进项税额也归入购建固定资产（直接付款购置凭证的口径）。
+
+一张凭证多个对方科目时按金额比例分摊（`FinAnalysisService.allocate`），尾差计入**最后一个基数不为 0** 的对方科目，保证各项目合计等于现金变动额、期末余额与账面一致。
+
 ## 关键类与文件
 
 | 位置 | 内容 |
