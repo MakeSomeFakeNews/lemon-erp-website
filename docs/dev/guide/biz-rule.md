@@ -49,6 +49,9 @@ order: 13
 | `scm.rfm.mode` | 客户分析 | RFM 分群方式 | 下拉（`RfmMode`） | `THRESHOLD` 固定阈值 | `ScmRfmService.settings` → `RfmCalculator`：`THRESHOLD` 按下面三个阈值判断高低，`AVERAGE` 按五分位得分与平均分比较；进销存报表客户 RFM 与客户关系客户分析共用 |
 | `scm.rfm.recencyDays` / `frequency` / `monetary` | 客户分析 | R 最近订货（天之内）/ F 订货频率（次 / 月）/ M 平均订货金额（元 / 次） | 整数 1~3650 / 小数（2 位）0~1000 / 小数（2 位）0~1 亿 | 30 / 1 / 1000 | 同上，固定阈值方式下使用；页面可临时覆盖（接口参数同名），`sys:bizRule:edit` 用户可在页面「保存为默认」 |
 | `fin.voucher.selfAudit` | 财务 | 允许审核自己制单的凭证 | 是否 | false | `FinVoucherService`：关闭时制单人不能审核自己的凭证（超级管理员除外） |
+| `fin.offset.reviewSeparate` | 财务 | 冲账单复核人不能是制单人 | 是否 | false | `FinOffsetService.review` |
+| `fin.settlement.draft` | 财务 | 收付款先存草稿 | 是否 | false | `FinSettlementService.confirmOnSave`：开启时新增、修改的收付款保存为草稿（`ApproveStatus.DRAFT`），`confirm` 后才核销；前端可读，`SettlementForm.vue` 据此显示「保存草稿」「保存并确认」，见 [应收应付核销开发](./settlement#草稿与确认) |
+| `mes.finish.kitCheck` | 生产制造 | 完工入库领料校验 | 下拉（`FinishKitCheck`） | `WARN` 提示 | `MesWoDocService.checkKit`：`BLOCK` 时累计完工超过按净领料计算的齐套数量不能入库，`WARN` 由前端确认；前端可读，见 [工单完工与生产统计](./mes-stat#完工入库领料校验) |
 | `hr.pay.monthDays` | 人力资源 | 月计薪天数 | 小数（2 位）1~31 | 21.75 | 日工资 =（基本工资 + 岗位津贴）/ 月计薪天数；月计薪小时 `monthPayHours()` = 月计薪天数 × 每日工时，用于薪资档案的小时人工成本（项目成员小时成本） |
 | `hr.pay.dayHours` | 人力资源 | 每日工时 | 小数 1~24 | 8 | 小时工资 = 日工资 / 每日工时；请假跨天时每天按此计；请假流程变量 `days`、项目工时的全天请假判断（`PmTimesheetService`） |
 | `hr.social.personalRate` / `hr.social.companyRate` | 人力资源 | 个人 / 单位社保比例（%） | 小数 0~100 | 10.5 / 26 | 员工没有社保方案时使用 |
@@ -63,7 +66,7 @@ order: 13
 | `hr.tax.table` | 人力资源 | 个税累计预扣率表 | 表格（上限、预扣率 %、速算扣除数） | 7 档综合所得预扣率表 | 除最后一档外上限必填且递增，最后一档上限留空（不限），由 `HrBizRules.validate` 校验 |
 | `hr.employee.probationMonths` | 人力资源 | 默认试用期（月） | 整数 0~12 | 3 | 录用、新增员工时的默认试用期 |
 
-定义分别在 `ScmBizRules`、`ScmRfmRules`（模块名「客户分析」，`scm.label.rfmModule`，页面上单独一个页签）、`FinBizRules`、`HrBizRules` 中（页签按 `BizRule` 的模块名分组，同一个 Gradle 模块可以登记多个模块名）；供应链、财务的标识常量定义在对应的 `*BizRules` 类里，人力资源的标识和默认值定义在 `hr/model/HrRules` 中（见下文「多个相关参数的类型化读取」）。
+定义分别在 `ScmBizRules`、`ScmRfmRules`（模块名「客户分析」，`scm.label.rfmModule`，页面上单独一个页签）、`FinBizRules`、`MesBizRules`（模块名「生产制造」）、`HrBizRules` 中（页签按 `BizRule` 的模块名分组，同一个 Gradle 模块可以登记多个模块名）；供应链、财务、生产制造的标识常量定义在对应的 `*BizRules` 类里，人力资源的标识和默认值定义在 `hr/model/HrRules` 中（见下文「多个相关参数的类型化读取」）。
 
 ## 新增一个业务参数
 

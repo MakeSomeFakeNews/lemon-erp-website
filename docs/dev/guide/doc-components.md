@@ -150,6 +150,7 @@ BigDecimal tax = amount.multiply(taxRate).divide(Decimals.HUNDRED, Decimals.MONE
 | `utils/number.js` | 金额、数量的显示与舍入 | `money`、`moneyOrBlank`、`price`、`qty`、`num`、`round2`、`round4`、`sumBy` |
 | `<FormDrawer page>` | 单据表单（子页） | 占满内容区，返回后列表状态不变 |
 | `<SubPage>` | 单据详情（子页） | 用法同 `a-drawer`，`defineExpose({ reload })` |
+| `<SourceDocLink :type :id :no :bill-kind :project-id>` | 应收应付单等的来源单号，点击打开来源单据 | 打开方式按来源类型登记在 `components/common/sourceDocs.js`，没有查看权限时只显示单号；被跳转的页面用 `useRouteOpen({ id, keyword, reload })` 处理 `?id=` / `?keyword=`，见 [应收应付核销开发](./settlement#来源单据穿透) |
 | `useBizRules({ 标识: 默认值 })` | 按业务参数显示或隐藏界面（如是否允许直接开单） | 只能读取后端在 `BizRuleProvider.publicKeys` 中声明的参数，见 [新增业务参数](./biz-rule#前端按参数显示界面-publickeys-usebizrules) |
 
 ### 供应链的单据组件

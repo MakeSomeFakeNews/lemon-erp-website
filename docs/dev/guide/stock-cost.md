@@ -83,14 +83,14 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 
 1. **标准成本**：framework 契约 `framework/finance/StandardCostProvider` 由 fin 的 `FinStandardCostProvider` 实现，取生效期间不晚于业务日期所在期间的最近一个已发布标准成本版本，单价大于 0 时按它计价，料工费按版本中的构成拆分（为空时整个单价计为材料）。mes 只依赖 framework，用 `ObjectProvider` 获取（没有 fin 时跳过）。
 2. **实际成本** = 材料 + 人工 + 制造费用：
-   - 材料 `WoFinishCost.amount`：净领料成本 = 领料 + 补料出库成本 − 退料入库成本。非最后一次完工按 BOM 用量取 min(本次应耗, 尚未被之前完工耗用的已领数量) × 净领料单价；最后一次（累计达到工单数量）取「净领料成本 − 之前已转入的材料成本」，超领由它承担；领用的物料都不在 BOM 中时按剩余数量平均。
+   - 材料 `WoFinishCost.amount`：净领料成本 = 领料 + 补料出库成本 − 退料入库成本。非最后一次完工按 BOM 用量取 min(本次应耗, 尚未被之前完工耗用的已领数量) × 净领料单价；最后一次（累计完工达到**应完工数量** = 工单数量 − 报工报废 `scrap_qty`，`MesStockCosts.targetQty`）取「净领料成本 − 之前已转入的材料成本」，超领和报废品耗用的材料由它承担；领用的物料都不在 BOM 中时按剩余数量平均。
    - 工费 `WoConversionCost.amount`：与月末核算同口径，工时 × 工作中心人工费率 / 制造费用率。有报工工时的工序按累计报工工时，非最后一次取 min(本次数量, 该工序尚未转出的合格数) × 工序工费 / 累计合格数；没有报工工时的工序按 标准工时 × 完工数量（月末核算此时没有工费）；最后一次取剩余。
 3. 既没有已计价的领料也没有工费时为 `AVERAGE`，按当前均价入库，入库后把实际计价金额记为材料成本（`docAmount`）。
 
 每张完工入库单记录口径和料工费，之后的完工按这些记录扣除已转入部分。
 
 - **完工后退料**（`afterReturn`）：按退料后的净领料把累计完工当作一次重新计算应承担的材料成本，已转入的超出部分冲减产品成本（不低于 0）。月末核算（`CostCalculator`）口径一致：本期之前已完工满数量的工单，之后的退料等剩余成本（含上期结转的在产品余额）在当期计入产品成本，不留在在产品中。
-- **提前关闭**（`closeCost` 预览、`applyClose` 执行）：未转入 = 净领料成本 − 已转入材料（不为负）+ 已发生工费 − 已转入工费。有完工时追加到产品，没有完工时为在制品损失、不进入库存。关闭确认框先调 `GET /mes/wo/{id}/close-cost`（`WoCloseCostView`，金额需要 `wms:stock:cost`）。
+- **提前关闭**（`closeCost` 预览、`applyClose` 执行）：未转入 = 净领料成本 − 已转入材料（不为负）+ 已发生工费 − 已转入工费。有完工时追加到产品，没有完工时为在制品损失、不进入库存。报工报废、改量后不经完工入库而完工时（`MesWorkOrderService.completeIfDone`）同样调用 `applyClose`，金额记在 `close_cost` / `close_stock_cost`，详情显示为「完工补转成本」，见 [工单完工与生产统计](./mes-stat#完工判断)。月末成本核算同样按 工单数量 − 报废 判断完工（`FinCostSourceMapper.selectWorkOrders`）。关闭确认框先调 `GET /mes/wo/{id}/close-cost`（`WoCloseCostView`，金额需要 `wms:stock:cost`）。
 - 冲减和追加都只计入仍在库的部分：比例 = min(产品当前计价数量 `valuedQty`, 工单完工数量) / 完工数量，写到最后一张完工入库单的流水上（`addCost`）。已出库的部分不再调整，因为实时成本没有销售成本账。
 - 已按标准成本完工的工单，这两项都不处理，差异在财务「成本差异」中分析。
 

@@ -4,7 +4,7 @@ order: 20
 
 # 应收应付核销开发
 
-本页说明 fin 模块中应收应付单的核销模型：收付款自动核销、核销折让 / 抹零（含外币）、多收转预收预付、外币预收预付、冲账单与凭证、应付坏账，以及扩展时要改的地方。代码在 `lemon-modules/lemon-fin`（包 `com.lemon.erp.modules.fin`），前端在 `lemon-web/src/components/fin`、`views/fin`。
+本页说明 fin 模块中应收应付单的核销模型：收付款自动核销、核销折让 / 抹零（含外币）、多收转预收预付、收付款中冲抵预收预付、实收为 0、收付款草稿与确认、往来汇总、来源单据穿透、外币预收预付、冲账单与凭证、应付坏账，以及扩展时要改的地方。代码在 `lemon-modules/lemon-fin`（包 `com.lemon.erp.modules.fin`），前端在 `lemon-web/src/components/fin`、`views/fin`。
 
 ## 核销模型
 
@@ -33,7 +33,7 @@ order: 20
 
 ## 收付款单
 
-`POST /fin/settlement/{receipt|payment}`，请求 `SettlementRequest`：
+`POST /fin/settlement/{receipt|payment}`（修改草稿 `PUT .../{id}`），请求 `SettlementRequest`：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -41,14 +41,16 @@ order: 20
 | `totalAmount` | 本次收付款总额，可为空（= 核销合计）；不能小于核销合计（`fin.error.settlementTotalLessThanSettled`） |
 | `toAdvance` | 总额大于核销合计时必须为 `true`（否则 `fin.error.overpaidChooseAdvance`），多出部分转预收预付 |
 | `exchangeRate` | 外币时的收付款汇率 |
+| `advances` | `SettlementAdvanceRequest(advanceId, amount)`，冲抵的预收预付（原币），见[收付款中冲抵预收预付](#收付款中冲抵预收预付) |
+| `confirm` | 开启「收付款先存草稿」时 `true` 保存并确认，否则存草稿；未开启时忽略，见[草稿与确认](#草稿与确认) |
 
 `FinSettlementService.create` 的要点：
 
-- 同一张收付款单只能核销同一往来单位、同一币种的单据；核销合计（`fin_settlement.amount_fc`）**不能小于 0**，可以为 0（红字冲账单、退货恰好抵消欠款）；
+- 同一张收付款单只能核销同一往来单位、同一币种的单据；实收实付（`fin_settlement.amount_fc` = 核销合计 − 冲抵的预收预付）**不能小于 0**，可以为 0（红字冲账单、退货或预收预付恰好抵消欠款）；
 - 收付款单的 `amount` / `amount_fc` 只是核销合计（实收实付），折让合计记 `discount_amount` / `discount_fc`，多收部分记 `advance_amount`（原币），都不含在 `amount` 中；
-- 不走审批时立即调用 `settle` 核销：`addSettled(本位币核销 + 本位币折让)`、`addSettledFc(原币核销 + 原币折让)`、`addDiscount`，然后 `toAdvance`；
-- 付款审批（`fin_payment`，`ApprovalFlow` `PAYMENT_FLOW`）时保存只校验未核销金额，审批通过后（`onPaymentFinished`）才核销并生成预付单；审批变量 `amount` 为实际付出的本位币 = `s.amount`（核销合计，外币为原币 × 收付款汇率）+ `advance × settleRate`（多付转预付），不能只取核销合计，否则可以把大额付款做成预付绕过金额条件；
-- 删除（未生成凭证）时按明细反向 `addSettled` / `addSettledFc` / `addDiscount`，并 `FinAdvanceService.delete(advanceId)` 删除转入的预收预付单（已冲抵或凭证已审核时会失败，整体回滚）。
+- `save` 先校验并保存为 `DRAFT`，生效时（`doConfirm` → `effectuate`）才核销，见[草稿与确认](#草稿与确认)；不走审批时立即核销：`addSettled(本位币核销 + 本位币折让)`、`addSettledFc(原币核销 + 原币折让)`、`addDiscount`，然后 `toAdvance`；
+- 付款审批（`fin_payment`，`ApprovalFlow` `PAYMENT_FLOW`）时确认只校验未核销金额（`checkOutstanding`），审批通过后（`onFlowFinished`）才核销并生成预付单；审批变量 `amount` 为实际付出的本位币 = `s.amount`（核销合计，外币为原币 × 收付款汇率）+ `advance × settleRate`（多付转预付），不能只取核销合计，否则可以把大额付款做成预付绕过金额条件；
+- 删除（未生成凭证）已生效的单据时按明细反向 `addSettled` / `addSettledFc` / `addDiscount`，`revokeForSettlement` 撤销收付款中的冲抵，并 `FinAdvanceService.delete(advanceId)` 删除转入的预收预付单（已冲抵或凭证已审核时会失败，整体回滚）；草稿、已拒绝的没有核销过，直接删除。
 
 ### 自动核销（前端）
 
@@ -67,6 +69,105 @@ order: 20
 ### 折让记录
 
 `GET /fin/settlement/{kind}/discounts`（权限 `fin:{kind}:list`，`SettlementDiscountRow` / `FinSettlementItemMapper.selectDiscountPage`）：已生效（`APPROVED`）收付款中 `discount <> 0` 的核销明细，可按往来单位、日期范围、收付款单号 / 原单据号查询，前端 `SettlementDiscounts.vue`（收付款页面的「折让记录」标签页，可导出）。
+
+## 收付款中冲抵预收预付
+
+issue #50。收付款表单可以勾选该单位未冲抵完的预收 / 预付款与核销单据一起冲抵，复用 `FinAdvanceService` 的冲抵逻辑，但凭证并入收付款凭证。
+
+**数据**
+
+| 表 / 字段 | 含义 |
+| --- | --- |
+| `fin_settlement_advance`（`FinSettlementAdvance`） | 收付款单选用的预收预付及冲抵金额（原币），草稿、审批中也有记录；`FinSettlementAdvanceMapper.selectBySettlement` 带出预收预付单号和余额 |
+| `fin_settlement.advance_offset` | 冲抵合计（原币） |
+| `fin_settlement_item.advance_offset` | 分配到这张单据的冲抵金额；明细的 `amount` / `amount_fc` **只记实收实付的部分**，所以账龄、提成回款等读取核销明细的口径不变 |
+| `fin_advance_apply.settlement_id` | 在收付款中冲抵的记录关联收付款单（在预收预付页面冲抵的为空），`settleNo` 为非表字段 |
+
+**流程**
+
+1. 表单通过 `GET /fin/settlement/{kind}/advances?partnerId=`（权限 `fin:{kind}:add`，`FinAdvanceService.open` / `FinAdvanceMapper.selectOpen`，`used_fc < amount_fc`，按日期从早到晚）列出可冲抵的预收预付，前端 `components/fin/SettlementAdvances.vue` 只允许勾选与核销单据同币种的；
+2. 提交 `SettlementRequest.advances`（`SettlementAdvanceRequest(advanceId, amount)`）。`save` 校验：属于该往来单位（`fin.error.advanceNotBelongPartner`）、不重复、同币种（`fin.error.settlementAdvanceCurrencyMismatch`）、不超过余额（`fin.error.totalOffsetAmountExceedsAdvanceBalance`）、冲抵合计不超过核销合计（`fin.error.advanceOffsetExceedsSettled`）、不能与 `toAdvance` 同时使用（`fin.error.advanceOffsetWithOverpaid`）；冲抵金额按单据日期分配到蓝字单据，写 `fin_settlement_item.advance_offset`；本次实收实付 `amount_fc` = 核销合计 − 冲抵合计；
+3. **生效**（`effectuate`：确认、未开启草稿时的保存，或付款审批通过，同一事务）先调用 `applyAdvances` → `FinAdvanceService.applyForSettlement(advanceId, 收付款日期, 分配的单据行, settlementId)`：与 `apply` 共用 `doApply`（校验、`addSettled`、`addUsed`、外币折算），但不生成凭证，冲抵记录写 `settlement_id`；再核销实收实付和折让；
+4. **凭证**（`generateVouchers`）：收款 借 结算账户（实收）、收款折让、`ADVANCE_RECEIVED` 预收账款（Σ `fin_advance_apply.amount`，按预收汇率）/ 贷 应收账款（核销 + 折让 + Σ `bill_amount`）；付款反之（贷 `PREPAYMENT`）；外币差额计入 `FINANCE_EXPENSE`。生成后把这些冲抵记录的 `voucher_id` 指向收付款凭证；`FinVoucherService` 删除凭证时把冲抵记录的 `voucher_id` 清空；
+5. **删除**已生效的收付款单（凭证未生成或已删除）时 `FinAdvanceService.revokeForSettlement(settlementId)`：反向 `addSettled` / `addSettledFc` / `addUsed`，删除冲抵记录，任一条件更新失败抛 `fin.error.dataChangedRefresh`；
+6. 被草稿或审批中的付款单选用（存在 `fin_settlement_advance` 记录）的预收预付不能删除：`FinAdvanceService.delete` 抛 `fin.error.advanceSelectedBySettlement`。
+
+付款审批时，确认前按最新余额校验（`checkOutstanding`，单据的核销 + 折让 + 冲抵、预收预付的余额），审批变量 `amount` 只含实付（`s.amount`）和多付转预付，冲抵部分不需要付钱，不计入。
+
+## 实收为 0 的收付款
+
+核销合计 − 冲抵合计可以为 0（欠款 1000 与冲账 −1000 合在一张单上，或欠款全部由预收冲抵），但**必须有核销明细**。没有资金分录时凭证只有往来科目一借一贷的冲抵（`partnerLine` 按蓝字、红字分两行），全部由预收冲抵时为 借 预收账款 / 贷 应收账款。
+
+前端 `SettlementForm.vue`：`canSubmit` 只要求勾选了单据（`items` 为空时不校验金额），提交时 `items` 为空先调用 `autoSettle` 按本次金额自动核销——`allocateSettle` 在核销合计为 0 时，未分配到的勾选单据保留核销 0 而不是清空，否则没有核销明细；金额校验 `amountsValid` 为 实收实付 ≥ 0、本次金额 ≥ 实收实付、多收须转预收且不能与冲抵同时使用。页面在实收为 0 时显示 `zeroTip` / `zeroWithAdvance` 提示。
+
+## 草稿与确认
+
+业务参数 `fin.settlement.draft`（`FinBizRules.SETTLEMENT_DRAFT`，默认关闭，`publicKeys` 前端可读）。收付款状态复用 `framework/workflow/ApproveStatus`，新增 **`DRAFT`**（字典 `sys_approve_status` 增加「草稿」）：
+
+| 状态 | 含义 |
+| --- | --- |
+| `DRAFT` | 草稿：只有核销明细和选用的预收预付，**没有核销**，不进入对账单、往来汇总、账龄、折让记录和凭证（这些查询都按 `status = 'APPROVED'` 或单据的 `settled_amount`） |
+| `APPROVING` | 付款审批中，同样没有核销 |
+| `APPROVED` | 已生效 |
+| `REJECTED` | 付款审批驳回 / 撤回，没有核销，可以修改或删除 |
+
+| 接口 | 权限 | 说明 |
+| --- | --- | --- |
+| `POST /fin/settlement/{kind}` | `fin:{kind}:add` | `create`：`save` 先存为 `DRAFT`，`confirmOnSave(req)`（未开启草稿，或 `req.confirm() == true`）时 `doConfirm` |
+| `PUT /fin/settlement/{kind}/{id}` | `fin:{kind}:add` | `update`：只能改 `DRAFT` / `REJECTED`（`fin.error.settlementNotEditable`），票据结算的不能改；删除原明细和选用的预收预付后重新 `save`，清空原流程实例；之后同样按 `confirmOnSave` 处理（已拒绝的付款保存即重新提交审批） |
+| `POST /fin/settlement/{kind}/{id}/confirm` | `fin:{kind}:confirm` | `confirm`：只能确认 `DRAFT`（`fin.error.settlementNotDraft`） |
+
+- 开启草稿时请求带 `confirm: true`（「保存并确认」）还需要确认权限：`FinSettlementController.checkConfirmPerm` 不满足时抛 `fin.error.noPermissionConfirmSettlement`；未开启时保存即生效，只需新增权限（与原来一致）；
+- `doConfirm`：收款或付款没有可用的审批流程时 `effectuate` 后 `StatusTransitions.change(DRAFT → APPROVED)`；付款有审批流程时 `checkOutstanding` 后 `DRAFT → APPROVING` 并发起流程，审批通过（`onFlowFinished`）再 `effectuate`；
+- 票据业务生成的收付款（`createForNote`）不存草稿，直接 `doConfirm`；
+- 删除：`DRAFT` / `REJECTED` 没有核销过，直接删除明细和选用记录；`APPROVED` 恢复核销、撤销冲抵、删除多收转入的预收预付；`APPROVING` 不能删除。
+
+前端 `SettlementForm.vue` 用 `useBizRules({ 'fin.settlement.draft': false })` 决定按钮：开启时为「保存草稿」（`confirm: false`）和带 `v-perm="fin:{kind}:confirm"` 的「保存并确认」，否则为原来的「确认收款 / 付款」（`confirm: true`）。`open({ id })` 修改时按原单据回填核销金额（`amount_fc + advance_offset`）、折让和冲抵金额，外币保留原汇率。`SettlementPage.vue` 中草稿、已拒绝（非票据）的单据有「修改」，草稿有「确认」（`useAction`），详情页底部同样。按钮权限 `fin:receipt:confirm`（菜单 1853）、`fin:payment:confirm`（1863），内置授权会计、出纳。按收付款区分的文字集中在 `components/fin/settlementConf.js`（原来在 `SettlementPage.vue` 中，往来汇总也要用）。
+
+## 往来汇总
+
+应收管理 / 应付管理的「往来汇总」页签（前端 `components/fin/PartnerSummary.vue`、展开明细 `PartnerSummaryDetail.vue`，嵌在 `BillPage.vue` 中）：
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /fin/bill/{ar,ap}/summary` | 分页，参数 `partnerId`、`keyword`（单位编码或名称）、`ownerId`（客户的 `owner_id`，供应商没有）、`onlyBalance`（默认 true），返回 `PartnerSummaryRow` |
+| `GET /fin/bill/{ar,ap}/summary/total` | 同样条件的合计行 |
+
+权限同应收 / 应付的查看（`fin:{ar,ap}:list`）。实现在 `FinPartnerLedgerService.summary` / `summaryTotal`，SQL 为 `FinPartnerLedgerMapper.xml` 的 `summaryRows` 片段：
+
+- `opening`：`source_type = 'MANUAL'`（期初 / 手工）的 `amount − settled_amount`；
+- `bill_balance`：其他来源的 `amount − settled_amount`（红字为负数；`settled_amount` 含收付款、折让、预收预付冲抵、坏账）；
+- `advance_balance`：`fin_advance` 的 `amount − used_amount`，取负数；
+- `bad_debt`：`bad_debt_amount` 合计，已含在已核销中，单列参考；
+- `net` = `opening + bill_balance + advance_balance`，按 `net DESC` 排序；全部为本位币。
+
+与往来对账单一致：对账单截至今天的期末余额 = `net + bad_debt`（对账单不扣坏账；外币单据另有收付汇率与记账汇率的差额）。草稿、审批中的收付款没有改变单据的 `settled_amount`，所以不影响汇总。
+
+展开明细复用已有接口：`GET /fin/bill/{kind}/unsettled`、预收预付分页（需要 `fin:advance:list`）、收付款分页（需要 `fin:{receipt,payment}:list`，取最近 20 笔）。行上的「收款 / 付款」调用 `SettlementForm.open({ partnerId, partnerName })`；「对账单」跳转 `/fin/partner-statement?kind=AR&partnerId=&partnerName=`，`views/fin/partner-statement/index.vue` 读取参数后直接查询并清除地址参数。
+
+## 来源单据穿透
+
+应收应付单列表、往来汇总明细、收付款表单、收付款详情的核销明细中，来源单号用公共组件 `components/common/SourceDocLink.vue` 显示：
+
+```vue
+<SourceDocLink :type="record.sourceType" :id="record.sourceId" :no="record.sourceNo"
+               :bill-kind="record.kind" :project-id="record.projectId" />
+```
+
+打开方式登记在同目录的 `sourceDocs.js`（`SOURCE_DOCS`，按 `BillSource`）：
+
+| 方式 | 来源 | 实现 |
+| --- | --- | --- |
+| `trade` | 销售出库 / 退货、采购入库 / 退货、采购运费（打开采购入库单） | 在当前页面打开 `components/scm/TradeDocDetail.vue` |
+| `ticket` / `project` | 服务收费 / 项目开票（按应收单上的 `projectId`） | 打开 `crm/TicketDetail.vue` / `pm/ProjectDetail.vue` |
+| `path` | 发运单、订单尾差（按 `billKind` 区分采购 / 销售订单）、返利（区分销售 / 采购返利）、冲账单、票据 | 跳转到页面并带 `?id=`，目标页面用 `composables/useRouteOpen` 打开详情 |
+| `path` + `byNo` | 质量索赔、固定资产（页面没有详情抽屉） | 跳转并带 `?keyword=单号` 筛选 |
+
+`perm` 为目标页面的查看权限（可按单据计算），`sourceTarget(doc, hasPerm)` 在没有登记、缺少 ID / 单号、没有权限时返回 `null`，组件只显示单号。详情组件按需 `import()`，列表中每行一个链接也不会预先加载。
+
+`useRouteOpen({ id, keyword, reload })`：`?id=` 时在 `onMounted` 中打开详情，`?keyword=` 时在 setup 阶段写入查询条件（首次加载即带上），处理后用 `router.replace` 去掉参数；页面已打开时监听参数变化再处理一次。已接入的页面：`scm/shipment`、采购 / 销售订单（`components/scm/OrderPage.vue` 原有的 `?id=` 处理，未使用 `useRouteOpen`）、`scm/rebate` 与 `purchase-rebate`（`RebatePage.vue`）、`fin/offset`、`fin/note`、`qms/claim`、`fin/asset`。
+
+**新增来源类型**时：在 `sourceDocs.js` 登记打开方式和权限，目标页面加 `useRouteOpen`；后端返回的应收应付单 / 核销明细要带 `sourceType`、`sourceId`、`sourceNo`（项目开票还要 `projectId`）。
 
 ## 外币折算 `ForeignAmounts`
 
@@ -158,15 +259,19 @@ order: 20
 
 | 位置 | 内容 |
 | --- | --- |
-| `service/FinSettlementService` | 收付款新增、核销、折让、多收转预收、审批回调、删除、凭证、折让记录 |
+| `service/FinSettlementService` | 收付款新增、修改、确认（草稿）、核销、折让、多收转预收、冲抵预收预付、审批回调、删除、凭证、折让记录 |
 | `service/ForeignAmounts` | 外币核销、折让、冲抵的本位币折算 |
-| `service/FinAdvanceService` | 预收预付登记（含外币）、冲抵、删除 |
+| `service/FinAdvanceService` | 预收预付登记（含外币）、冲抵（`apply`、收付款中的 `applyForSettlement` / `revokeForSettlement`）、删除 |
+| `service/FinPartnerLedgerService`、`mapper/fin/FinPartnerLedgerMapper.xml` | 往来对账单、往来汇总（`summary` / `summaryTotal`） |
+| `entity/FinSettlementAdvance`、`mapper/fin/FinSettlementAdvanceMapper.xml` | 收付款选用的预收预付 |
 | `service/FinOffsetService`、`controller/FinOffsetController` | 冲账单 |
 | `service/FinBillService` | `createOffsetBill`、`deleteOffsetBill`、`writeOffBadDebt`、`lines`（冲账单分录） |
 | `model/AccountRole`、`model/BillSource`、`model/OffsetStatus` | 凭证用途、单据来源 `OFFSET`、冲账单状态 |
-| `service/FinBizRules` | `fin.offset.reviewSeparate` |
+| `service/FinBizRules` | `fin.offset.reviewSeparate`、`fin.settlement.draft` |
 | `mapper/fin/FinSettlementItemMapper.xml`、`FinOffsetMapper.xml`、`FinBillMapper.xml`、`FinAdvanceMapper.xml`、`FinPartnerLedgerMapper.xml` | 折让记录、冲账单列表、核销条件更新、账龄、往来对账 |
-| 前端 `components/fin/SettlementPage.vue`、`SettlementForm.vue`、`SettlementDiscounts.vue`、`fin.js`（`allocateSettle`、`settleAllAmounts`） | 收付款列表、新增、折让记录、自动核销 / 全部核销 |
+| 前端 `components/fin/SettlementPage.vue`、`SettlementForm.vue`、`SettlementAdvances.vue`、`SettlementDiscounts.vue`、`settlementConf.js`、`fin.js`（`allocateSettle`、`settleAllAmounts`） | 收付款列表、新增 / 修改、冲抵预收预付、折让记录、按收付款区分的文字、自动核销 / 全部核销 |
+| 前端 `components/fin/PartnerSummary.vue`、`PartnerSummaryDetail.vue` | 往来汇总页签 |
+| 前端 `components/common/SourceDocLink.vue`、`sourceDocs.js`，`composables/useRouteOpen.js` | 来源单据穿透 |
 | 前端 `views/fin/advance/index.vue`、`views/fin/offset/index.vue`、`components/fin/BillPage.vue` | 预收预付、冲账单、应收应付（坏账按钮） |
 
 ## 扩展

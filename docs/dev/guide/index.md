@@ -1,6 +1,6 @@
 # 开发指南
 
-本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序、AI 能力扩展、开单取价、实时库存成本、进销存报表等专题。
+本章是二次开发的操作手册：先是后端、前端的编码规范，然后以一个完整的示例模块「行政办公 → 用车申请」串联起新增模块、单据开发公共组件、单据编号与打印、接入审批流、菜单授权等常见任务，最后是定时任务、缓存、新租户初始化、供应商门户、业务参数、自定义字段、国际化、微信小程序、AI 能力扩展、开单取价、实时库存成本、进销存报表、工单完工与生产统计、应收应付核销等专题。
 
 ## 内容清单
 
@@ -27,7 +27,8 @@
 | [整单优惠、尾差与买赠](./order-discount) | 整单优惠按行金额分摊（`WholeDiscounts`）、分批出入库与退货的精确结算和订单变更重新分摊（`OrderLineAmounts`）、订单关闭尾差调整单（`ScmOrderCloseAdjuster`、`OrderCloseAdjustedEvent`）、直接开单买赠（`DirectGifts`、`giftRows.js`）、`WholeDiscountBar` |
 | [实时库存成本](./stock-cost) | 移动加权平均的计价模型（`MovingAverage`）与写入时机（`StockService.apply` → `StockCostService.price`，按物料 ID 加行锁）、流水的业务单价 / 成本价 / 往来单位、各类业务的成本来源、生产完工的标准成本与实际料工费（`MesStockCosts`）、寄售仓、权限、近似成本、与月末成本核算的关系 |
 | [进销存报表开发](./jxc-report) | bi 模块实时查询业务表的报表：口径与公共 SQL 片段、数据权限、汇总维度 `JxcDimension` 及如何扩展、汇总 → 明细 → 单据的穿透、经营状况 / 商品分析 / RFM |
-| [应收应付核销开发](./settlement) | fin 模块的核销模型：收付款自动核销（`allocateSettle`）、折让 / 抹零与外币折算（`ForeignAmounts`）、多收转预收预付、外币预收预付、冲账单复核与凭证（`FinOffsetService`）、应付坏账、折让与冲账的凭证科目用途 |
+| [工单完工与生产统计](./mes-stat) | 工单报工报废数量 `scrap_qty` 与完工判断（`markCompleted`、`completeIfDone`）、在制数量与工序剩余（`WoOpQty`）、完工入库的领料齐套校验（`WoKitQty`、`mes.finish.kitCheck`）、生产统计 5 张报表的接口、口径与扩展（`MesStatService`、`stat.js`） |
+| [应收应付核销开发](./settlement) | fin 模块的核销模型：收付款自动核销（`allocateSettle`）、折让 / 抹零与外币折算（`ForeignAmounts`）、多收转预收预付、收付款中冲抵预收预付、收付款草稿与确认（`ApproveStatus.DRAFT`）、往来汇总、来源单据穿透（`SourceDocLink`）、外币预收预付、冲账单复核与凭证（`FinOffsetService`）、应付坏账、折让与冲账的凭证科目用途 |
 
 ## 新功能的开发流程
 
