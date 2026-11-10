@@ -219,7 +219,7 @@ order: 12
 
 ## 生产制造
 
-<!-- 截图：biz-rule-mes.jpg（业务参数 - 生产制造页签） -->
+![业务参数 - 生产制造](/images/manual/system/biz-rule-mes.jpg)
 
 ### 完工入库领料校验
 

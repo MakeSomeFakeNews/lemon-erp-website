@@ -12,9 +12,7 @@ order: 15
 
 ![账户调拨](/images/manual/fin/transfer-list.jpg)
 
-<!-- 截图：transfer-form.jpg（新增调拨，填写手续费后显示「手续费承担方」） -->
-
-截图环境中暂无调拨数据。
+![新增调拨，填写手续费后显示「手续费承担方」](/images/manual/fin/transfer-form.jpg)
 
 ## 列表
 

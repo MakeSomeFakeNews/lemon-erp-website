@@ -12,7 +12,7 @@ order: 55
 
 供应链 → 采购 → 采购返利
 
-<!-- 截图：purchase-rebate-list.jpg（采购返利列表） -->
+![采购返利列表](/images/manual/scm/purchase-rebate-list.jpg)
 
 ## 列表
 
@@ -24,7 +24,7 @@ order: 55
 
 ## 新增 / 编辑采购返利协议
 
-<!-- 截图：purchase-rebate-form.jpg（新增采购返利协议，按项目填写金额） -->
+![新增采购返利协议 - 按项目填写金额](/images/manual/scm/purchase-rebate-form.jpg)
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ order: 55
 
 ## 协议详情
 
-<!-- 截图：purchase-rebate-detail.jpg（采购返利协议详情） -->
+![采购返利协议详情](/images/manual/scm/purchase-rebate-detail.jpg)
 
 详情显示供应商、期间、状态、兑付方式（红字应付）、计算方式、创建人和说明：
 

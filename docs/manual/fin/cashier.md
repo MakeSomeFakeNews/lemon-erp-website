@@ -43,8 +43,6 @@ order: 10
 
 ![日记账](/images/manual/fin/cashier-journal.jpg)
 
-<!-- 截图：cashier-journal.jpg 需重拍（新增「来源单据」列） -->
-
 ### 操作步骤
 
 1. 切换到「日记账」页签。
