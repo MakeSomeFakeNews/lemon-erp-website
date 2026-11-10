@@ -4,7 +4,7 @@ order: 18.5
 
 # 整单优惠、尾差与买赠
 
-采购 / 销售订单、销售报价和出入库直接开单可以填写**整单优惠**（含税金额，抹零也用它）。整单优惠不作为单独的一行，而是分摊进各行的行金额，所以下游的应收应付、库存成本、毛利、提成不需要感知它；代价是行金额不再等于 数量 × 单价，分批出入库、退货、订单变更、关闭时都要按「行金额」精确结算。本页说明这套计算的实现和关键类、字段。用户操作见手册[销售订单 - 整单优惠与抹零](../../manual/scm/sales#整单优惠与抹零)。
+采购 / 销售订单、销售报价和出入库直接开单可以填写**整单优惠**（含税金额，抹零也用它）。整单优惠不作为单独的一行，而是在内部分摊进各行的行金额，所以下游的应收应付、库存成本、毛利、提成不需要感知它；代价是行金额不再等于 数量 × 单价，分批出入库、退货、订单变更、关闭时都要按「行金额」精确结算。对用户而言优惠只在合计处体现，明细、价格记忆、价格参考仍按优惠前单价，见[显示口径](#显示口径-不改变价格体系)。本页说明这套计算的实现和关键类、字段。用户操作见手册[销售订单 - 整单优惠与抹零](../../manual/scm/sales#整单优惠与抹零)。
 
 ## 数据结构
 
@@ -21,6 +21,10 @@ order: 18.5
 | `scm_order.close_adjust`、`scm_order_item.close_adjust` | 关闭时的尾差调整（订单币种），已计入 `done_amount` |
 | `scm_order_item.close_adjust_net` | 尾差的不含税金额（本位币），采购订单计入月末成本核算 |
 | `scm_order_item.gift` | 1 为买赠的赠品行（单价 0） |
+| `scm_trade_doc.discount_amount` | 本单分摊的整单优惠（本位币，含税），优惠前合计 = 价税合计 + 本项；退货单为原单优惠分摊 |
+| `scm_trade_doc_item.gross_price` | 优惠前含税单价（本位币），为空同单价（`price` 仍是扣除分摊后的成交单价） |
+| `scm_trade_doc_item.discount_share` | 本行分摊的整单优惠（本位币，含税） |
+| `scm_inquiry_supplier.whole_discount` | 询价单供应商的整单优惠承诺 |
 
 `ScmTradeDoc.wholeDiscount`（直接开单时取隐式订单的优惠）、`ScmTradeDocItem.gift` 是非表字段，只用于列表、详情展示。
 
@@ -43,6 +47,23 @@ void apply(List<ScmOrderItem> items, BigDecimal discount)
 - 草稿编辑时前端按 `origPrice` 回填单价，保存时整单重新应用促销、返利和整单优惠；限价（`checkPriceLimit`）按原价校验。
 - 报价单（`ScmQuotationService`）只用 `allocate` 计算分摊后的税额和合计，明细单价不变；转订单时把 `wholeDiscount` 传给订单，由订单按同样规则分摊。报价审批的最低折扣率按「分摊后行金额 / (目录价 × 数量)」计算，与转成订单后的成交价一致。
 
+## 显示口径：不改变价格体系
+
+分摊只用于内部计算（部分出入库、退货、毛利、采购成本），**整单优惠不改变价格体系**（issue #43）：
+
+- **明细显示优惠前**：订单、出入库单的明细、打印显示优惠前的单价和金额。订单行按 `OrderLineAmounts.grossPrice(item)` = (行金额 + 分摊额) / 数量；出入库明细在生成时记录 `gross_price`（本位币，外币按单据汇率折算）和本行分摊额 `discount_share`，前端 `components/scm/scm.js` 的 `grossPrice(i)`（优先取 `grossPrice`，否则按订单口径计算）/ `grossAmount(i)` = `amount + discountShare` 统一换算；
+- **合计处扣减**：出入库单记录本单分摊的优惠 `scm_trade_doc.discount_amount`（= 各行 `discount_share` 之和），详情 / 打印为「优惠前合计 − 整单优惠 = 优惠后合计」；订单为 `totalAmount + wholeDiscount` − `wholeDiscount`。打印模板的合计取优惠前合计（`print.name.grossTotal` / `discountedTotal`）；
+- **退货**：按扣除优惠后的成交价退款（`returned` 本来就按 `qty × price`），退货单的 `discount_share` 为 `OrderLineAmounts.returnShare(item, qty, amount)` = 按优惠前单价计的金额 − 实际退货金额（不小于 0），即退回的那部分原单优惠，详情显示「原单优惠分摊」「退款金额」；
+- **价格记忆、价格参考、供货价格**：`ScmPriceMemoryService` 登记 `COALESCE(gross_price, price)`；`ScmPricingMapper` 的销售 / 进货历史取 `COALESCE(i.gross_price, i.price)` 和 `amount + discount_share`，进货数量的均价同口径；`ScmSupplierPriceMapper` 的采购历史同样取优惠前单价。客户下次开单不会带出分摊后的零碎单价；
+- **促销、返利抵扣**仍直接改变单价（成交价），按改变后的价格记忆；订单详情只在 `origPrice` 与优惠前单价不同时（有促销、返利）显示划线原价；
+- **引用订单开单**：`TradeDocItems.vue` 的明细按 `grossPrice` 显示，合计 = Σ `qty × grossPrice`，另按成交价估算 `netAmount`，差额显示为「订单优惠分摊」/「原单优惠分摊」，金额以后端保存结果为准。小程序订单详情（`pkg-crm/order/detail.vue`）同口径。
+
+升级脚本 `20261110_trade_discount_freight.sql` 按订单明细的分摊额回填已有出入库明细的 `gross_price`、`discount_share` 和单据的 `discount_amount`，并对含整单优惠的往来单位 × 物料重算价格记忆。
+
+## 询价的整单优惠承诺
+
+询价单录入供应商报价时可以填写整单优惠承诺（`scm_inquiry_supplier`：`inquiry_id` × `supplier_id` 唯一，`whole_discount` 按该供应商全部报价行 数量 × 单价 的合计计算，不能超过合计，`InquiryQuoteRequest.wholeDiscount`），重新录入时覆盖；详情接口返回 `offers`，比价表头显示「报价合计」和优惠。定标生成采购订单时 `ScmInquiryService.awardedDiscount` 计算带入订单的 `wholeDiscount`：全部中标取全额（不超过中标金额），部分中标按 round2(承诺 × 中标金额 / 报价合计)，再由订单按常规规则分摊。删除询价单时一并删除承诺。
+
 ## 分批出入库与退货：`OrderLineAmounts`
 
 出入库单（`ScmTradeDocService.create`）在回写订单数量后重新读取订单行，按下面的规则计算本行金额（订单币种），再用 `ScmOrderItemMapper.addAmounts` 原子累加 `done_amount` / `return_amount` / `done_share`：
@@ -53,6 +74,8 @@ void apply(List<ScmOrderItem> items, BigDecimal discount)
 | `returned(item, qty)` | 按 `qty × price`，不超过剩余的已出入库净额；退回全部实际完成数量时取剩余净额 |
 | `outboundShare(item, qty)` | 本次消耗的分摊额：剩余分摊额 × 本次数量 / 未完成数量，完成一批取剩余 |
 | `replenishShare(item, qty)` | 补发 / 补收的退货退回已消耗的分摊额（负数）；退款的退货不退回（优惠已经实现） |
+| `grossPrice(item)` | 优惠前单价 (行金额 + 分摊额) / 数量，没有分摊时即单价 |
+| `returnShare(item, qty, amount)` | 退货单本行显示的原单优惠分摊：`qty × grossPrice − amount`，不小于 0 |
 
 补发的退货扣减 `done_amount`，补发的最后一批又按 `outbound` 取回差额；退款的退货记 `return_amount`，不影响补完时的尾差。这套规则对所有订单都生效（不只是有整单优惠的），因为促销、返利分摊同样会让行金额不等于 数量 × 单价。
 
@@ -98,7 +121,7 @@ fin 的 `FinBillService.onOrderCloseAdjusted` 生成应收 / 应付单，来源 
 
 - `components/scm/WholeDiscountBar.vue`：`<WholeDiscountBar v-model:value="form.wholeDiscount" :total="优惠前合计" :symbol="symbol" />`，显示合计、优惠输入（不超过合计）、「抹零」下拉（抹去分 / 角分 / 个位：把优惠后合计按分的整数向下取整到 0.1 / 1 / 10，差额累加到优惠）和优惠后合计。只负责录入，分摊在后端完成；
 - `total` 要与后端的分摊基数一致：销售订单有促销预览时为预览的成交价按行舍入后求和（`OrderForm.vue` 的 `discountBase`），直接开单为合计 − 促销优惠（`TradeDocItems.vue`），报价为明细合计；
-- 列表、详情、打印显示优惠：`$t('scm.wholeDiscount.value', { amount })`；订单详情的「关闭尾差调整」读 `detail.closeAdjust`；
+- 列表显示优惠：`$t('scm.wholeDiscount.value', { amount })`；详情、打印的明细用 `grossPrice` / `grossAmount`，合计处列出优惠前合计、整单优惠（出入库单读 `discountAmount`）、优惠后合计；订单详情的「关闭尾差调整」读 `detail.closeAdjust`；
 - 直接开单只在不引用订单时提交 `wholeDiscount`（`TradeDocForm.vue`），引用订单时按订单已分摊的金额出入库。
 
 ## 其他入口
@@ -106,7 +129,7 @@ fin 的 `FinBillService.onOrderCloseAdjusted` 生成应收 / 应付单，来源 
 - **智能录入**：`ScmExtractSupport` 的提取字段增加 `wholeDiscount`（「整单优惠、抹零或折让金额」），提示词要求明细填优惠前单价，合计校验按优惠后的金额；
 - **外部订单导入**：`ScmOrderImportService` 支持「整单优惠」列，同一外部单号各行相同或只填一行（`scm.error.importWholeDiscountMismatch`）；
 - **经销商门户**：下单不能填优惠（价格取价目表），内勤在审核前编辑草稿订单填写；
-- **报表**：进销存报表、毛利取出入库单的行金额，已含分摊；收付款折让、冲账单、订单尾差调整只调整应收应付，只体现在资产状况中，见[进销存报表开发](./jxc-report)。
+- **报表**：进销存报表、毛利取出入库单的行金额（成交价），已扣除分摊；价格参考类查询改取优惠前单价；收付款折让、冲账单、订单尾差调整只调整应收应付，只体现在资产状况中，见[进销存报表开发](./jxc-report)。
 
 ## 扩展时注意
 

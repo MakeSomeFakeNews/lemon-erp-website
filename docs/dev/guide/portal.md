@@ -11,7 +11,8 @@ order: 12
 - 门户账号是 `sys_user.supplier_id` 不为空的用户（经销商门户为 `customer_id`），`LoginUser.isSupplier()` 为 true；
 - 在「供应链 → 供应商」资料中开通、停用、重置密码（权限 `scm:supplier:portal`，接口 `/scm/supplier/{supplierId}/portal-accounts`），由框架契约 `PortalAccounts` 定义、system 模块的 `SysPortalAccountService` 实现；开通时只分配内置的「供应商」角色（编码 `supplier`）；
 - 登录后，不论分配了什么角色，`SysLoginUserLoader` 只保留 `portal:` 开头的权限，数据权限为仅本人，部门为空；
-- 菜单只返回「供应商门户」模块（`/portal`），首页直接进入 `/portal/order`。
+- 菜单只返回「供应商门户」模块（`/portal`），首页直接进入 `/portal/order`；
+- 门户账号不是内部人员：选人接口 `GET /workflow/identity/users`（`SysFlowIdentityProvider.searchUsers`，业务表单的 `IdentityUserSelect`、审批人 / 转交的 `UserPicker`）只返回启用的内部用户，审批人解析（`listEnabledUserIds`、按角色）排除门户账号；`UserLookup.require` / `requireActive` 把门户账号视为不存在（`UserBrief.portal`），因此不能被设为负责人、业务员；部门负责人、部门添加成员用 `/system/user?internal=true`。用户管理列表照常显示门户账号。
 
 ## 三层隔离
 

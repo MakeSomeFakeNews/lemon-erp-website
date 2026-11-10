@@ -299,7 +299,8 @@ function openFlow(record) {
 | `hr_leave` | 请假 / 加班 | `HrLeaveService`：创建即发起（`start`）、撤销（`cancelIfRunning`）、区分驳回与撤销（`onFinishedWithStatus`） |
 | `scm_requisition`、`scm_quotation`、`scm_order_change` | 请购单、销售报价、订单变更 | scm |
 | `wms_check`、`wms_stock_doc` | 有差异的盘点、手工出入库与调拨确认 | wms |
-| `mes_supplement`、`mes_ecn`、`qms_ncr` | 补料申请、工程变更、不合格品评审 | mes |
+| `mes_supplement`、`qms_ncr` | 补料申请、不合格品评审 | mes |
+| `mes_ecn` | 工程变更提交 | `MesEcnService.submit`：流程变量 `reason`（字典 `mes_ecn_reason`）、`itemChanges` / `opChanges`（新旧 BOM 对比 `MesEcnService.diff` 的子件、工序变化项数）、`materialCode`、`ecnNo`，与 `MesFlowBusinesses.ecnFlow` 声明一致；审批通过后批准人为最后一步的审批人，未发布流程时提交即批准、批准人为提交人。内置模型：部门主管 → 质量工程师 → `reason` IN (CUSTOMER, QUALITY) 或 `itemChanges` ≥ 5 时总经理 → 抄送生产计划员（条件分支内多组条件为「或」） |
 | `fin_voucher`、`fin_payment`、`fin_expense`、`fin_loan` | 凭证、付款单、费用报销、员工借款 | fin |
 | `hr_leave`、`hr_recruit`、`hr_change`、`hr_payroll` | 请假加班、招聘需求、人事异动、工资表 | hr |
 | `crm_contract` | 销售合同 | crm |

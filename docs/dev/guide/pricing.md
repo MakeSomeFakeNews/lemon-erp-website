@@ -105,10 +105,11 @@ private DefaultPrice salesPrice(...) {
 | `supplierCompare` 供商对比 | 「全部数据」时取价格记忆（`PURCHASE`），否则按采购入库单计算 | 同上 | 见下文 |
 
 - 没有某一方向查看权限时，对应分区返回 `null`（不是空数组），前端据此隐藏标签页；
-- 供商 / 客户对比（`ScmPricingService.compare`）：`SecurityUtils.getDataScope().all()` 为真时直接查价格记忆（`ScmPriceMemoryMapper.selectCompare`）；否则在 `DataPermissionContext.execute(ScmConstants.TRADE_RULE, ...)` 中按看得到的销售出库 / 采购入库单现算（`ScmPricingMapper.selectTradeCompare`，口径同价格记忆：最新、最低、最高价及日期，不含退货和单价为 0 的赠品行），只列出这些单据的往来单位，价格也只来自这些单据，避免价格记忆这种汇总结果泄露其他人的成交价。前端在这两个标签页下方显示 `pricing.reference.compareScope` 说明；
+- 供商 / 客户对比（`ScmPricingService.compare`）：`SecurityUtils.getDataScope().all()` 为真时直接查价格记忆（`ScmPriceMemoryMapper.selectCompare`）；否则在 `DataPermissionContext.execute(ScmConstants.TRADE_RULE, ...)` 中按看得到的销售出库 / 采购入库单现算（`ScmPricingMapper.selectTradeCompare`，口径同价格记忆：最新、最低、最高价及日期，不含退货和单价为 0 的赠品行，价格取优惠前单价 `COALESCE(gross_price, price)`），只列出这些单据的往来单位，价格也只来自这些单据，避免价格记忆这种汇总结果泄露其他人的成交价。前端在这两个标签页下方显示 `pricing.reference.compareScope` 说明；
 - 数据权限用 `DataPermissionContext.execute(rule, () -> mapper.selectXxx(q))` 在 Service 内部启用（同一个方法里不同分区的规则不同，不能用方法注解）；
 - `kind` 是 `partnerId` 的种类：客户与供应商的 ID 不在同一张表，指定 `kind = SALES` 时 `partnerId` 只用于销售方向的分区，采购方向的分区不按往来单位筛选（`withoutPartner`），反之亦然；
-- 查询写在 `ScmPricingMapper.xml`（报价、出入库历史、进货数量）和 `ScmPriceMemoryMapper.xml`（`selectCompare`）中，往来单位的编码 / 名称筛选是公共片段 `partnerFilter`。
+- 查询写在 `ScmPricingMapper.xml`（报价、出入库历史、进货数量）和 `ScmPriceMemoryMapper.xml`（`selectCompare`）中，往来单位的编码 / 名称筛选是公共片段 `partnerFilter`；
+- 出入库历史、进货数量一律按**整单优惠前**的口径：单价 `COALESCE(i.gross_price, i.price)`、金额 `i.amount + i.discount_share`，与价格记忆一致（整单优惠只在合计处扣减，见[整单优惠 - 显示口径](./order-discount#显示口径-不改变价格体系)）；供货价格的采购历史（`ScmSupplierPriceMapper`）同样取优惠前单价。新增价格类查询时沿用这个口径。
 
 前端组件 `components/scm/PriceReference.vue`：
 

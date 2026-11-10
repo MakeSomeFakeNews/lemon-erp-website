@@ -14,7 +14,7 @@ order: 19
 | 查询条件 | `bi/dto/JxcQuery` | 日期范围（必填）、往来单位、业务员、物料、分类、品牌、区域、仓库、关键字，穿透的 `dim` + `key`，商品分析的阈值 |
 | 返回结构 | `bi/dto/JxcViews` | `Summary`（行、合计、是否截断）、`SummaryRow`、`DetailRow`、`Business`、`Assets`、`GoodsRow`、`Rfm` 等 |
 | 汇总维度 | `bi/model/JxcDimension` | 销售、进货各自可用的维度 |
-| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、`RfmScorer`（RFM 打分，纯计算） | |
+| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService` | |
 | SQL | `resources/mapper/bi/BiJxcMapper.xml` | 只读 JOIN scm、wms、fin 的表 |
 | 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
 | 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
@@ -37,9 +37,18 @@ order: 19
 
 - 金额为本位币，销售额 / 进货额为**不含税**（`i.amount - i.tax_amount`），另列价税合计；
 - 销售成本与财务「毛利分析」一致：数量 × 单据所在月份的成本核算单价（`fin_material_cost.unit_cost`），没有核算时取物料的参考成本价，并统计按参考成本计算的行数；
-- 毛利、毛利率、均价在 `BiJxcService.fillSummary` 中计算（`Decimals` 统一精度），SQL 只做求和；
+- 毛利、毛利率、均价在 `BiJxcService.fillSummary` 中计算（`Decimals` 统一精度），SQL 只做求和；销售另有坏账核销、本公司运费及扣除后的毛利，见下文；
+- 金额取出入库明细的成交金额 `amount`（已扣除整单优惠的分摊），不用优惠前单价 `gross_price`；
 - 汇总最多返回 `SUMMARY_LIMIT`（1000）行，合计（`selectTotal`）仍为全部；明细导出最多 `EXPORT_LIMIT`（5000）行；
 - 日期范围由 `checkRange` 校验：销售、进货、商品分析不超过 366 天，经营状况、RFM 不超过 731 天。
+
+### 坏账与运费的参考口径
+
+销售报表（以及财务「经营分析」的销售毛利，`FinAnalysisMapper.xml` 同样的片段）另外返回 `badDebt`、`freight`，`fillSummary` 计算 `profitAfterBadDebt` = 毛利 − 坏账、`profitAfterFreight` = 再减运费（issue #38）：
+
+- 片段 `badDebtFreight`：LEFT JOIN 销售出库单应收单（`fin_bill.kind = 'AR' AND source_type = 'SALES_OUT'`）上的 `bad_debt_amount` 合计（含税，与坏账凭证计入营业外支出的金额一致），以及该出库单已发货（`status <> 'PENDING'`）、本公司承担（`freight_bearer = 'COMPANY'`）的发运运费合计；客户承担的代垫运费不计入；
+- 片段 `docShare` 按行金额 / 单据价税合计（合计为 0 时按数量）分摊到明细，退货单为 0；
+- 只是参考口径，销售额、成本、毛利本身不变：利润表中坏账在营业外支出、运费在销售费用，都不在营业成本，不会重复扣减。前端 `JxcTradeReport.vue` / `JxcDetail.vue`、`views/fin/analysis/index.vue` 增加四列，合计有值时显示卡片。
 
 ### 数据权限
 
@@ -133,9 +142,9 @@ detailRef.value.open({ params: params() })
 | 经营状况 | `BiJxcService.business` 复用 `doSummary`：按 `MONTH` 得到走势（没有数据的月份补 0 行），按 `SALESMAN`、`CUSTOMER` 得到员工销售、客户分布（前 10 + 其他）；资金流来自 `fin_settlement`（已生效的收付款单）和 `fin_advance`（预收预付） |
 | 资产状况 | 当前时点：资金（`FinCashierService.daily`）、库存金额（`selectInventory`：当前库存 × 最近一期核算单价，没有时取参考成本价，不含供应商寄售仓）、应收应付与预收预付余额（`selectBalances`）、往来余额前 10（`selectTopBalances`）；净资产 = 资金 + 库存 + 应收 + 预付 − 应付 − 预收 |
 | 商品分析 | `BiJxcAnalysisService` 的 `top`（排序依据 `GoodsRankBy`）、`slow`（阈值 `slowQty`，默认 0）、`overstock`（可销天数阈值 `overstockDays`，默认 90）、`shortage`（当前可用库存 vs 安全库存 + 未出库的销售订单，列出在途采购）、`turnover`（期初期末按库存流水推算）；均为分页查询 |
-| 客户 RFM | `selectRfm` 取期间有销售出库的客户的最近购买日期、出库单数、净销售额，`RfmScorer.score` 按五分位打 1–5 分（⌈5 × 不优于它的客户占比⌉，并列同分），得分不低于平均分为「高」，`RfmSegment.of(r, f, m)` 分为八类 |
+| 客户 RFM | `selectRfm` 取期间有销售出库的客户的最近订货日期、出库单数、净销售额（不含税）；`ScmRfmService.settings(params)` 合并页面传入的参数（`mode`、`recencyDays`、`frequency`、`monetary`，不传的取业务参数 `scm.rfm.*`）并校验范围；`RfmCalculator.calculate(metrics, settings, months)` 计算：R = 最近订货距今天数、F = 每月订货次数（出库单数 ÷ `months`，`months(begin, asOf)` = 天数 ÷ 30.4375）、M = 平均每次订货金额（净销售额 ÷ 出库单数）；固定阈值（`RfmMode.THRESHOLD`）下 R ≤ 天数、F ≥ 次 / 月、M ≥ 元 / 次为高，平均分（`AVERAGE`）下五分位得分（⌈5 × 不优于它的客户占比⌉，并列同分，按单数和净额打分）不低于平均分为高；`RfmSegment.of(recent, frequent, valuable)` 分为八类。返回结果带实际使用的 `settings` 和统计月数 `months` |
 
-`RfmScorer` 是不依赖 Spring 的纯计算类，修改打分规则时可以单独验证。
+`RfmCalculator` 是不依赖 Spring 的纯计算类，修改打分规则时可以单独验证。客户关系的客户分析（`CrmAnalysisService.rfm`，`GET /crm/analysis/rfm?mode=&recencyDays=&frequency=&monetary=`）用同一个计算类和参数，统计近一年、金额为含税价税合计，分层返回 `RfmSegment` 枚举（前端按 `jxc.rfm.seg.*` 翻译）。前端两个页面共用分群参数条 `components/bi/RfmSettingsBar.vue`：切换方式、修改阈值后 `@apply(params)` 重新查询，「恢复默认」传 `{}`，有 `sys:bizRule:edit` 时「保存为默认」写入业务参数。
 
 ## 新增一张进销存报表
 

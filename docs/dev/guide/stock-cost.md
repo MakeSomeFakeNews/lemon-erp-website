@@ -59,7 +59,7 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 
 | 业务 | 成本单价 | 代码 |
 | --- | --- | --- |
-| 采购入库 / 退货 | 行不含税金额（本位币，含促销、返利、整单优惠分摊）/ 数量，同时作为业务单价；退货按退货单价冲减 | scm `ScmStockCosts.enrich` |
+| 采购入库 / 退货 | 行不含税金额（本位币，含促销、返利、整单优惠分摊）/ 数量，同时作为业务单价；采购入库填写了运费时加上本行分摊的运费（`freight_share`，见[业务联动 - 运费](../architecture/integration#运费)）；退货按退货单价冲减（运费不退） | scm `ScmStockCosts.enrich` |
 | 销售出库 | 当前均价（`unitCost` 为空），业务单价为不含税售价 | `ScmStockCosts.enrich` |
 | 销售退货 | 该订单原销售出库的实际成本（`StockCostService.docUnitCosts`），没有时按均价 | `ScmStockCosts.originalOutCosts` |
 | 其他入库 | 表单填写的成本价（4 位小数）；有 `wms:stock:cost` 时前端默认 `GET /wms/stock/unit-cost` 返回的均价，没有时不带出、为空按确认时的均价；保存成本为 0 的行前二次确认 | `StockDocForm.vue` |

@@ -58,8 +58,9 @@ public void bindFreightBill(Long shipmentId, Long billId) {
 
 | 回写方法 | 所属模块 | 调用时机 |
 | --- | --- | --- |
-| `ScmShipmentService.bindFreightBill` | scm | fin 处理 `ShipmentShippedEvent` 生成运费应付单后 |
-| `ScmRebateService.bindBill` | scm | fin 处理 `RebateSettledEvent` 生成红字应收单后 |
+| `ScmShipmentService.bindFreightBill` / `bindFreightArBill` | scm | fin 处理 `ShipmentShippedEvent` 生成运费应付单 / 代垫运费应收单后 |
+| `ScmTradeDocService.bindFreightBill` | scm | fin 处理 `PurchaseFreightEvent` 生成采购运费应付单后 |
+| `ScmRebateService.bindBill` | scm | fin 处理 `RebateSettledEvent` 生成红字应收单（销售返利）/ 红字应付单（采购返利）后 |
 | `QmsClaimService.bindBill` | mes | fin 处理 `SupplierClaimConfirmedEvent` 生成红字应付单后 |
 | `MesEquipmentService.bindVoucher` / `unbindVouchers` | mes | fin 处理 `MaintenanceFinishedEvent` 生成费用凭证后 / 删除凭证时 |
 
@@ -72,8 +73,9 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 | `TradeDocConfirmedEvent` | scm | 采购入库 / 退货、销售出库 / 退货确认（库存已更新） | fin 生成应付 / 应收单；mes 处理委外；scm 登记价格记忆（`ScmPriceMemoryService`） |
 | `OrderStatusChangedEvent` | scm | 订单反审核、关闭等状态变化 | mes 检查或关闭生产计划；scm 释放库存预留 |
 | `OrderDeletedEvent` | scm | 草稿订单删除 | crm 商机解除对订单的引用；scm 报价、询价、请购解除引用 |
-| `ShipmentShippedEvent` | scm | 物流发运单发货 | fin 生成运费应付单 |
-| `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 销售返利结算 / 撤销 | fin 生成 / 删除红字应收单 |
+| `ShipmentShippedEvent` | scm | 物流发运单首次发货 | fin 生成承运商运费应付单（本公司承担借 销售运费，客户承担借 代垫运费），客户承担时另生成代垫运费应收单，见[运费](#运费) |
+| `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（借 存货 / 贷 应付账款） |
+| `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 返利结算 / 撤销（红字单据方式；事件带 `kind`、`partnerId`） | fin 生成 / 删除红字应收单（销售返利）或红字应付单（采购返利） |
 | `WorkOrderClosedEvent` | mes | 生产工单关闭 | mes 撤销未完成的补料申请 |
 | `MaintenanceFinishedEvent` | mes | 设备维修保养完成 | fin 生成费用凭证 |
 | `SupplierClaimConfirmedEvent` / `SupplierClaimCancelledEvent` | mes | 供应商质量索赔确认 / 撤销 | fin 冲减应付 |
@@ -238,10 +240,27 @@ flowchart TD
 `ScmPriceMemoryService` 监听 `TradeDocConfirmedEvent`（`@EventListener`，与出入库**同一事务**），只处理销售出库、采购入库：读取单据明细，按 往来单位 × 物料 登记最新价（同一物料多行取最后一行）、最低价、最高价及各自日期，写入 `scm_price_memory`（种类 `SALES` / `PURCHASE`）。
 
 - 退货不登记，单价为 0 的行（赠品）不登记；
-- 价格为出入库明细的单价（含税、本位币）；
+- 价格为出入库明细的优惠前单价 `COALESCE(gross_price, price)`（含税、本位币）：整单优惠只在合计处扣减，不改变价格体系，见[整单优惠 - 显示口径](../guide/order-discount#显示口径-不改变价格体系)；促销、返利抵扣直接改变单价，按改变后的记；
 - 按物料 ID 顺序逐个执行 `ScmPriceMemoryMapper.upsert`（`INSERT ... ON DUPLICATE KEY UPDATE`，唯一键 `kind + partner_id + material_id + tenant_id`），并发确认不会丢失更新，固定的加锁顺序避免死锁；单据日期不早于原最新日期时才更新最新价。
 
 价格记忆是开单默认价的来源之一（销售的「最近售价」、采购的「最近进价」），也是价格参考中「客户对比」「供商对比」的数据，见 [开单取价与价格参考](../guide/pricing)。
+
+## 运费
+
+运费分两处登记，承担方用系统字典 `scm_freight_bearer`（`scm/model/FreightBearer`：`COMPANY` 本公司承担、`CUSTOMER` 客户承担（代垫）、`SUPPLIER` 供应商代垫）：
+
+**发运单（销售运费）**：`scm_shipment.freight_bearer`（`COMPANY` / `CUSTOMER`，默认 `COMPANY`）。首次发货且运费大于 0、指定了承运商或客户承担时，`ScmShipmentService` 发布 `ShipmentShippedEvent(…, customerId, bearer)`，`FinBillService.onShipmentShipped` 在同一事务中：
+
+- 指定了承运商时生成承运商应付单（来源 `SHIPMENT`），费用科目本公司承担取 `AccountRole.SALES_FREIGHT`（默认 6601）、客户承担取 `FREIGHT_ADVANCE`（默认 1221 其他应收款），凭证 借 该科目 / 贷 应付账款，回写 `bindFreightBill`；
+- 客户承担时另生成客户的代垫运费应收单（来源 `SHIPMENT`，不含税），凭证 借 应收账款 / 贷 代垫运费，与应付侧借记的代垫运费相抵，不是销售收入、不影响毛利，回写 `ScmShipmentService.bindFreightArBill`（`scm_shipment.freight_ar_bill_id`）。
+
+已生成任一单据后不能再修改运费、承担方和承运商（前端 `billed`，后端比较旧值）。
+
+**采购入库（采购运费）**：`TradeDocRequest.freight / freightBearer / carrierSupplierId`，`ScmTradeDocService.checkFreight` 校验只能是采购入库（`scm.error.freightOnlyPurchaseIn`）、承担方只能是 `SUPPLIER`（默认）或 `COMPANY`（`freightBearerInvalid`），`COMPANY` 必须选承运商（`freightSelectCarrier`）。运费由 `ScmFreights.allocate(freight, 各行不含税金额, 各行数量)` 按金额比例分摊到 `scm_trade_doc_item.freight_share`（尾差放在金额最大的一行，金额合计为 0 时按数量），单据记录 `freight`、`freight_bearer`、`carrier_supplier_id`，并发布 `PurchaseFreightEvent`（同一事务）：
+
+- `ScmStockCosts`：采购入库的实时成本单价 = (行不含税金额 + `freight_share`) / 数量；采购退货仍按退货单价冲减（运费不退）；
+- 月末成本核算：`FinCostSourceMapper` 的出入库汇总 `net` 加上 `freight_share`（其他种类为 0），计入采购金额；
+- `FinBillService.onPurchaseFreight` 生成运费应付单（来源 `BillSource.PURCHASE_FREIGHT`，字典 `fin_bill_source`「采购运费」），应付对象为供应商（代垫）或承运商（本公司承担），回写 `ScmTradeDocService.bindFreightBill`（`freight_bill_id`）；凭证 借 存货（`FinBillMapper.selectFreightByCategory` 按物料分类汇总 `freight_share`，最后一个分类取差额）/ 贷 应付账款。
 
 ## 自动凭证的科目
 

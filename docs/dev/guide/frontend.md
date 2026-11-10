@@ -159,7 +159,9 @@ onMounted(load)
 - 根元素 `class="table-page"`，表格所在卡片加 `table-card`，表格设置 `:scroll="{ x: 总宽度, y: '100%' }"`：表头固定，只有表格区域滚动，分页条始终可见；
 - `TableToolbar` 提供刷新、密度、列设置、显示 / 隐藏搜索栏、导出，默认插槽放操作按钮，`extra` 插槽放右侧附加按钮；
 - `useColumns(columns, 存储键)` 记住用户隐藏的列（只存隐藏的列，以后新增的列默认显示）；
-- 列定义加 `dict: '字典类型'` 后导出 Excel 时输出字典标签，或用 `exportValue: (record) => 值` 自定义；
+- 列定义加 `dict: '字典类型'` 后导出 Excel 时输出字典标签，或用 `exportValue: (record) => 值` 自定义；一列合并显示多项信息时用 `exportColumns: [{ title, dataIndex 或 exportValue, dict }]` 拆成多列导出。金额、数量导出原始数值，往来单位导出为「编码 名称」；
+- 查询条件放在 `<SearchForm>` 中，每个 `a-form-item` 一格，超过 3 个时可展开；收起时 1200 宽及以上条件与「查询」「重置」排在同一行（条件平分剩余宽度），放不下时按钮整体换行；日期范围等较宽的条件在 `a-form-item` 上写 `data-wide`（按两倍宽度分配）；
+- 选择内部人员的字段用 `components/common/IdentityUserSelect.vue`（`GET /workflow/identity/users`，只返回启用的内部用户，不含门户账号；选项显示「昵称 · 部门（用户名）」），保存时后端用 `UserLookup.require(Active)` 校验；人力资源业务选员工档案用 `EmployeeSelect`；
 - 操作列 `key: 'action'`、`fixed: 'right'`，按钮放在 `span.table-actions` 中；
 - 页面上的文字全部用 `$t` / `t`，列 `title` 同时用作导出 Excel 的表头，导出也会跟随界面语言。
 

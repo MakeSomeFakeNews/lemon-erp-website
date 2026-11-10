@@ -132,7 +132,7 @@ public record ConditionRule(String field, ConditionOperator operator, String val
 
 1. 按当前节点 ID 从流程设计中取出节点配置；
 2. 按 `AssigneeType` 分派给对应的 `AssigneeStrategy` 实现（启动时收集全部策略 Bean，同一类型有多个实现时启动失败）；
-3. 通过 `FlowIdentityProvider.listEnabledUserIds` 过滤掉停用的用户；
+3. 通过 `FlowIdentityProvider.listEnabledUserIds` 过滤掉停用的用户和门户账号（供应商 / 经销商门户账号不会成为审批人）；
 4. 结果为空且节点配置为「转交超级管理员」时，取拥有 `admin` 角色的用户；配置为「自动通过」时返回空集合，多实例不产生任务，直接通过。
 
 内置的四种策略：
