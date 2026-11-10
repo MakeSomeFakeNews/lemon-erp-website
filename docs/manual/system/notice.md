@@ -10,7 +10,7 @@ order: 14
 
 系统管理 → 通知公告
 
-<!-- 截图：/images/manual/system/notice-list.jpg（通知公告列表） -->
+![通知公告列表](/images/manual/system/notice-list.jpg)
 
 ### 权限
 
@@ -49,7 +49,7 @@ order: 14
 
 点击 **新增公告** 打开表单（占满内容区，返回后列表状态不变）。只有草稿和已撤回的公告可以编辑。
 
-<!-- 截图：/images/manual/system/notice-form.jpg（新增公告表单，含发布范围与 Markdown 预览） -->
+![新增公告](/images/manual/system/notice-form.jpg)
 
 | 字段 | 必填 | 说明 |
 | --- | --- | --- |
@@ -115,7 +115,7 @@ order: 14
 | 正文 | 与员工看到的样式一致：标题（置顶的带图钉）、类型、发布时间、发布人、有效期、正文和附件 |
 | 阅读情况 | 接收人名单，还没有发布过的公告此页签不可用 |
 
-<!-- 截图：/images/manual/system/notice-readers.jpg（公告详情的阅读情况页签） -->
+![公告详情的阅读情况](/images/manual/system/notice-readers.jpg)
 
 **阅读情况**：
 
