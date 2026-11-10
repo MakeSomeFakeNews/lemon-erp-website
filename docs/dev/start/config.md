@@ -103,7 +103,7 @@ SPRING_PROFILES_ACTIVE=prod java -jar lemon-erp.jar
 
 | 配置项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `lemon.user.initial-password` | `Lemon@123` | 系统参数「初始密码」的默认值：人事录用、组织同步自动开通账号时使用，须符合密码策略，首次登录要求修改 |
+| `lemon.user.initial-password` | `Lemon@123` | 系统参数「初始密码」的默认值：人事录用、组织同步自动开通账号时使用，须符合密码策略，首次登录要求修改（自动开通的账号授予内置的普通员工角色 `staff`，见 `SysOrgSyncService`） |
 
 ### lemon.cache：缓存实现
 

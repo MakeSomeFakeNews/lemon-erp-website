@@ -156,6 +156,8 @@ public record ConditionRule(String field, ConditionOperator operator, String val
 
 条件中可以引用的变量：流程表单字段（「发起申请」中直接发起的流程），或业务模块在 `FlowBusiness` 中声明、发起时传入的变量（`approvalSupport.submit` / `start` 的变量参数，底层为 `flowApi.start`）。
 
+流程详情（`WfInstanceDetailService`，`InstanceDetail`）除业务信息 `business` 外，还返回该业务流程的全部变量定义 `variables`（`FlowBusiness.Variable`，名称按请求语言翻译，不是业务单据的流程为空列表）。前端 `InstanceDetailDrawer` 把「表单字段 + 业务变量」交给流程图，条件摘要与设计器一致地显示变量名称，字典变量的取值显示为字典标签，而不是字段标识（如 `amount 大于等于 5000`）。
+
 ## 流程变量
 
 | 变量 | 说明 |

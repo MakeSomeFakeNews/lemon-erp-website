@@ -41,7 +41,7 @@ MovingAverage.Result r = MovingAverage.apply(state, qty, specifiedUnitCost, refC
 
 1. 过滤供应商寄售仓（`unvaluedWarehouses`，`WarehouseType.CONSIGN_IN`）的变动，返回 `Priced.NONE`；
 2. 按物料 ID 升序（`TreeSet`）对 `wms_material_cost` 加行锁（`WmsMaterialCostMapper.selectForUpdate`，`SELECT ... FOR UPDATE` 写在 XML 中）。还没有成本记录的物料先初始化：数量 = 当前计价库存合计（`selectValuedQty`，所以必须在库存变动之前），单价 = 参考成本价；并发初始化遇到 `DuplicateKeyException` 后重新加锁读取；
-3. 逐条计价：`TRANSFER`（含在途调拨的调出和收货）只按均价记金额、不改变状态；`IN` / `OUT` 用 `StockChange.unitCost()`；`CHECK` 盘盈用填写的成本价、盘亏按均价；
+3. 逐条计价：`TRANSFER`（含在途调拨的调出和收货）不改变状态，按均价记金额；在途调拨收货的调入行由调用方传入调出时的成本单价（`StockChange.unitCost`），调出、调入金额相抵；`IN` / `OUT` 用 `StockChange.unitCost()`；`CHECK` 盘盈用填写的成本价、盘亏按均价；
 4. 写回有变化的物料（`updateCost`），并把成本单价、金额连同业务单价、往来单位写入流水。
 
 固定的加锁顺序避免了两张单据交叉锁物料造成死锁；成本记录与库存在同一事务中更新，单据失败时一起回滚。
@@ -66,13 +66,14 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 期初入库 | 导入行的 `costPrice`，为空取参考成本价 | `WmsOpeningStockService` |
 | 盘点 | 盘盈 `wms_check_item.cost_price`（空则确认时的均价；前端输入 4 位小数，有 `wms:stock:cost` 时以均价作为输入提示），盘亏均价 | `WmsCheckService` |
 | 组装 / 拆卸 | 组装：成套件 = 子件出库成本合计（`docAmount`）/ 数量；拆卸：成套件出库成本按 子件数量 × 均价 的权重 `allocate` 到子件 | `WmsAssemblyService` |
-| 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`） | `StockDocReverser` |
+| 在途调拨收货 | 调出流水的成本单价（`StockCostService.transferOutCosts(docId, materialIds)`，取该调拨单的负数流水），没有时按均价。在途期间计价数量不变，按调出时的单价收货使调出、调入金额相抵，按流水汇总的库存金额不会与物料实时成本偏离 | `WmsStockDocService.receive` |
+| 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`）；调拨冲销不按原单成本，两边统一按均价（金额相抵） | `StockDocReverser` |
 | 生产领料 / 补料、其他出库、各类领用 | 当前均价 | — |
 | 生产退料 | 该工单该物料的领料（含补料）平均成本 | `MesStockCosts.returnUnitCosts` |
 | 完工入库 | 见下节 | `MesStockCosts.finishCost` |
 | 报废入库 | 表单填写的成本价（`WoDocItemRequest.costPrice`，需要 `wms:stock:cost`），否则均价；不分摊工单成本 | `MesWoDocService` |
 | 委外收回（加工商退回子件） | 该委外订单该子件的发料平均成本（`outsourceIssueUnitCosts`，按来源单号汇总委外发料流水） | `MesOutsourceService` |
-| 委外件收货 / 退货 | 采购入库先按加工费（不含税单价）计价；mes 监听 `TradeDocConfirmedEvent`，在同一事务中按 核销数量 × 发料平均成本 调用 `StockCostService.addCost` 追加（退货为负） | `MesOutsourceService.onTradeDocConfirmed` |
+| 委外件收货 / 退货 | 采购入库先按加工费（不含税单价）计价；mes 监听 `TradeDocConfirmedEvent`，在同一事务中按 核销数量 × 发料平均成本 调用 `StockCostService.addCost` 追加（退货为负）。委外用料只为物料属性为委外的明细自动生成；自制件偶尔委外时由用户在订单详情「委外加工明细」中选择明细（`GET /mes/outsource/{orderId}/candidates` 列出有默认 BOM、未生成用料、未收货的明细，`POST /mes/outsource/{orderId}/lines` 即 `MesOutsourceService.addLines` 按默认 BOM 生成），之后发料、核销、成本相同 | `MesOutsourceService.onTradeDocConfirmed` |
 
 `StockCostService.addCost(kind, docId, extra)` 给已确认单据追加成本：更新物料的金额和单价（数量不变）、按数量把追加额分摊到该单据该物料的流水（最后一条取尾差）、回写明细的成本单价；物料已没有计价数量时不追加，库存金额不会被减成负数，返回实际追加额。
 
@@ -88,7 +89,7 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 
 每张完工入库单记录口径和料工费，之后的完工按这些记录扣除已转入部分。
 
-- **完工后退料**（`afterReturn`）：按退料后的净领料把累计完工当作一次重新计算应承担的材料成本，已转入的超出部分冲减产品成本（不低于 0）。
+- **完工后退料**（`afterReturn`）：按退料后的净领料把累计完工当作一次重新计算应承担的材料成本，已转入的超出部分冲减产品成本（不低于 0）。月末核算（`CostCalculator`）口径一致：本期之前已完工满数量的工单，之后的退料等剩余成本（含上期结转的在产品余额）在当期计入产品成本，不留在在产品中。
 - **提前关闭**（`closeCost` 预览、`applyClose` 执行）：未转入 = 净领料成本 − 已转入材料（不为负）+ 已发生工费 − 已转入工费。有完工时追加到产品，没有完工时为在制品损失、不进入库存。关闭确认框先调 `GET /mes/wo/{id}/close-cost`（`WoCloseCostView`，金额需要 `wms:stock:cost`）。
 - 冲减和追加都只计入仍在库的部分：比例 = min(产品当前计价数量 `valuedQty`, 工单完工数量) / 完工数量，写到最后一张完工入库单的流水上（`addCost`）。已出库的部分不再调整，因为实时成本没有销售成本账。
 - 已按标准成本完工的工单，这两项都不处理，差异在财务「成本差异」中分析。
@@ -97,13 +98,15 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 
 供应商寄售仓的库存不计价。为保证计价数量始终等于自有库存，`StockDocRules.checkConsignTransfer` 禁止寄售仓与自有仓互相调拨（`wms.error.supplierConsignmentTransferNotAllowed`），只允许同一供应商的寄售仓之间调拨。寄售货物转为自有走寄售结算（采购入库到自有仓 + 寄售消耗出库），退回供应商用其他出库。
 
+在途调拨收货（`POST /wms/transfer/{id}/receive`，请求体 `TransferReceiveRequest` 的 `receiveDate`，可省略）可指定收货日期：为空取当天，不能早于调拨单的 `biz_date`（`wms.error.receiveDateBeforeTransferDate`），按收货日期做结账校验并保存到 `wms_stock_doc.receive_date`。按仓库统计的收发存（`WmsInOutMapper`）、经营历史（`WmsStockFlowMapper.historyDate`）、库龄（`FinStockAgeMapper`）和 BI 库存金额（`BiJxcMapper`）中，调入流水（数量为正）的日期取 `COALESCE(receive_date, biz_date)`。
+
 ## 查询与权限
 
 | 功能 | 接口 / 代码 |
 | --- | --- |
 | 库存查询的均价、库存金额 | `WmsStockMapper.xml` 的 `avgCost` 片段（没有成本记录或数量为 0 且无单价时取参考成本价），寄售仓为空；合计 `GET /wms/stock/total` |
 | 当前均价（表单默认值） | `GET /wms/stock/unit-cost?materialIds=`，只要求 `wms:stock:cost`（均价是系统计算的成本，只能新增 / 修改入库单、盘点单的人拿不到）；前端没有该权限时不调用 |
-| 经营历史 | `GET /wms/stock/history`（`WmsStockQueryService.history`，前端 `components/wms/StockHistory.vue`）：期初 + 日期范围内的流水（最多 5000 条），不选仓库时排除调拨和寄售仓；日期取单据业务日期 |
+| 经营历史 | `GET /wms/stock/history`（`WmsStockQueryService.history`，前端 `components/wms/StockHistory.vue`）：期初 + 日期范围内的流水（最多 5000 条），不选仓库时排除调拨和寄售仓；日期取单据业务日期，在途调拨的调入流水取收货日期（`wms_stock_doc.receive_date`） |
 | 库存流水 | 流水分页返回 `bizPrice`、`costPrice`、`costAmount`、`partnerName`、`costEstimated` |
 
 单价和金额由按钮权限 `wms:stock:cost`（「查看成本金额」）控制，**后端不返回**（置空），不是只在前端隐藏；前端用 `hasPerm('wms:stock:cost')` 决定是否显示列。系统计算的成本（当前均价、出库成本、确认后的实际入库成本、盘点差异金额）只给有该权限的人；没有该权限、但要录入成本价的人只能看到自己填写的值：

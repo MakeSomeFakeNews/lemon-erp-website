@@ -50,9 +50,11 @@ order: 13
 | `hr.pay.monthDays` | 人力资源 | 月计薪天数 | 小数（2 位）1~31 | 21.75 | 日工资 =（基本工资 + 岗位津贴）/ 月计薪天数；月计薪小时 `monthPayHours()` = 月计薪天数 × 每日工时，用于薪资档案的小时人工成本（项目成员小时成本） |
 | `hr.pay.dayHours` | 人力资源 | 每日工时 | 小数 1~24 | 8 | 小时工资 = 日工资 / 每日工时；请假跨天时每天按此计；请假流程变量 `days`、项目工时的全天请假判断（`PmTimesheetService`） |
 | `hr.social.personalRate` / `hr.social.companyRate` | 人力资源 | 个人 / 单位社保比例（%） | 小数 0~100 | 10.5 / 26 | 员工没有社保方案时使用 |
+| `hr.social.entryCutoffDay` | 人力资源 | 入职当月缴社保的截止日 | 整数 0~31 | 15 | `HrRules.paysSocial`：入职日期晚于该日的入职当月不缴（次月起缴）；31 当月都缴，0 一律次月起缴 |
+| `hr.social.leaveCutoffDay` | 人力资源 | 离职当月缴社保的起始日 | 整数 1~32 | 1 | 同上：离职日期早于该日的离职当月不缴；1 照常缴纳，32 一律不缴。当月不缴时 `HrPayrollService.calculate(..., paysSocial)` 把个人、单位社保和个人公积金置 0 |
 | `hr.attendance.lateFine` | 人力资源 | 迟到早退扣款（每次） | 小数 0~10000 | 50 | 工资表考勤扣款 |
 | `hr.attendance.lunchThresholdHours` | 人力资源 | 午休扣除阈值（小时） | 小数 0~24 | 5 | `HrAttendanceService.evaluate` → `HrRules.workHours`：打卡间隔超过该小时数（不含等于）时扣除午休 |
-| `hr.attendance.lunchBreakHours` | 人力资源 | 午休时长（小时） | 小数 0~24 | 1 | 同上，扣除的小时数，0 表示不扣；只影响之后打卡、补卡计算的出勤时长 |
+| `hr.attendance.lunchBreakHours` | 人力资源 | 午休时长（小时） | 小数 0~24 | 1 | 同上，扣除的小时数，0 表示不扣；只影响之后打卡、补卡计算的出勤时长。请假当天判断迟到早退时也留出这段午休（`evaluate(..., leaves)`：请假覆盖上班时间时迟到从请假结束 + 午休起算，覆盖下班时间时早退到请假开始 − 午休为止；请假审批通过、撤销后 `HrAttendanceService.reevaluate` 重新判断，已确认工资的月份不调整） |
 | `hr.leave.sickDeductRate` | 人力资源 | 病假扣发比例（%） | 小数 0~100 | 40 | 病假按小时工资扣发 |
 | `hr.overtime.workdayRate` / `restdayRate` / `holidayRate` | 人力资源 | 工作日 / 休息日 / 法定节假日加班倍数 | 小数 0~10 | 1.5 / 2 / 3 | 加班费 |
 | `hr.tax.threshold` | 人力资源 | 个税基本减除费用（月） | 小数 | 5000 | 累计预扣法 |

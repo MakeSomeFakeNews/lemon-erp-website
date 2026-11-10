@@ -84,7 +84,7 @@ INSERT INTO sys_menu (id, parent_id, name, type, path, component, perms, icon, s
 | 12 | 项目经理 | pm |
 | 13 | 普通员工 | staff |
 
-质量工程师、供应商、经销商等角色在后续段落中插入，按编码查询其 ID。
+质量工程师（14）、供应商、经销商、销售经理（`sales_mgr`，17）等角色在后续段落中插入，按编码查询其 ID。销售经理在 `init.sql` 中复制了销售员的全部菜单，新页面授权给销售员时也要给销售经理授权。
 
 ```sql
 -- 普通员工：使用用车申请；普通用户、总经理：只读

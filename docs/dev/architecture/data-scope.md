@@ -108,6 +108,8 @@ private ScmPurchaseContract getAccessible(Long id) {
    // create_by 不需要赋值：插入实体时由 MybatisPlusConfig 的 CreateByInnerInterceptor 自动填当前登录用户
    ```
 
+   `dept_id` 不一定是制单人部门：数据应归属执行部门时，按业务确定。例如生产工单（`mes_work_order.dept_id`）取工艺路线中第一个设置了所属车间（`mes_work_center.dept_id`）的工作中心的车间（`WoLineService.productionDept`），没有时取制单人部门，返工工单取原工单的部门；修改工作中心的车间时，第一道工序在这里的未结束工单随之调整（`MesWorkOrderMapper.updateOpenDeptByFirstWorkCenter`）。这样规则仍是「`dept_id` 或制单人」，车间主管按「本部门」、计划员按「本部门及以下」即可看到工单。
+
 2. **只用于查询**：写操作中的唯一性校验（如单号、编码是否重复）不能受数据权限影响，否则会因为看不到其他部门的数据而误判为不重复。不要把 `@DataPermission` 加在包含这类校验的写方法上。
 3. **列表与详情一致**：列表用 `@DataPermission`，按 ID 访问用 `DataScopes.require`，两者使用同一条规则（建议定义为常量）。
 4. **定时任务、异步线程中不要使用**：这些线程没有登录用户，`SecurityUtils.getDataScope()` 会抛出未登录异常。

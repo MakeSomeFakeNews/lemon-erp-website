@@ -18,6 +18,8 @@ order: 20
 | `bad_debt_amount` | 其中坏账核销（应收）/ 无法支付转销（应付） |
 | `status` | `BillStatus`：未核销 / 部分核销 / 已核销 |
 
+金额为 0 的单据（整单赠品等）没有可核销的金额，也没有分录：生成时直接为 `SETTLED`，`FinBillService` 批量生成凭证时跳过（`FinBill.zeroAmount()`，否则会报「凭证至少需要两条分录」导致同批回滚），结账检查（`FinCloseCheckService`）的「未生成凭证」不计入 `amount = 0` 的单据，前端 `BillPage.vue` 显示「金额为 0 无需凭证」且不能勾选。
+
 所有核销都经过 `FinBillMapper.addSettled`（条件更新：蓝字 `0 ≤ settled + x ≤ amount`，红字反向），失败即超过未核销金额，抛出 `fin.error.settledAmountExceedsOutstandingAmount`；原币另由 `addSettledFc` 累加。能减少单据余额的来源：
 
 | 来源 | 记录 | 代码 |
