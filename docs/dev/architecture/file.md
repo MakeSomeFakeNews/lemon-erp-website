@@ -71,12 +71,12 @@ public class WmsRecordTypes implements RecordTypeProvider {
 | --- | --- |
 | `code` | 类型编码，如 `wms_material`，即前端 `AttachmentPanel` / `ChangeLogPanel` 的 `biz-type` |
 | `name` | 名称的消息键（登记在本模块的资源包中，输出时 `Messages.get`），如 `wms.label.material` |
-| `viewPerm` | 查看附件、变更历史需要的权限，多个用逗号分隔（有其一即可，如内部与供应商门户共用的单据） |
+| `viewPerm` | 查看附件、变更历史需要的权限，多个用逗号分隔（有其一即可，如内部与供应商门户共用的单据）；为空表示登录即可，由 `loader` 判断当前用户能否访问该记录（如通知公告只给接收人看，见[通知公告 → 附件可见性](./notice#附件可见性)） |
 | `editPerm` | 上传、删除附件需要的权限，多个用逗号分隔 |
 | `rule` | 业务记录的数据权限规则（`DataPermissionRule`），为 null 不按数据权限过滤 |
 | `loader` | 按 ID 读取业务记录，在数据权限规则下执行；返回 null 表示不存在或无权访问 |
 
-登记的业务类型同时用于附件、字段变更历史和 [自定义字段](../guide/custom-field)：三者都由系统模块的 `SysRecordAccessService` 按 `viewPerm` / `editPerm` 和数据权限规则校验访问。
+登记的业务类型同时用于附件、字段变更历史和 [自定义字段](../guide/custom-field)：三者都由系统模块的 `SysRecordAccessService` 按 `viewPerm` / `editPerm` 和数据权限规则校验访问（`viewPerm` 为空时跳过权限校验，只看 `loader` 是否返回记录）。
 
 按部门隔离的单据要传入数据权限规则，例如采购合同 `new RecordType("scm_contract", "scm.label.purchaseContract", "scm:contract:list", "scm:contract:edit", ScmConstants.CONTRACT_RULE, contractMapper::selectById)`，这样其他部门的用户即使知道 ID 也无法下载附件。
 

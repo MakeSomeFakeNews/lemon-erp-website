@@ -27,6 +27,7 @@ order: 16
 | --- | --- | --- |
 | 审批 | `/workflow/task/*`、`/workflow/instance/*`、`/workflow/copy`、`/workflow/start/*`、`/workflow/identity/users` | `wf:task:todo` / `wf:task:done` / `wf:instance:mine` / `wf:copy:list` 任一；发起 `wf:start:list` |
 | 工作台、消息 | `/dashboard/business`、`/dashboard/todos`、`/system/message/*` | 登录即可 |
+| 通知公告（`pkg-notice`：工作台入口、消息页未读公告提示、列表与详情，正文用 `rich-text` 显示，附件下载后打开） | `/system/notice/my*`、`/system/attachment` | 登录即可 |
 | 员工自助 | `/hr/self/*`、`/hr/perf/appraisal/{id}` | 登录即可（需关联员工档案） |
 | 项目工时 | `/pm/my/timesheet`、`/pm/my/timesheet/tasks`、`/pm/my/tasks`、`/pm/timesheet`、`/pm/timesheet/review` | 填报登录即可（须为项目成员）：选择任务用 `GET /pm/my/timesheet/tasks?projectId=`（本人参与的项目的任务树，不需要项目权限，读取失败时改用 `/pm/my/tasks`）；审核 `pm:timesheet:list` |
 | 销售与服务 | `/crm/*`、`/scm/sales/order`、`/bi/trace/order/sales/{id}`、`/system/attachment/*` | `crm:customer:list`、`crm:followup:list`、`crm:lead:list`、`crm:opp:list`、`crm:ticket:list`、`scm:sales:list` |
@@ -72,7 +73,8 @@ lemon-mp
     ├── pkg-wms                 分包：库存、经营历史、快速开单、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
     │                           sale/ 快速开单的明细行 SaleRow.vue、lines.js、gifts.js；components/ 搜索弹层、价格参考弹层）
     ├── pkg-mes                 分包：设备、保养维修、质量检验、不合格品
-    ├── api/<区>.js              接口封装：auth、workflow、dashboard、message、hr、pm、crm、wms、mes
+    ├── pkg-notice              分包：通知公告列表、详情（markdown.js 正文转 rich-text）
+    ├── api/<区>.js              接口封装：auth、workflow、dashboard、message、notice、hr、pm、crm、wms、mes
     ├── config/entries          工作台入口登记：index.js 汇总，<区>.js 每个功能区一个文件
     ├── components/l-*          通用组件（easycom 自动引入）
     ├── composables             usePaged、useAction（runAction、scanCode、vibrate）、useTitle

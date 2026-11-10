@@ -44,6 +44,8 @@ MySQL 8 默认使用 `caching_sha2_password` 认证，在没有 SSL 的连接上
 - 后端进程设置 `TZ=Asia/Shanghai` 或 `-Duser.timezone=Asia/Shanghai`，容器中尤其要注意；
 - MySQL 服务器时区与业务时区一致（`init.sql` 中的 `NOW()` 使用服务器时区）。
 
+后端与数据库必须使用相同的时区（建议都用 `Asia/Shanghai`）：部分 SQL 用 `NOW()` 写入时间（取数据库时区），程序中的 `LocalDateTime.now()` 取 JVM 时区，两者不一致时，同一条记录中由 SQL 写入的时间与由程序写入的时间会相差若干小时。
+
 JSON 中的日期时间统一输出为 `yyyy-MM-dd HH:mm:ss`（服务器时区），不会输出 UTC 时间。
 
 ### 能在已有数据的库上重新执行 init.sql 吗？

@@ -202,4 +202,6 @@ docker compose exec -T mysql sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" lemon_
 
 **打印的 PDF 中文排版异常**：确认使用的是 `docker/backend.Dockerfile` 构建的镜像，容器内执行 `docker compose exec backend fc-list :lang=zh` 应有输出。
 
+**页面上的时间前后错位、相差若干小时**：后端与数据库要使用相同的时区（建议都用 `Asia/Shanghai`），否则 SQL 中 `NOW()` 写入的时间（数据库时区）与程序写入的时间（JVM 时区）会错位，同一张表中的时间前后不一致。自带的 `docker-compose.yml` 已给 MySQL 和后端容器都设置了 `TZ=Asia/Shanghai`；使用外部数据库时，请确认数据库的时区与后端一致，并在 `DB_URL` 中带上 `serverTimezone=Asia/Shanghai`，见[常见问题 → 时间相差 8 小时](./faq#时间相差-8-小时)。
+
 **修改了 .env 没有生效**：执行 `docker compose up -d` 重新创建容器；数据库密码只在第一次初始化时生效。

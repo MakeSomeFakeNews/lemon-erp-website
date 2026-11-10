@@ -41,6 +41,7 @@ Docker 部署时在 `environment` 中加上 `LEMON_DEMO_ENABLED: "true"`。
 | `/auth/im/callback` | 钉钉、企业微信、飞书授权回调（扫码登录、个人中心绑定） |
 | `/auth/miniapp/login`、`/auth/miniapp/choose`、`/auth/miniapp/bind` | 微信小程序登录：微信登录、选择租户、账号密码登录并绑定微信 |
 | `/system/message/read` | 标记站内消息已读 |
+| `/system/notice/my/*/read` | 员工打开通知公告时标记已读（对应的站内消息一并已读），见[通知公告](../architecture/notice#演示模式) |
 | `/bi/olap/pivot` | 多维分析查询 |
 | `/scm/promotion/preview` | 销售订单的促销预览 |
 | `/wms/location/putaway` | 上架库位建议 |
