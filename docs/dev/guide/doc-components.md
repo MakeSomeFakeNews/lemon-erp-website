@@ -460,9 +460,13 @@ defineExpose({ openCreate: drawer.openCreate, openEdit: drawer.openEdit })
 
 ```vue
 <a-button v-perm="'oa:car:add'" type="primary" @click="formRef.openCreate()">{{ $t('oa.car.create') }}</a-button>
-<a-button v-if="record.status === CarRequestStatus.DRAFT" v-perm="'oa:car:edit'" type="link" size="small" @click="formRef.openEdit(record)">
-  {{ $t('common.action.edit') }}
-</a-button>
+<!-- 操作列 -->
+<TableActions
+  :actions="[
+    { type: 'view', onClick: () => openDetail(record) },
+    { type: 'edit', perm: 'oa:car:edit', show: record.status === CarRequestStatus.DRAFT, onClick: () => formRef.openEdit(record) }
+  ]"
+/>
 
 <CarRequestForm ref="formRef" @success="onSaved" />
 <CarRequestDetail ref="detailRef" v-model:open="detailOpen" :request-id="detailId" @edit="(d) => formRef.openEdit(d)" />

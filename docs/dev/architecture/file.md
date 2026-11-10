@@ -92,7 +92,7 @@ public class WmsRecordTypes implements RecordTypeProvider {
 
 Excel 的生成和解析都在前端完成（ExcelJS），后端只接收 JSON：
 
-- **导出**：列表页把 `useTable` 返回的 `exportAll` 传给 `TableToolbar` 的 `exporter`，按当前查询条件、当前显示的列分页拉取（每页 500 条，最多 20 页即 1 万行）后生成 Excel；列定义中 `dict: '字典类型'` 导出字典标签，`exportValue: (record) => 值` 自定义；一列合并显示多项信息时用 `exportColumns: [{ title, dataIndex 或 exportValue, dict }]` 拆成多列导出（如订单的「订单 / 交货日期」导出为订单日期、交货日期两列）；操作列不导出。导出列为当前显示的列加上 `defaultHidden` 的列（用户在列设置中取消勾选的默认显示列不导出）。约定：金额、数量导出原始数值（不带货币符号和千分位），往来单位导出为「编码 名称」。采购 / 销售订单、采购入库 / 退货、销售出库 / 退货、入库单、出库单、调拨单在公共组件 `OrderPage`、`TradeDocPage`、`StockDocPage` 中接入，与列表查看权限相同，不另设导出权限。
+- **导出**：列表页把 `useTable` 返回的 `exportAll` 传给 `TableToolbar` 的 `exporter`，按当前查询条件、当前显示的列分页拉取（每页 500 条，最多 20 页即 1 万行）后生成 Excel；列定义中 `dict: '字典类型'` 导出字典标签，`exportValue: (record) => 值` 自定义；一列合并显示多项信息时用 `exportColumns: [{ title, dataIndex 或 exportValue, dict }]` 拆成多列导出（如订单的「订单 / 交货日期」导出为订单日期、交货日期两列）；操作列不导出。导出列为当前显示的列（用户在列设置中隐藏的列不导出；所有列默认显示，没有默认隐藏的列）。约定：金额、数量导出原始数值（不带货币符号和千分位），往来单位导出为「编码 名称」。采购 / 销售订单、采购入库 / 退货、销售出库 / 退货、入库单、出库单、调拨单在公共组件 `OrderPage`、`TradeDocPage`、`StockDocPage` 中接入，与列表查看权限相同，不另设导出权限。
 - **导入**：前端 `ImportModal` 下载模板、解析文件，把字典标签、名称等转换为值和 ID 后按行提交；后端接收 `ImportRequest<T>`（一次最多 2000 行），调用 `ImportExecutor.run(req, 新增方法, 校验分组)`：在一个事务中逐行做 Bean Validation 并调用业务的新增方法（与手工新增走同一套校验），收集每行的错误，任何一行出错整批回滚，返回出错的行号和原因（最多 200 条）。
 
 ```java

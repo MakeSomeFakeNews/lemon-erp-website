@@ -246,14 +246,17 @@ export const submitCarRequest = (id) => request.post(`/oa/car/${id}/submit`)
 export const withdrawCarRequest = (id) => request.post(`/oa/car/${id}/withdraw`)
 ```
 
+```js
+// 操作列（TableActions，见前端开发「操作列」）：提交、撤回是按状态出现的主操作，直接显示；审批记录放进「更多」
+const rowActions = (record) => [
+  { type: 'submit', perm: 'oa:car:submit', show: record.status === CarRequestStatus.DRAFT, onClick: () => submit(record) },
+  { key: 'withdraw', type: 'unaudit', label: t('oa.car.withdraw'), perm: 'oa:car:submit', show: record.status === CarRequestStatus.APPROVING, onClick: () => withdraw(record) },
+  { key: 'flow', type: 'history', label: t('oa.car.flowRecords'), show: !!record.flowInstanceId, more: true, onClick: () => openFlow(record) }
+]
+```
+
 ```vue
-<a-button v-if="record.status === CarRequestStatus.DRAFT" v-perm="'oa:car:submit'" type="link" size="small" @click="submit(record)">
-  {{ $t('common.action.submit') }}
-</a-button>
-<a-button v-if="record.status === CarRequestStatus.APPROVING" v-perm="'oa:car:submit'" type="link" size="small" @click="withdraw(record)">
-  {{ $t('oa.car.withdraw') }}
-</a-button>
-<a-button v-if="record.flowInstanceId" type="link" size="small" @click="openFlow(record)">{{ $t('oa.car.flowRecords') }}</a-button>
+<TableActions :actions="rowActions(record)" />
 
 <InstanceDetailDrawer v-model:open="flowOpen" :instance-id="flowInstanceId" />
 ```

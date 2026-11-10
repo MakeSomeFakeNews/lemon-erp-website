@@ -735,7 +735,7 @@ export default {
         :data-source="list"
         :loading="loading"
         :pagination="pagination"
-        :scroll="{ x: 1210, y: '100%' }"
+        :scroll="{ x: scrollX, y: '100%' }"
         @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
@@ -746,18 +746,7 @@ export default {
             <DictTag type="oa_car_status" :value="record.status" />
           </template>
           <template v-else-if="column.key === 'action'">
-            <span v-if="record.status === CarRequestStatus.DRAFT" class="table-actions">
-              <a-button v-perm="'oa:car:edit'" type="link" size="small" @click="drawer.openEdit(record)">
-                <template #icon><EditOutlined /></template>{{ $t('common.action.edit') }}
-              </a-button>
-              <span v-perm="'oa:car:remove'">
-                <a-popconfirm :title="$t('oa.car.confirmDelete', { no: record.requestNo })" @confirm="remove(record.id)">
-                  <a-button type="link" danger size="small">
-                    <template #icon><DeleteOutlined /></template>{{ $t('common.action.delete') }}
-                  </a-button>
-                </a-popconfirm>
-              </span>
-            </span>
+            <TableActions :actions="rowActions(record)" />
           </template>
         </template>
       </a-table>
@@ -805,11 +794,13 @@ export default {
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { DeleteOutlined, EditOutlined, PlusOutlined } from '@ant-design/icons-vue'
+import { PlusOutlined } from '@ant-design/icons-vue'
 import DictTag from '@/components/DictTag.vue'
 import FormDrawer from '@/components/FormDrawer.vue'
 import SearchForm from '@/components/SearchForm.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
+import TableActions from '@/components/common/TableActions.vue'
+import { actionColumn } from '@/components/common/tableActions'
 import { addCarRequest, deleteCarRequest, getCarRequest, pageCarRequest, updateCarRequest } from '@/api/oa/car'
 import { CarRequestStatus } from '@/constants/enums'
 import { useAction } from '@/composables/useAction'
@@ -831,9 +822,9 @@ const columns = [
   { title: t('common.field.status'), key: 'status', width: 100, dict: 'oa_car_status' },
   { title: t('oa.car.applicant'), dataIndex: 'createByName', width: 110 },
   { title: t('common.field.createTime'), dataIndex: 'createTime', width: 170 },
-  { title: t('common.action.operation'), key: 'action', width: 160, fixed: 'right' }
+  actionColumn(2) // 编辑、删除两个图标；右侧固定、右对齐，宽度按当前语言计算
 ]
-const { checked, visibleColumns } = useColumns(columns, 'oa-car')
+const { checked, visibleColumns, scrollX } = useColumns(columns, 'oa-car')
 const showSearch = ref(true)
 
 const query = reactive({ keyword: undefined, status: undefined })
@@ -865,8 +856,20 @@ const drawer = useFormDrawer({
 })
 const { formRef, form } = drawer
 
-// 删除：调接口 → 提示 → 刷新列表（a-popconfirm 已确认，这里不再弹确认框）
+// 删除：调接口 → 提示 → 刷新列表（操作的 confirm 已气泡确认，这里不再弹确认框）
 const remove = useAction(deleteCarRequest, { successKey: 'common.msg.deleteSuccess', reload: () => load() })
+
+// 操作列：只有草稿可编辑、删除；没有权限或不满足 show 的操作不显示
+const rowActions = (record) => [
+  { type: 'edit', perm: 'oa:car:edit', show: record.status === CarRequestStatus.DRAFT, onClick: () => drawer.openEdit(record) },
+  {
+    type: 'delete',
+    perm: 'oa:car:remove',
+    show: record.status === CarRequestStatus.DRAFT,
+    confirm: t('oa.car.confirmDelete', { no: record.requestNo }),
+    onClick: () => remove(record.id)
+  }
+]
 </script>
 
 <style scoped>
@@ -880,6 +883,8 @@ const remove = useAction(deleteCarRequest, { successKey: 'common.msg.deleteSucce
 
 - 判断状态用生成的常量 `CarRequestStatus.DRAFT`，不写 `'DRAFT'`；用车类型是业务字典，下拉选项全部来自 `dict.oa_car_type`，不写死可选值；
 - 删除等单条操作用 `useAction`，失败时请求拦截器已提示，不需要 catch；
+- 操作列用 `TableActions` + `actionColumn`：编辑、删除显示为图标（悬停显示文字），按状态用 `show`、按权限用 `perm` 控制；不常用的操作写 `more: true` 放进「更多」，规则见 [前端开发 → 操作列](./frontend#操作列)；
+- `scroll.x` 用 `useColumns` 返回的 `scrollX`；所有列默认显示，一列只放一项信息，宽度不够时横向滚动；
 - 列表列的 `dict` 让导出 Excel 时输出字典标签。
 
 有明细行、字段多的单据，表单改为 `<FormDrawer page>` 子页并封装为 `components/oa/CarRequestForm.vue`，明细行用 `useLineItems` + `LineItemsTable`，详情用 `SubPage` 封装为 `CarRequestDetail.vue`，完整写法见 [单据开发公共组件](./doc-components)。

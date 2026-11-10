@@ -338,7 +338,7 @@ function print(r) {
 }
 ```
 
-在列表的操作列或详情的 `extra` 插槽中加一个「打印」按钮调用即可。
+在列表操作列的 `TableActions` 中加一个 `{ type: 'print', onClick: () => print(record) }`（打印图标），或在详情的 `extra` 插槽中加一个「打印」按钮调用即可。
 
 ### 新增单据打印的步骤
 

@@ -98,7 +98,7 @@ async function remove(id) {
         :data-source="list"
         :loading="loading"
         :pagination="pagination"
-        :scroll="{ x: 1200, y: '100%' }"
+        :scroll="{ x: scrollX, y: '100%' }"
         @change="onTableChange"
       >
         <template #bodyCell="{ column, record }">
@@ -106,9 +106,13 @@ async function remove(id) {
             <DictTag type="wms_warehouse_type" :value="record.type" />
           </template>
           <template v-else-if="column.key === 'action'">
-            <span class="table-actions">
-              <a-button v-perm="'wms:warehouse:edit'" type="link" size="small" @click="drawer.openEdit(record)">{{ $t('common.action.edit') }}</a-button>
-            </span>
+            <TableActions
+              :actions="[
+                { type: 'edit', perm: 'wms:warehouse:edit', onClick: () => drawer.openEdit(record) },
+                { key: 'location', label: $t('wms.common.location'), icon: EnvironmentOutlined, perm: 'wms:location:list', onClick: () => toLocations(record) },
+                { type: 'delete', perm: 'wms:warehouse:remove', confirm: $t('wms.warehouse.confirmDelete', { name: record.name }), onClick: () => remove(record.id) }
+              ]"
+            />
           </template>
         </template>
       </a-table>
@@ -119,10 +123,12 @@ async function remove(id) {
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { PlusOutlined } from '@ant-design/icons-vue'
+import { EnvironmentOutlined, PlusOutlined } from '@ant-design/icons-vue'
 import DictTag from '@/components/DictTag.vue'
 import SearchForm from '@/components/SearchForm.vue'
 import TableToolbar from '@/components/TableToolbar.vue'
+import TableActions from '@/components/common/TableActions.vue'
+import { actionColumn } from '@/components/common/tableActions'
 import { pageWarehouse } from '@/api/wms/warehouse'
 import { useColumns } from '@/composables/useColumns'
 import { useDict } from '@/composables/useDict'
@@ -137,9 +143,9 @@ const columns = [
   { title: t('wms.common.warehouse'), key: 'name', width: 200 },
   { title: t('common.field.type'), key: 'type', width: 150, dict: 'wms_warehouse_type' },
   { title: t('wms.warehouse.address'), dataIndex: 'address', width: 240, ellipsis: true },
-  { title: t('common.action.operation'), key: 'action', width: 220, fixed: 'right' }
+  actionColumn(3) // 一行最多 3 个图标：编辑、库位、删除
 ]
-const { checked, visibleColumns } = useColumns(columns, 'wms-warehouse')
+const { checked, visibleColumns, scrollX } = useColumns(columns, 'wms-warehouse')
 const showSearch = ref(true)
 
 const query = reactive({ keyword: undefined, status: undefined })
@@ -156,13 +162,14 @@ onMounted(load)
 
 要点：
 
-- 根元素 `class="table-page"`，表格所在卡片加 `table-card`，表格设置 `:scroll="{ x: 总宽度, y: '100%' }"`：表头固定，只有表格区域滚动，分页条始终可见；
+- 根元素 `class="table-page"`，表格所在卡片加 `table-card`，表格设置 `:scroll="{ x: scrollX, y: '100%' }"`：表头固定，只有表格区域滚动，分页条始终可见；`scrollX` 由 `useColumns` 返回（显示中的列宽合计，有勾选列时 + 32），不要写死数字；
 - `TableToolbar` 提供刷新、密度、列设置、显示 / 隐藏搜索栏、导出，默认插槽放操作按钮，`extra` 插槽放右侧附加按钮；
-- `useColumns(columns, 存储键)` 记住用户隐藏的列（只存隐藏的列，以后新增的列默认显示）；
+- `useColumns(columns, 存储键)` 记住用户隐藏的列（只存隐藏的列，以后新增的列默认显示；「重置」显示全部列）。所有列默认显示，没有默认隐藏的列；列宽按内容设置（单号、日期、金额不折行、不被截断），一列只放一项信息（往来单位的编码与名称、订单 / 交货日期这类成对的信息除外），**不靠收窄列宽、合并字段、隐藏列来避免横向滚动**，宽度不够时表格横向滚动；
+- 导出为当前显示的列（列设置中隐藏的列不导出，操作列不导出）；
 - 列定义加 `dict: '字典类型'` 后导出 Excel 时输出字典标签，或用 `exportValue: (record) => 值` 自定义；一列合并显示多项信息时用 `exportColumns: [{ title, dataIndex 或 exportValue, dict }]` 拆成多列导出。金额、数量导出原始数值，往来单位导出为「编码 名称」；
 - 查询条件放在 `<SearchForm>` 中，每个 `a-form-item` 一格，超过 3 个时可展开；收起时 1200 宽及以上条件与「查询」「重置」排在同一行（条件平分剩余宽度），放不下时按钮整体换行；日期范围等较宽的条件在 `a-form-item` 上写 `data-wide`（按两倍宽度分配）；
 - 选择内部人员的字段用 `components/common/IdentityUserSelect.vue`（`GET /workflow/identity/users`，只返回启用的内部用户，不含门户账号；选项显示「昵称 · 部门（用户名）」），保存时后端用 `UserLookup.require(Active)` 校验；人力资源业务选员工档案用 `EmployeeSelect`；
-- 操作列 `key: 'action'`、`fixed: 'right'`，按钮放在 `span.table-actions` 中；
+- 操作列统一用 `<TableActions :actions="..." />` 渲染、`actionColumn(图标数, [单独出现时的文字])` 定义列，见下文「[操作列](#操作列)」；
 - 页面上的文字全部用 `$t` / `t`，列 `title` 同时用作导出 Excel 的表头，导出也会跟随界面语言。
 
 ### useTable
@@ -182,6 +189,66 @@ const { list, loading, size, pagination, selectedKeys, rowSelection, load, searc
 | `exportAll(columns, filename?)` | 按当前条件导出 Excel，传给 `TableToolbar` 的 `exporter` |
 
 `fetcher` 接收 `{ current, size, ...query }`，返回 `{ records, total }`。`options.params` 用于把查询条件转换为接口参数（如把时间范围拆成两个参数）。
+
+### 操作列
+
+行操作统一用 `components/common/TableActions.vue` 渲染，列定义用 `components/common/tableActions.js` 的 `actionColumn`：
+
+```vue
+<template v-else-if="column.key === 'action'">
+  <TableActions :actions="rowActions(record)" />
+</template>
+```
+
+```js
+import TableActions from '@/components/common/TableActions.vue'
+import { actionColumn } from '@/components/common/tableActions'
+
+const columns = [
+  // ...
+  actionColumn(2, [t('common.action.view')]) // 一行最多 2 个图标（编辑与出库按状态互斥）；只剩「查看」时显示「图标 + 文字」
+]
+
+// 取自 components/scm/OrderPage.vue（销售订单）
+const rowActions = (record) => [
+  { type: 'view', onClick: () => openDetail(record) },
+  { type: 'edit', show: record.status === OrderStatus.DRAFT, perm: 'scm:sales:edit', onClick: () => form.value.openEdit(record) },
+  {
+    key: 'trade',
+    label: t('scm.order.outbound'),
+    icon: ExportOutlined,
+    show: [OrderStatus.APPROVED, OrderStatus.PARTIAL].includes(record.status),
+    perm: 'scm:salesOut:add',
+    onClick: () => openTrade('salesOut', record)
+  }
+]
+// 不常用的操作加 more: true 放进「更多」，例如 { type: 'delete', confirm: t('common.msg.confirmDelete'), onClick: ..., more: true }
+```
+
+每个操作的属性：
+
+| 属性 | 说明 |
+| --- | --- |
+| `type` | 常用操作（`view` / `detail` / `edit` / `delete` / `copy` / `print` / `submit` / `audit` / `unaudit` / `approve` / `confirm` / `reject` / `cancel` / `enable` / `disable` 等，见 `ACTION_TYPES`），决定默认图标、文字（`common.action.*`）和是否红色；`reverse` / `run` / `log` / `history` / `list` / `move` / `password` / `setting` 只给图标，文字由 `label` 传入 |
+| `key` | 区分操作，默认取 `type` |
+| `label` / `icon` | 文字（悬停提示和「更多」菜单中显示）、图标组件，覆盖 `type` 的默认值 |
+| `onClick` | 点击时执行；有 `confirm` 时在确认后执行 |
+| `perm` | 权限标识（字符串或数组，满足其一），代替 `v-perm` |
+| `show` | 为 `false` 时不显示，代替 `v-if`（按状态出现的操作）；不可见的操作不占位 |
+| `disabled` / `loading` / `danger` | 禁用、加载中、红色 |
+| `tip` | 附加的悬停提示（如禁用原因） |
+| `confirm` | 二次确认：标题文字或 `{ title, description, okType }`。直接显示的操作用气泡确认，「更多」中的用确认框 |
+| `more` | 放进「更多」（三个点）下拉 |
+| `slot` | 需要包一层自定义弹出组件（如收货日期确认）时使用：写插槽名，在插槽中用 `<TableActionButton :action :text />` 渲染按钮（插槽参数 `{ action, text }`），始终直接显示 |
+
+显示规则（`layoutActions` 自动处理）：
+
+- 操作显示为图标按钮，悬停显示文字，图标之间用竖线分隔；一行只有一个操作时显示「图标 + 文字」。
+- 直接显示：查看、编辑、删除，以及单据按状态出现的主操作（审核、确认、提交、入库 / 出库、收货、冲销、发布等）；资料、日志、历史、附件、调整部门、重置密码、复制、设为默认、维护子项等不常用的操作写 `more: true`。
+- 顺序：查看 → 编辑 → 主操作 → 删除 → 更多。
+- 每行直接显示的图标（含「更多」）最多 4 个（`MAX_INLINE`），超过时从后往前把操作移进「更多」；「更多」中只有一个操作且放得下时直接显示，不为一个操作弹下拉。
+
+`actionColumn(count, labels = [], extra = {})` 返回 `{ title: 操作, key: 'action', width, fixed: 'right', align: 'right' }`：`count` 是一行中最多同时出现的图标数（按状态互斥的操作只算一个，含「更多」，不超过 4）；某些行可能只剩一个操作时把它的文字（已翻译）放进 `labels`，保证「图标 + 文字」放得下；宽度按图标数和当前语言测量，不写死。`extra` 合并进列定义（如 `{ fixed: false }`）。
 
 ## 表单：useFormDrawer + FormDrawer
 
@@ -372,9 +439,12 @@ const submit = useAction((r) => submitCarRequest(r.id), {
 })
 ```
 
-```vue
-<a-popconfirm :title="$t('common.msg.confirmDelete')" @confirm="remove(record.id)">...</a-popconfirm>
-<a-button type="link" size="small" @click="submit(record)">{{ $t('common.action.submit') }}</a-button>
+```js
+// 在操作列中使用：直接显示的操作用气泡确认（confirm），已确认过，useAction 不再弹框
+const rowActions = (record) => [
+  { type: 'submit', perm: 'oa:car:submit', show: record.status === CarRequestStatus.DRAFT, onClick: () => submit(record) },
+  { type: 'delete', perm: 'oa:car:remove', confirm: t('common.msg.confirmDelete'), onClick: () => remove(record.id) }
+]
 ```
 
 | 选项 | 说明 |
@@ -511,7 +581,7 @@ views/mes/wo/
 </span>
 ```
 
-`v-perm` 在挂载时移除没有权限的元素。需要在脚本中判断时用 `useUserStore().hasPerm(perm)`，例如 `StatusSwitch` 的 `:disabled="!userStore.hasPerm('wms:warehouse:edit')"`。
+`v-perm` 在挂载时移除没有权限的元素。表格操作列中的操作不用 `v-perm`，写在 `TableActions` 操作的 `perm` 属性中（见「[操作列](#操作列)」）。需要在脚本中判断时用 `useUserStore().hasPerm(perm)`，例如 `StatusSwitch` 的 `:disabled="!userStore.hasPerm('wms:warehouse:edit')"`。
 
 ## 样式与深色模式
 
