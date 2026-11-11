@@ -68,9 +68,9 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 
 | | 系统字典 `SYSTEM` | 业务字典 `BUSINESS` |
 | --- | --- | --- |
-| 内容 | 程序内置的取值：状态、单据类型、业务类型等，代码按取值判断（后端有同名枚举） | 纯分类：客户等级、物料分类、出入库类别、不良类型、假期类型、用工类型、工程变更原因、停机原因等 |
+| 内容 | 程序内置的取值：状态、单据类型、业务类型等，代码按取值判断（后端有同名枚举） | 纯分类：客户等级、商品品牌、出入库类别、不良类型、假期类型、用工类型、工程变更原因、停机原因等 |
 | 数据 | 全平台共用一份（`sys_dict_data.tenant_id = 1`），取值全部内置 | 每个租户各自一份：新租户开通时由 `SysDictTenantInitializer` 从平台复制 |
-| 维护 | 平台在「系统管理 → 字典管理」（`sys:dict:*`，平台专属）中只能修改名称、颜色、排序、备注，不能新增、删除取值或修改键值 | 租户管理员在「系统管理 → 业务字典」（`sys:bizdict:list` / `edit`）中新增、改名、停用；程序依赖的取值标记为内置（`sys_dict_data.builtin = 1`，如物料分类的低值易耗品、假期类型的年假），不能删除、不能改键值 |
+| 维护 | 平台在「系统管理 → 字典管理」（`sys:dict:*`，平台专属）中只能修改名称、颜色、排序、备注，不能新增、删除取值或修改键值 | 租户管理员在「系统管理 → 业务字典」（`sys:bizdict:list` / `edit`）中新增、改名、停用；程序依赖的取值标记为内置（`sys_dict_data.builtin = 1`，如职位类别的生产、假期类型的年假），不能删除、不能改键值 |
 | 业务代码 | 字段用枚举类型 | 字段用 `String`，保存时用 framework 的 `DictLookup.check(字典, 值, 字段名称键)` 按当前租户的字典校验，不在代码里写死允许的取值；内置取值集中定义为常量（如 `HrDictValues`） |
 
 - 字典类型的编码和种类保存后不能修改；业务字典的键值以大写字母开头，只含大写字母、数字、下划线，不超过 16 位（存入业务表的编码字段，最短为 `VARCHAR(16)`）。
@@ -84,6 +84,35 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
   ```
 
 - 前端用法相同（`useDict`、`DictTag`、`/system/dict/data/type/{type}` 自动返回当前租户的业务字典）；新增字典的步骤见 [新增一个业务模块](../guide/new-module#_2-建表与字典)。
+- 需要层级、在业务页面维护的分类（如[物料分类](#物料分类)）由业务模块建表，实现 framework 的 `DictSource` 后仍可按字典类型读取：`SysDictService` 按类型读取时优先取 `DictSource`（只读、不缓存，不出现在字典管理和业务字典中）。
+
+### 物料分类
+
+物料分类是多级树（`wms_material_category`，每个租户一份，最多 5 级，`WmsMaterialCategoryService`），在「物料管理」页左侧的分类树中维护，不单独设菜单。按钮权限 `wms:material:category`（新增下级、编辑、删除、拖动排序 / 改上级），节点显示该分类及其下级分类的物料数；分类列表 `GET /wms/material-category` 登录即可访问。
+
+**按分类编码关联**：物料（`wms_material.category`）以及检验方案、促销、返利项目、提成规则、凭证科目设置都保存**分类编码**，不改为 ID。编码保存后不能修改（新增时留空自动生成 `C0001`…），所以改名、移动、调整层级不影响已有数据。这样做的理由：
+
+1. 已有数据不用转换：升级时原业务字典的取值原样变成一级分类（编码 = 原键值），所有引用处的值都不变；
+2. 引用分类的表分布在 scm / mes / fin / bi（含 BI 事实表），按编码关联就不用逐表加列、回填；
+3. 程序依赖的取值（原材料、半成品、成品、低值易耗品，凭证科目的预置值、低值易耗品领用）继续按编码使用。
+
+**下级分类的规则**：分类有祖级 ID 路径 `ancestors`（如 `0,3,7`）。
+
+- **按分类筛选时包含下级分类**：Java 中用 `tree().subtree(编码)`，mapper XML 中引用公共子查询（只读）：
+
+  ```xml
+  m.category IN (<include refid="com.lemon.erp.modules.wms.mapper.WmsMaterialCategoryMapper.subtreeCodes"><property name="code" value="q.category"/></include>)
+  ```
+
+  物料管理、商品价格、库存查询、收发存、库龄、进销存报表与商品分析、生产统计、销售预测、AI 问数的库存 / 收发存工具都是如此；进销存报表按分类汇总后穿透只取该分类本身（`JxcQuery.drillCategory`），与汇总口径一致。
+- **按分类匹配规则时下级分类沿用上级的设置**，最近的优先（`MaterialCategoryTree.lineage` 返回自身及各级上级的编码）：检验方案（mapper 按祖级路径匹配，`QmsInspectionPlanMapper.selectMatch`）、促销（`PromotionCalculator`，指定分类的促销对下级分类的物料同样适用）、提成规则（同为指定分类时取最近的上级）、凭证科目设置（含预置科目，如低值易耗品的下级分类也是周转材料）、低值易耗品领用。
+- 按分类汇总的报表、BI 维度按物料的分类编码分组，名称显示完整路径（如「电子元器件 / 电阻」）。
+
+**校验与删除**：同一上级下名称不重复；停用的分类及其下级不能再给物料选用（`checkUsable`，已有物料不受影响）；有下级、被物料引用、被其他单据引用（`ReferenceGuard`，`RefType.MATERIAL_CATEGORY`，各模块按编码只读关联分类表检查）或内置（原材料、半成品、成品、低值易耗品，程序按编码使用）的不能删除。
+
+**导入导出**：物料导入的「分类」列可填分类编码、完整路径（`电子元器件/电阻`，`/` 两侧空格可有可无）或不重名的分类名称（`MaterialCategoryTree.resolve`，智能录入、数据整理同此规则），导出为完整路径。
+
+**按字典读取（`DictSource`）**：原来的业务字典 `wms_material_category` 已迁移为一级分类并删除。分类服务实现 framework 的 `DictSource`，按字典类型 `wms_material_category` 读取（`/system/dict/data/type/...`、`DictLookup`、按字典显示名称的报表和 BI 维度）时提供「编码 → 完整路径」（只含可选用的分类），所以前端 `<DictTag type="wms_material_category">`、`useDict`、`DictLookup.check`（返利项目）都不用改。选择分类用 `components/wms/MaterialCategorySelect.vue`（树形，`usable-only` 用于表单），分类数据用 `composables/useMaterialCategories`（全局缓存，维护后 `reload`）。新租户由 `WmsTenantInitializer` 按层级复制平台的分类。
 
 ## 租户套餐与租户管理员
 

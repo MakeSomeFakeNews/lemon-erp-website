@@ -230,7 +230,7 @@ warehouseService.changeStatus(id, req.status());
 
 **跨模块共用的取值放在 framework**：审批状态 `framework/workflow/ApproveStatus`（字典 `sys_approve_status`）、站内消息类别 `framework/message/MessageCategory`（字典 `sys_message_category`）、流程变量类型 `FlowBusiness.VariableType`。
 
-**业务字典的字段保持字符串**。业务字典（客户等级、物料分类、假期类型等，见 [字典](../architecture/tenant#字典)）的取值由租户维护、可以新增，不能定义为枚举；字段用 `String`，保存时用 `DictLookup.check` 按当前租户的字典校验。程序依赖的内置取值集中定义为常量（如 `hr/model/HrDictValues.LEAVE_ANNUAL`），并在 `init.sql` 中标记为内置（`builtin = 1`），租户不能删除、不能改键值。
+**业务字典的字段保持字符串**。业务字典（客户等级、商品品牌、假期类型等，见 [字典](../architecture/tenant#字典)）的取值由租户维护、可以新增，不能定义为枚举；字段用 `String`，保存时用 `DictLookup.check` 按当前租户的字典校验。程序依赖的内置取值集中定义为常量（如 `hr/model/HrDictValues.LEAVE_ANNUAL`），并在 `init.sql` 中标记为内置（`builtin = 1`），租户不能删除、不能改键值。
 
 **前端同步**：前端比较状态时使用由后端枚举生成的 `@/constants/enums`。新增或修改枚举后在 `lemon-web` 中运行 `npm run gen:enums` 重新生成，`npm run i18n:check` 会检查生成的文件是否与后端一致，见 [前端开发规范](./frontend#状态与类型常量)。只有「文件名与枚举同名的顶层枚举」会被生成，类内部的嵌套枚举、用 `@JsonValue` 自定义取值的枚举（`EnableStatus`）不会。
 

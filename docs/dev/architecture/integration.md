@@ -353,7 +353,7 @@ Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCatego
 ```
 
 - `fin/model/AccountRole` 枚举列出全部用途（分组：往来、存货与成本、收入与费用、税费、资产、薪酬、期末），每个用途带默认科目编码（`init.sql` 预置的科目）；存货（`INVENTORY`）、主营业务收入（`REVENUE`）、主营业务成本（`COST_OF_SALES`）可按物料分类，工资费用（`SALARY_EXPENSE`）可按职位类别，其他入库 / 其他出库的对方科目（`OTHER_IN_OFFSET` / `OTHER_OUT_OFFSET`）可按收发类别（维度 `IN_CATEGORY` / `OUT_CATEGORY`）分别设置；用途可声明后备用途（`AccountRole.fallback()`），没有任何设置时沿用后备用途的科目（其他出入库对方科目 → 待处理财产损溢 `PENDING_LOSS`）；
-- `FinAccountRuleService.accountId(用途[, 维度取值])` 的取值顺序：用途 + 维度取值的设置 → 用途的设置 → 默认科目编码（带维度的用途还可以按维度给默认值，如半成品、成品的存货默认为库存商品 1405，低值易耗品为周转材料 1411；生产岗位的工资费用为制造费用 5101，销售岗位为销售费用 6601）；
+- `FinAccountRuleService.accountId(用途[, 维度取值])` 的取值顺序：用途 + 维度取值的设置（物料分类没有单独设置时依次取各级上级分类的设置，`MaterialCategoryTree.lineage`）→ 用途的设置 → 默认科目编码（物料分类同样按最近的上级取预置值；带维度的用途还可以按维度给默认值，如半成品、成品的存货默认为库存商品 1405，低值易耗品为周转材料 1411；生产岗位的工资费用为制造费用 5101，销售岗位为销售费用 6601）；
 - 设置保存在 `fin_account_rule`（按租户），设置的科目必须是启用的末级科目，被设置引用的科目不能删除、不能增加下级；修改只影响之后生成的凭证；
 - 其他模块（hr 工资、pm 项目月结等）同样注入 `FinAccountRuleService` 取科目；新增自动凭证的用途时在 `AccountRole` 中登记，「凭证科目设置」页面自动列出；
 - 科目范围用途（`AccountRole.scope()`：库存现金 `CASH` 1001、银行存款 `BANK` 1002）设置的是一个科目及其全部下级，可以是上级科目：结算账户校验、银行对账、出纳日记账、现金流量表、资金计划按 `FinAccountService.cashCodes()` / `roleCode(用途)` 识别，前端 `AccountSelect` 用 `:roles="['CASH', 'BANK']"` 限定可选科目；Java 代码中不写科目编码，只有报表格式（资产负债表、利润表模板，现金流量表按一级科目归类）按企业会计准则的编码前缀定义。

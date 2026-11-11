@@ -22,7 +22,7 @@ order: 11
 | 实现 | 模块 | 复制的数据 |
 | --- | --- | --- |
 | `SysDictTenantInitializer` | system | 业务字典的取值（`SysDictService.copyBusinessData`：平台中全部业务字典的数据复制一份到新租户，之后由租户在「业务字典」中维护） |
-| `WmsTenantInitializer` | wms | 规格属性及属性值（颜色、尺码，多规格物料生成 SKU 时使用） |
+| `WmsTenantInitializer` | wms | 规格属性及属性值（颜色、尺码，多规格物料生成 SKU 时使用）；物料分类（按层级复制平台的分类树，上级 ID、祖级路径换成新租户中的） |
 | `FinTenantInitializer` | fin | 币种、会计科目表（按编码层级复制，上级科目 ID 换成新租户中的） |
 | `HrTenantInitializer` | hr | 班次（考勤、请假折算工时依赖默认班次） |
 | `BiTenantInitializer` | bi | 预警规则 |

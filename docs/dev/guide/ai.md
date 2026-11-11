@@ -509,7 +509,7 @@ public class ScmSupplierCleanseSource implements AiCleanseSource {
 - `AiCleanseRecord` 中名称、规格、分类、单位是固定字段，联系人、地址等放在 `extra` 中（键为 `AiCleanseField.extraKey()`），其他有助于判断的字段（品牌、条码）也可以放进 `extra`；`AiCleanseRecord.TAX_NO` 键的值相同的记录直接归为疑似重复；
 - **`apply` 必须调用业务 Service 的修改方法**，不要直接写表：这样编码唯一、状态等原有校验和字段变更历史都照常生效；先用 `AiCleanseSupport.validate` 按实体注解校验长度等规则，再检查业务上的唯一性（不允许改成与其他启用记录重名）；
 - 生成建议时 AI 模块已丢弃不可修改的字段、超过 `AiCleanseField.maxLength()` 的值和不在 `categoryOptions()` 中的分类；采纳时 `AiCleanseRegistry.apply` 再检查应用权限和字段在 `editableFields()` 中，然后才调用 `apply`；每条建议一个事务，`apply` 抛出的 `BizException` 消息作为该条的失败原因显示；
-- 有分类时实现 `categoryOptions()` 返回可选值（值 → 名称，一般是 `dictLookup.options(业务字典)`），模型只能从中选择，参考 `wms/ai/WmsMaterialCleanseSource`；
+- 有分类时实现 `categoryOptions()` 返回可选值（值 → 名称，一般是 `dictLookup.options(业务字典)`），模型只能从中选择；物料分类的候选为「编码 → 完整路径」（只含可选用的分类），参考 `wms/ai/WmsMaterialCleanseSource`；
 - 可修改字段只能从 `AiCleanseField`（NAME、SPEC、CATEGORY、UNIT、CONTACT、ADDRESS）中选。需要新的字段时要在 `AiCleanseField` 中增加（列宽 `maxLength`，放在 `extra` 中的给出 `extraKey`），并在前端 `locales/<语言>/ai.js` 的 `cleanse.field` 中补充名称。
 
 ### 3. 验证

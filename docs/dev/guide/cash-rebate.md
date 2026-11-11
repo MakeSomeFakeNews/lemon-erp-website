@@ -122,7 +122,7 @@ order: 20.5
 | 方式 | 说明 |
 | --- | --- |
 | `TIER` 阶梯比例 | 明细 `scm_rebate_tier`（`min_amount`、`rate`，1～20 档，金额不能重复）。期间金额（`ScmRebateMapper.selectTradeAmount`：销售返利为销售出库 − 销售退货，采购返利为采购入库 − 采购退货，取 `scm_trade_doc.total_amount`，含税）达到的最高一档返利率 × 全部金额 |
-| `ITEM` 按项目填写金额 | 明细 `scm_rebate_item`（`item_name`、可选的 `brand` / `category`（业务字典 `wms_material_brand` / `wms_material_category`，`DictLookup.check` 校验）、`amount`，1～100 项）。结算时取合计，不做公式计算；期间金额只作参考，`rate` 为空 |
+| `ITEM` 按项目填写金额 | 明细 `scm_rebate_item`（`item_name`、可选的 `brand` / `category`（业务字典 `wms_material_brand` / 物料分类 `wms_material_category`（由 `DictSource` 提供），`DictLookup.check` 校验）、`amount`，1～100 项）。结算时取合计，不做公式计算；期间金额只作参考，`rate` 为空 |
 
 `Calc` 返回期间金额、返利率（`ITEM` 为 `null`）、返利金额；前端按 `rate == null` 判断显示「按项目合计」。保存时按 `calcMode` 只保存对应的明细（另一种明细传空）。
 

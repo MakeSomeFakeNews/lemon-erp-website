@@ -61,7 +61,7 @@ order: 19
 
 ```java
 public enum JxcDimension {
-    CATEGORY(true, true),   // 物料分类（业务字典 wms_material_category）
+    CATEGORY(true, true),   // 物料分类（wms_material_category，按字典类型读取完整路径）
     BRAND(true, true),      // 品牌（业务字典 wms_material_brand）
     REGION(true, false),    // 客户区域
     CUSTOMER(true, false),
@@ -126,7 +126,7 @@ detailRef.value.open({ params: params() })
 
 | 维度 | 转换 |
 | --- | --- |
-| 分类、品牌、区域 | `setCategory` / `setBrand` / `setRegion`；键为空时 `markNone`（筛选「未设置」） |
+| 分类、品牌、区域 | `drillCategory` / `setBrand` / `setRegion`；键为空时 `markNone`（筛选「未设置」）。分类的筛选条件 `category` 包含下级分类，汇总却按物料的分类编码分组（下级分类单独成行），所以穿透用 `drillCategory` 只取该分类本身（`categoryExact`），与汇总口径一致 |
 | 客户、供应商 | `setPartnerId` |
 | 业务员 | `setSalesmanId`；键为空时 `markNone`（没有业务员） |
 | 商品 | `setMaterialId` |
