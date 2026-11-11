@@ -82,9 +82,9 @@ public class ScmDocNos {
 
 1. 页面调用 `utils/print.js` 的 `printDocs(doc, 标题, 模板标识)`；
 2. `toPrintDoc` 把页面组装的单据规范化：表头字段、签字栏转为 `{ key, label, value }`，明细行转为「列标题 → 文本」，所有值转为字符串；
-3. 读取当前租户已保存的打印模板（`GET /system/print-template`，首次打印时加载并缓存在前端），`applyTemplate` 按模板隐藏、排序、改名表头字段 / 明细列 / 签字栏，设置列宽和公司名称；`layoutOf` 把模板的纸张设置换算为 `layout`（宽、高、页边距 mm，字号 pt，已按纸张方向换算）；
-4. `POST /system/print/pdf`，请求体为 `{ type, title, layout, docs, overlay }`（`PrintRequest`），前端超时 120 秒；
-5. 后端 `modules/system/print/PrintService` 校验、规范化后选择版式：上传了 JRXML 的单据按 JRXML，启用了套打的按套打定位，否则由 `PrintDesigner` 按单据结构和纸张生成默认版式；编译、填充、导出 PDF；
+3. 读取当前租户已保存的打印模板（`GET /system/print-template`，首次打印时加载并缓存在前端）；该单据有多份启用的[打印格式](#多份打印格式)时先弹出格式选择，按选中格式的配置套用（只有一份时直接用它）；`applyTemplate` 按模板隐藏、排序、改名表头字段 / 明细列 / 签字栏，设置列宽和公司名称；`layoutOf` 把模板的纸张设置换算为 `layout`（宽、高、页边距 mm，字号 pt，已按纸张方向换算）；
+4. `POST /system/print/pdf`，请求体为 `{ type, formatId, title, layout, docs, overlay }`（`PrintRequest`），前端超时 120 秒；
+5. 后端 `modules/system/print/PrintService` 校验、规范化后选择版式：上传了 JRXML 的单据（带 `formatId` 时取该格式的 JRXML）按 JRXML，启用了套打的按套打定位，否则由 `PrintDesigner` 按单据结构和纸张生成默认版式；编译、填充、导出 PDF；
 6. 前端把返回的 PDF 显示在 `components/print/PrintPreview.vue`（挂在 `App.vue` 中的全局预览窗口，使用浏览器内置的 PDF 阅读器），用户点「打印」或「下载 PDF」。
 
 单据数据始终由页面组装（页面上已有、已按查看权限和数据权限取到的数据），打印接口只负责排版，所以 `POST /system/print/pdf` 不设菜单权限，登录用户都可以调用。打印按钮一般也不单独设权限，有查看权限即可打印。
@@ -238,6 +238,35 @@ JRXML 中可用的参数与字段：
 
 后端校验：最多 80 个定位字段、明细 30 列、每页 100 行，行高 3~50mm，字号 6~36pt，超出纸张的元素不输出。套打不适用于工资条；上传了 JRXML 的单据以 JRXML 为准，套打不生效。
 
+### 多份打印格式
+
+同一单据可以有多份打印格式（issue #96，如销售出库单的标准格式和只显示数量的发货单），打印时选择。
+
+**数据**：`sys_print_template` 每行一份格式，字段 `name`（格式名称）、`is_default`、`sort`、`status`，唯一键 (`template_key`, `name`, `tenant_id`)；每份格式有自己的 `config`、`jrxml`、`background`。没有任何记录的单据按内置默认版式，新增第一份格式时先把它保存为默认的「标准格式」，所以没有改动的单据与原来完全一样。标签和通用设置（`_common`）只有一份，不能新增格式。
+
+**后端**（`SysPrintTemplateService`）：
+
+- `GET /system/print-template` 仍返回各单据默认格式的配置；`GET /system/print-template/formats` 返回全部单据格式（含配置），所有登录用户可读，供打印时选择；
+- `POST / PUT / DELETE /system/print-template/formats[/{id}]` 维护格式（沿用 `sys:printTemplate:edit`）。新增时带 `sourceId` 复制该格式的配置、JRXML 和底图；
+- 每个单据有且只有一份默认格式：新增、修改、删除格式都先 `lockByKey`（`SELECT ... FOR UPDATE`）锁定该单据的格式再串行执行，设为默认时其他格式自动取消默认；默认格式不能停用，还有其他格式时不能删除；
+- 按模板标识的接口（保存配置、恢复默认、JRXML 上传 / 下载 / 删除、套打底图）增加可选参数 `formatId`，带时操作该格式，不带时操作默认格式，因此标签、通用设置和已有调用方不受影响；
+- 打印请求带 `formatId` 时，`PrintService` 按它取该格式的 JRXML，不属于该单据或属于其他租户的格式报「打印格式不存在」；配置已由前端套用。
+
+**前端**：
+
+- `utils/printTemplates.js` 的 `loadFormats` / `formatsOf` / `formatConfig` / `formatLabel`。预置名称「标准格式」「发货单（不含价格）」存库为中文，`formatLabel` 按界面语言显示；
+- `utils/print.js` 的 `printDocs` 在该单据有多份启用格式时，经 `formatPicker` 状态弹出 `components/print/PrintFormatPicker.vue`（挂在 `App.vue`），批量打印只选择一次；
+- 预选用户上次使用的格式，没有时为默认格式。上次的选择保存在个人设置 `printFormats`（`/profile/settings/printFormats`，内容 `{ 模板标识: 格式 ID }`，见[界面设置](./ui-settings)），换浏览器 / 设备也能记住；首次需要选择时读取一次，选择与上次相同时不再保存，只保留仍存在的单据；
+- 打印模板页面 `views/system/print-template` 按区域拆为同目录子组件：格式栏 `FormatBar.vue`、基本设置 `BasicSettings.vue`、JRXML `JrxmlPanel.vue`、套打 `OverlaySection.vue`、字段 / 列 / 签字栏 `SectionRows.vue`、预览 `PreviewPane.vue`，编辑配置的合并与整理在 `templateConfig.js`。
+
+**预置格式**：销售出库单预置「发货单（不含价格）」（标题「发货单」，隐藏含税单价、税率、价税合计列和金额类表头字段，不作为默认），与默认的标准格式一起写在 `init.sql`。新租户由 `SysPrintTenantInitializer` 从平台复制（只复制名称和配置，不复制平台的 JRXML、底图；平台删除了这份示例时不复制）。已有库执行升级脚本 `sql/upgrade/20261111_print_formats.sql`，见[升级](../deploy/upgrade)。
+
+测试：`PrintFormatTests`（增删改、复制、默认唯一、权限、按格式打印取对应 JRXML、预置格式、租户隔离）。
+
+::: tip 只显示数量的格式
+列配置本来就支持隐藏，合计行也跟着列走，所以复制一份格式后取消勾选单价、金额列和金额类表头字段即可，不需要写 JRXML。
+:::
+
 ### 登记打印模板：PRINT_TYPES
 
 要让新单据出现在「系统管理 → 打印模板」中、可以配置版式和套打，先把用到的名称加到两个语言包的 `print.name` 中（中文名称即匹配键）：
@@ -306,7 +335,7 @@ export const PRINT_TYPES = [
 
 `PRINT_TYPES` 有三个用途：模板设计页按它列出可配置的字段、明细列、签字栏；套打设计器按它列出可定位的内容；`sampleDoc` 按它生成示例单据（3 行明细），用于模板设计页的 PDF 预览和「下载默认模板」。
 
-模板按名称匹配：用户可以隐藏、调整顺序、重命名表头字段、明细列和签字栏，设置明细列宽度（mm），设置纸张、方向、页边距、字号、标题，是否显示公司名称和备注。doc 中有而模板中没有的条目（如之后新增的字段）按默认显示在末尾。模板配置的结构见 `printTemplates.js` 文件头的注释，按租户保存在 `sys_print_template.config`（JSON，最长 20000 字符），模板标识 `_common` 为通用设置（公司名称）。
+模板按名称匹配：用户可以隐藏、调整顺序、重命名表头字段、明细列和签字栏，设置明细列宽度（mm），设置纸张、方向、页边距、字号、标题，是否显示公司名称和备注。doc 中有而模板中没有的条目（如之后新增的字段）按默认显示在末尾。模板配置的结构见 `printTemplates.js` 文件头的注释，按租户、按格式保存在 `sys_print_template.config`（JSON，最长 20000 字符），模板标识 `_common` 为通用设置（公司名称）。
 
 ### 示例：打印用车申请
 
@@ -373,10 +402,13 @@ function print(r) {
 | --- | --- | --- |
 | `POST /system/print/pdf` | 登录即可 | 生成 PDF（`Content-Disposition: inline`） |
 | `POST /system/print/jrxml` | `sys:printTemplate:edit` | 按请求中的单据和配置生成默认版式的 JRXML |
-| `GET /system/print-template` | 登录即可 | 全部已修改的模板（上传了 JRXML 的带 `jrxml: true`） |
-| `PUT` / `DELETE /system/print-template/{key}` | `sys:printTemplate:edit` | 保存配置 / 恢复默认（同时删除 JRXML 和底图） |
-| `GET` / `POST` / `DELETE /system/print-template/{key}/jrxml` | `sys:printTemplate:edit` | 下载 / 上传 / 删除 JRXML |
-| `GET` / `PUT /system/print-template/{key}/background` | `sys:printTemplate:list` / `edit` | 读取 / 保存套打底图 |
+| `GET /system/print-template` | 登录即可 | 各单据默认格式的已修改模板（上传了 JRXML 的带 `jrxml: true`） |
+| `GET /system/print-template/formats` | 登录即可 | 全部单据的打印格式（含配置），打印时选择 |
+| `POST /system/print-template/formats` | `sys:printTemplate:edit` | 新增格式，带 `sourceId` 时复制该格式 |
+| `PUT` / `DELETE /system/print-template/formats/{id}` | `sys:printTemplate:edit` | 修改格式（名称、排序、状态、设为默认）/ 删除格式 |
+| `PUT` / `DELETE /system/print-template/{key}` | `sys:printTemplate:edit` | 保存配置 / 恢复默认（同时删除 JRXML 和底图）；带 `formatId` 时只操作该格式，`DELETE` 不带时删除该单据的全部格式 |
+| `GET` / `POST` / `DELETE /system/print-template/{key}/jrxml` | `sys:printTemplate:edit` | 下载 / 上传 / 删除 JRXML，可带 `formatId` |
+| `GET` / `PUT /system/print-template/{key}/background` | `sys:printTemplate:list` / `edit` | 读取 / 保存套打底图，可带 `formatId` |
 
 ## 条码与标签
 

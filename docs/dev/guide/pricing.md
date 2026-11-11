@@ -183,6 +183,56 @@ function onReferencePick(price) {
 }
 ```
 
+## 商品速查
+
+「供应链 → 销售 → 商品速查」（`views/scm/quickLookup`，菜单权限 `scm:quickLookup:list`，issue #97）给销售和管理人员报价用，与小程序共用接口（小程序端见 [微信小程序开发 - 商品速查](./miniapp#商品速查)）。用户手册见 [商品速查](/manual/scm/quick-lookup)。
+
+**搜索与列表**
+
+- 按名称、规格、编码、条码、拼音首字母、去掉分隔符的缩写搜索，规则同物料下拉（`WmsMaterialService.options`）；
+- 每行显示可用库存（全部仓库，库存 − 冻结）和用户选择的**一种**价格。
+
+**查询价格**（枚举 `QuickPrice`）
+
+| 可选项 | 取值 |
+| --- | --- |
+| 参考进货价 | 物料参考成本价 |
+| 库存均价 | 移动加权成本 |
+| 最新进价、最新售价 | 最近一次采购入库 / 销售出库的优惠前单价（`ScmPricingMapper.selectLatestPrices`） |
+| 零售价、批发价1–8 | 物料价格列，只列启用的价格列 |
+| 不显示价格 | 只显示数量 |
+
+选择保存在个人设置 `quickLookup`（`/profile/settings/quickLookup`，内容 `{ price }`，Web 与小程序共用，没有保存过按最新售价），见[界面设置 - 保存](./ui-settings#保存)。`GET /scm/quick-lookup/price-options` 返回可选项和当前用户能否查看（`allowed`）。
+
+**价格按权限在后端过滤**（`ScmQuickLookupService.allowed`）：不只是前端隐藏，规则与价格参考一致，不另设按钮。
+
+| 价格 | 需要的权限（任一） |
+| --- | --- |
+| 进货类（参考进货价、最新进价、进价历史） | `scm:purchase:list`、`scm:purchaseIn:list` |
+| 库存均价 | 「查看成本金额」`wms:stock:cost` |
+| 售价类（最新售价、售价历史） | `scm:sales:list`、`scm:salesOut:list`、`scm:quotation:list` |
+| 零售价、批发价 | 同售价类，或「商品价格」`scm:goodsPrice:list` |
+
+- 选择了没有权限或已停用的价格时不返回价格，标记 `priceDenied`，只显示数量；
+- 没有权限的人请求进价 / 售价历史、往来明细，接口直接报错；
+- 内置角色中销售员、销售经理只能看售价类，采购员只能看进货类，总经理、仓库管理员（能查看采购入库和销售出库单，有「查看成本金额」）全部可看，普通用户（只读）按其查看权限。
+
+**联查接口**（都要求 `scm:quickLookup:list`）
+
+| 接口 | 说明 |
+| --- | --- |
+| `GET /scm/quick-lookup?keyword=&price=&current=&size=` | 搜索；每行有商品图片时带主图 `imageUrl` |
+| `POST /wms/material/images/urls` | 点击商品看全部商品图片（[物料图片](./material#商品图片)，公开文件地址，登录即可读取） |
+| `GET /scm/quick-lookup/{id}/stock` | 点击库存看各仓库 / 库位 / 批次，成本按 `wms:stock:cost` |
+| `GET /scm/quick-lookup/{id}/summary?kind=SALES\|PURCHASE` | 点击价格看**历史参考**：最近 3 次、系统最新价、最高价、最低价，同价取最近一次；进货类价格默认打开进价，其他打开售价 |
+| `GET /scm/quick-lookup/{id}/trades` | **更多交易历史**，分页：日期范围、单位编号 / 名称 / 电话筛选，列 日期、数量、单价、单位名称、单位编号、单号、制单、复核 |
+
+**更多内容**打开与销售单明细相同的[价格参考](#价格参考)（报价、销售、进货、客户对比、供商对比，按权限显示）。
+
+**统计口径**：历史与最新价都只统计优惠前单价大于 0 的行（不含赠品），按出入库单的数据权限（制单人部门 + 制单人）统计，看不到的单据不计入。
+
+前端页面拆为同目录子组件：库存分布 `QuickLookupStock.vue`、商品图片 `QuickLookupImages.vue`、价格历史 `QuickLookupHistory.vue`（内含 `PriceReference`），`lookup.js` 的 `kindOfPrice` 决定点击价格时打开哪种历史。已有库执行升级脚本 `sql/upgrade/20261111_quick_lookup.sql` 登记菜单和授权，见[升级](../deploy/upgrade)。测试 `QuickLookupTests`。
+
 ## 客户执行价导入导出
 
 - 导出 `GET /scm/customer-price/export?customerId=&keyword=`（`scm:customer:list`）：`customerId` 为空导出全部客户，`keyword` 按客户编码 / 名称筛选；返回 `ScmCustomerPrice`（带客户、物料的编码名称、规格、单位），SQL 在 `ScmCustomerPriceMapper.xml`。

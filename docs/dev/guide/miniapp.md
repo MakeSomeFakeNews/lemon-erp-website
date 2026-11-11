@@ -14,9 +14,9 @@ order: 16
 | --- | --- |
 | 审批：待办 / 已办 / 我发起的 / 抄送我的，同意、拒绝、转交、撤回；发起申请（流程中心设计的表单）；审批提醒（微信订阅消息） | 系统配置：菜单、角色、字典、参数、租户、打印模板、编码规则、第三方集成 |
 | 工作台（待办汇总、经营概览）、站内消息 | 流程设计器、表单设计、BI 多维分析、自定义报表、数据大屏 |
-| 员工自助：打卡、考勤日历、假期余额、请假加班申请与撤销、工资条、绩效自评与评分；项目工时填报与审核 | 字段多、明细行多的单据录入：采购 / 销售订单、BOM、工艺路线、凭证、工资表、MRP、成本核算、结账 |
-| 销售与服务：客户、联系人拨号、写跟进（拍照）、今日待跟进、线索录入与转化、商机推进、服务工单受理与处理、销售订单进度、快速开单（销售出库直接开单） | 打印、Excel 导入导出、供应商 / 经销商门户 |
-| 仓储生产：库存查询（均价、库存金额）与经营历史、扫码收货、上架、拣货、盘点（盘盈成本价）、生产报工 | 工单指派、配件领用、不合格品评审处置、检验方案维护 |
+| 员工自助：打卡、考勤日历、假期余额、请假加班申请与撤销、工资条、绩效自评与评分；项目工时填报与审核 | 字段多、明细行多的单据录入：采购 / 销售订单（需审批，手机录入列为后续计划；订单出入库可用拣货、扫码收货）、BOM、工艺路线、凭证、工资表、MRP、成本核算、结账 |
+| 销售与服务：客户、联系人拨号、写跟进（拍照）、今日待跟进、线索录入与转化、商机推进、服务工单受理与处理、销售订单进度、快速开单（销售出库直接开单）；商品速查（库存与按个人设置显示的一种价格，价格按权限由后端过滤；点击看图片、库存分布、售价 / 进价历史，长按更多）；单据草稿（销售出库、采购入库草稿的审核记账、删除）；保存并审核后打印 / 分享 PDF（后端生成 PDF，用其他应用打开打印或转发） | Excel 导入导出、供应商 / 经销商门户、套打与打印模板设计 |
+| 仓储生产：库存查询（均价、库存金额）与经营历史、扫码收货、快速入库（采购入库直接开单：扫码选商品、辅助单位、默认进价、批次与有效期、序列号、库位推荐）、上架、拣货、盘点（盘盈成本价）、生产报工 | 工单指派、配件领用、不合格品评审处置、检验方案维护 |
 | 设备与质量：设备台账（扫码）、保养维修登记与处理、检验录入、不合格品登记 | |
 
 新增功能时按同样的原则取舍：需要大屏幕、大量录入、复杂配置的留在 Web 端；小程序中遇到这类操作时提示「请在电脑端处理」。
@@ -31,8 +31,10 @@ order: 16
 | 员工自助 | `/hr/self/*`、`/hr/perf/appraisal/{id}` | 登录即可（需关联员工档案） |
 | 项目工时 | `/pm/my/timesheet`、`/pm/my/timesheet/tasks`、`/pm/my/tasks`、`/pm/timesheet`、`/pm/timesheet/review` | 填报登录即可（须为项目成员）：选择任务用 `GET /pm/my/timesheet/tasks?projectId=`（本人参与的项目的任务树，不需要项目权限，读取失败时改用 `/pm/my/tasks`）；审核 `pm:timesheet:list`，「待审批」分段请求 `/pm/timesheet` 时带 `excludeSelf=true`（不列出本人的工时，与 Web 端工时审批一致） |
 | 销售与服务 | `/crm/*`、`/scm/sales/order`、`/bi/trace/order/sales/{id}`、`/system/attachment/*` | `crm:customer:list`、`crm:followup:list`、`crm:lead:list`、`crm:opp:list`、`crm:ticket:list`、`scm:sales:list` |
-| 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`/fin/account/options`、`/fin/account/scopes`、`/scm/supplier/carrier-options`（运费）、`POST /scm/salesOut`（业务参数 `scm.tradeDoc.draft` 开启且没有 `scm:salesOut:post` 时改为 `POST /scm/salesOut/drafts` 存草稿）、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
-| 扫码作业 | `/wms/*`（含经营历史 `/wms/stock/history`）、`/scm/purchaseIn`（收货在 `scm.tradeDoc.draft` 开启且没有 `scm:purchaseIn:post` 时改为 `/scm/purchaseIn/drafts`）、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
+| 商品速查 | `/scm/quick-lookup/*`、`/profile/settings/quickLookup`、`POST /wms/material/images/urls`、`/scm/pricing/reference` | `scm:quickLookup:list` |
+| 单据草稿 | `/scm/{salesOut,purchaseIn}/drafts/*` | `scm:salesOut:list` / `scm:purchaseIn:list`（且业务参数 `scm.tradeDoc.draft` 开启），审核 `scm:{kind}:post`、删除 `scm:{kind}:add` |
+| 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`/fin/account/options`、`/fin/account/scopes`、`/scm/supplier/carrier-options`（运费）、`POST /scm/salesOut`（业务参数 `scm.tradeDoc.draft` 开启时可 `POST /scm/salesOut/drafts` 存草稿，见[手机开单的保存、草稿与打印](#手机开单的保存、草稿与打印)）、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
+| 扫码作业 | `/wms/*`（含经营历史 `/wms/stock/history`）、`/scm/purchaseIn`（扫码收货、快速入库；`scm.tradeDoc.draft` 开启时可存草稿 `/scm/purchaseIn/drafts`）、`/scm/supplier/options`（快速入库选供应商）、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`（快速入库还要业务参数 `scm.directDoc.enabled` 开启）、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
 | 设备与质量 | `/mes/equipment`、`/mes/maintenance/*`、`/mes/inspection/*`、`/qms/plan/match`、`/qms/ncr` | `mes:equipment:list`、`mes:maintain:list`、`mes:qc:list`、`qms:ncr:list` |
 
 为小程序补充的后端能力：
@@ -71,8 +73,9 @@ lemon-mp
     ├── pkg-hr                  分包：打卡、考勤、请假加班、工资条、绩效
     ├── pkg-pm                  分包：我的工时、填报、工时审核
     ├── pkg-crm                 分包：客户、跟进、商机、销售订单、线索、服务工单（photos.js 跟进照片）
-    ├── pkg-wms                 分包：库存、经营历史、快速开单、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
-    │                           sale/ 快速开单的明细行 SaleRow.vue、运费 SaleFreight.vue、lines.js、gifts.js；components/ 搜索弹层、价格参考弹层）
+    ├── pkg-wms                 分包：库存、经营历史、快速开单、快速入库、商品速查、单据草稿、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
+    │                           sale/ 快速开单的明细行 SaleRow.vue、运费 SaleFreight.vue、lines.js、gifts.js；purchase/ 快速入库；lookup/ 商品速查（voice.js 语音）；
+    │                           draft/ 单据草稿；tradeSave.js 保存方式；print.js 打印 / 分享 PDF；components/ 搜索弹层、价格参考弹层）
     ├── pkg-mes                 分包：设备、保养维修、质量检验、不合格品
     ├── pkg-notice              分包：通知公告列表、详情（markdown.js 正文转 rich-text）
     ├── api/<区>.js              接口封装：auth、workflow、dashboard、message、notice、hr、pm、crm、wms、mes
@@ -577,6 +580,77 @@ runAction(() => changeOpportunityStage(o.id, data), { success: t('crm.opportunit
 
 成本金额只在后端控制：没有「查看成本金额」（`wms:stock:cost`）权限时，`/wms/stock/summary` 不返回 `unitCost`、`amount`，`/wms/stock/history` 返回 `costVisible: false` 且不带单价金额；盘点单详情的 `costVisible` 在有 `wms:stock:cost`，或盘点单未完成且有 `wms:check:add` / `wms:check:edit` 时为真（小程序盘点入口要求 `wms:check:edit` 且只列草稿盘点单，因此盘盈行总能填成本价）；当前均价 `avgCost` 只在有 `wms:stock:cost` 时返回，没有时输入框提示「默认按确认时的当前均价」，不显示「默认均价 X」。页面按字段是否返回或 `costVisible` 显示，不自己判断权限。
 
+## 商品速查
+
+商品速查（`pkg-wms/lookup`，issue #97）的接口、价格权限、个人设置与 Web 端「商品速查」相同，见 [开单取价 - 商品速查](./pricing#商品速查)。
+
+- 顶部搜索框输入名称 / 规格 / 简拼，400ms 防抖搜索，触底加载下一页；
+- 右上「价格 ▾」打开查询价格设置 `LookupSettingSheet`，按进货类 / 成本 / 销售类分组，没有权限的置灰；
+- 小程序没有双击，交互改为点击：
+  - 点击商品描述看商品图片 `LookupImageSheet`（列表中显示主图缩略图，点击放大）；
+  - 点击库存看各仓库 / 批次 `LookupStockSheet`（有 `wms:stock:list` 时可转到经营历史）；
+  - 点击价格看历史参考 `LookupPriceSheet`：售价 / 进价分段按权限显示，底部【更多交易历史】打开 `lookup/trades`，【更多内容】打开 `lookup/reference`；
+- 长按一行用 `uni.showActionSheet` 弹出全部联查（含售价、进价历史和经营历史，按权限列出）。
+
+### 语音输入
+
+小程序没有内置的语音识别 API，商品速查默认使用输入法的语音输入（微信键盘、系统输入法的麦克风），不需要任何配置。需要「按住说话」按钮时接入微信官方的「同声传译」插件，代码已在 `pkg-wms/lookup/voice.js` 中写好（`requirePlugin('WechatSI')` 成功才显示按钮，识别语言随界面语言）：
+
+1. 在微信公众平台「设置 - 第三方设置 - 插件管理」中添加插件「微信同声传译」（AppID `wx069ba97219f66d99`）；
+2. 在 `src/pages.json` 的 `pkg-wms` 分包中声明：
+
+   ```json
+   "plugins": { "WechatSI": { "version": "0.3.6", "provider": "wx069ba97219f66d99" } }
+   ```
+
+3. 重新编译，搜索框旁出现「按住说话」。
+
+::: warning 注意
+插件没有在后台添加就声明，会导致小程序无法编译和预览，所以仓库中默认不声明。只在已添加插件的小程序上加这段配置；录音需要麦克风授权，发布前在「用户隐私保护指引」中声明麦克风的用途。
+:::
+
+## 手机开单的保存、草稿与打印
+
+issue #97 补齐了手机开单：快速入库、统一的保存方式、单据草稿和打印 / 分享 PDF。
+
+**保存方式**：快速开单、快速入库、扫码收货的保存按钮统一由 `pkg-wms/tradeSave.js` 决定，与 Web 端出入库表单一致：
+
+| 情况 | 按钮 |
+| --- | --- |
+| 业务参数「进销存单据先存草稿」（`scm.tradeDoc.draft`）关闭 | 只有「保存」，保存即审核 |
+| 开启，且有审核权限（`scm:{kind}:post`） | 「存草稿」+「保存并审核」 |
+| 开启，但没有审核权限 | 只有「存草稿」 |
+
+`saveModes(kind)` 返回按钮列表，`saveTrade(kind, mode, build)` 调用 `POST /scm/{kind}` 或 `POST /scm/{kind}/drafts`，审核成功后询问是否打印。
+
+**快速入库**（`pkg-wms/purchase`）是采购入库直接开单：`POST /scm/purchaseIn`，`orderId` 为空，带供应商 `partnerId`。
+
+| 要点 | 实现 |
+| --- | --- |
+| 表头 | 选供应商（`/scm/supplier/options` 分页搜索）、仓库（记住上次选择）、发票类型、入库日期 |
+| 商品 | 扫码 / 搜索商品；扫库位条码设为当前库位 |
+| 含税单价 | 按 `/scm/pricing/default`（`kind=PURCHASE`：合同价 → 供货价 → 最近进价 → 参考成本价）带出 |
+| 辅助单位 | 折算规则同快速开单，复用 `pkg-wms/sale/lines.js` |
+| 批次与序列号 | 批次物料必须填批次号（可填有效期），序列号物料扫描序列号 |
+| 库位 | 不选时保存前按上架策略推荐（`fillPutaway`） |
+
+**单据草稿**（`pkg-wms/draft`）：
+
+- 分段列出销售出库 / 采购入库的草稿，按列表权限显示分段，可按单据号搜索；
+- 详情显示表头和明细；
+- 「审核记账」调用 `POST /scm/{kind}/drafts/{id}/post`，「删除」调用 `DELETE /scm/{kind}/drafts/{id}`。
+
+**打印 / 分享 PDF**（`pkg-wms/print.js`）：
+
+1. 保存并审核、草稿审核成功后询问是否打印，需要 `scm:{kind}:list` 读取单据详情，没有时不询问；
+2. 按 Web 端 `TradeDocDetail` 的打印内容组装单据。匹配键取 Web 端语言包 `zh-CN/print.js` 的打印名称，显示名称按界面语言；
+3. 套用打印模板（`/system/print-template`，即默认格式的隐藏 / 排序 / 改名 / 纸张；上传了 JRXML 的由后端按 JRXML），调用 `POST /system/print/pdf` 生成 PDF；
+4. 写入 `wx.env.USER_DATA_PATH` 后用 `uni.openDocument({ showMenu: true })` 打开，用户在右上角菜单转发，或用其他应用打开打印。小程序不能直接连接打印机；H5 调试时在新窗口打开。
+
+打印改动集中在 `print.js` 一个文件，以后支持[打印格式选择](./doc-no-print#多份打印格式)时只改这里。
+
+销售 / 采购订单的手机录入暂未提供（订单字段多、需审批，仍在电脑端），订单出库 / 入库可用拣货、扫码收货。
+
 ## 与 Web 端共用的内容
 
 `vite.config.js` 中的别名 `@web` 指向 `../lemon-web/src`，小程序直接引用 Web 端的两类文件，不复制：
@@ -644,7 +718,7 @@ uni.requestSubscribeMessage({ tmplIds: templateIds })
 <!-- #endif -->
 ```
 
-当前用到条件编译的地方：登录页判断是否为微信环境、订阅消息、「我的」中的审批提醒 / 切换账号 / 解除绑定。
+当前用到条件编译的地方：登录页判断是否为微信环境、订阅消息、「我的」中的审批提醒 / 切换账号 / 解除绑定、商品速查的同声传译插件（`voice.js`，只在 `MP-WEIXIN`）、打印 / 分享 PDF（`print.js`，H5 在新窗口打开，小程序用 `uni.openDocument`）。
 
 ## 发布
 
