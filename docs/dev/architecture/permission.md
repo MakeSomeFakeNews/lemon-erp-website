@@ -114,14 +114,14 @@ public R<List<ScmPurchaseContract>> active(...) { ... }
 | 超级管理员 | admin | 全部 | 全部权限 |
 | 普通用户 | common | 本部门及以下 | 所有页面只读（数据大屏除外，含通知公告管理页 `sys:notice:list`） |
 | 总经理 | gm | 全部 | 业务模块只读 + 商务智能（含数据大屏和投屏链接管理）；审核、关闭采购 / 销售订单，审核招聘需求、假勤、工时 |
-| 采购员 | purchaser | 本部门（另可看到各部门已提交的请购单） | 请购、询价、采购订单与收退货、供应商、寄售结算、采购返利协议（`scm:purchaseRebate:list` / `add`）；库存、物料只读 |
+| 采购员 | purchaser | 本部门（另可看到各部门已提交的请购单） | 请购、询价、采购订单与收退货、供应商（含合并 `scm:supplier:merge`）、寄售结算、采购返利协议（`scm:purchaseRebate:list` / `add`）；库存、物料只读 |
 | 销售员 | sales | 仅本人 | 报价、销售订单、发货通知、客户、CRM（含服务工单受理处理、市场活动）；库存、出库、价目表只读 |
-| 销售经理 | sales_mgr | 本部门及以下 | 销售员的全部权限 + 客户分析（`crm:analysis:list`）、价目表维护（`scm:price:edit`）、商品价格维护（`scm:goodsPrice:edit`）；可看到下属的客户、订单和跟进 |
+| 销售经理 | sales_mgr | 本部门及以下 | 销售员的全部权限 + 客户分析（`crm:analysis:list`）、价目表维护（`scm:price:edit`）、商品价格维护（`scm:goodsPrice:edit`）、客户合并（`scm:customer:merge`）；可看到下属的客户、订单和跟进 |
 | 仓库管理员 | warehouse | 全部 | 仓库全部单据与资料、采购收退货、销售出库退货、拣货、发运、领料与完工入库、移动作业、数据大屏；生产统计 `mes:stat:product` |
 | 生产计划员 | planner | 本部门及以下 | 生产计划、MRP、产能排程、工单、齐套、BOM、工作中心、请购单；生产统计 `mes:stat:piece/output/wo/product/usage` |
 | 车间主管 | workshop | 本部门 | 领料、报工、完工入库、补料申请、质量检验、设备与维护；生产统计 `mes:stat:*`（5 个菜单） |
 | 质量工程师 | quality | 全部 | 质量管理全部功能；物料、供应商、工单只读；生产统计 `mes:stat:output` / `wo`；员工通用权限 |
-| 会计 | accountant | 全部 | 财务全部功能（含 `fin:receipt:confirm` / `fin:payment:confirm`）；采购销售单据、工资表、项目核算只读；生产统计 `mes:stat:piece` / `product` / `usage` |
+| 会计 | accountant | 全部 | 财务全部功能（含 `fin:receipt:confirm` / `fin:payment:confirm`、应收应付对冲 `fin:netting:add` / `fin:netting:remove`）；采购销售单据、工资表、项目核算只读；生产统计 `mes:stat:piece` / `product` / `usage` |
 | 出纳 | cashier | 全部 | 收付款（含 `fin:receipt:confirm` / `fin:payment:confirm`）、预收预付、银行对账、报销借款付款、其他收支（`fin:io:list/add/edit/remove/confirm/category`） |
 | 人事专员 | hr | 全部 | 人力资源全部功能；通知公告（`sys:notice:list` / `add` / `edit` / `remove` / `publish`）；生产统计 `mes:stat:piece` |
 | 项目经理 | pm | 仅本人 | 项目管理全部功能（只看自己负责的项目），审批本人负责项目的工时 |

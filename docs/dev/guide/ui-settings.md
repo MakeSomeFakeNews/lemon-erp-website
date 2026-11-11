@@ -103,5 +103,5 @@ Ant Design Vue 4 本身不输出 CSS 变量，原来页面里写的 `var(--ant-c
 ## 扩展
 
 - **新增一个界面设置项**：在 `uiSettings.js` 的 `DEFAULT_SETTINGS` 中加默认值、在 `normalizeSettings` 中加校验，在 `SettingDrawer.vue` 中加控件，文字加到 `locales/<语言>/layout.js` 的 `layout.settings`；仍保存在 key `ui` 中，后端不用改。
-- **新增一种个人设置**（与界面无关，如某个表格的列设置）：用新的 key 调用 `/profile/settings/{key}`，注意每人最多 20 项、单项不超过 8000 字符。已有的其他个人设置：`printFormats`（每种单据上次使用的打印格式 `{ 模板标识: 格式 ID }`，见[多份打印格式](./doc-no-print#多份打印格式)）、`quickLookup`（商品速查选择的价格 `{ price }`，Web 与小程序共用，见[商品速查](./pricing#商品速查)）。
+- **新增一种个人设置**（与界面无关，如某个表格的列设置）：用新的 key 调用 `/profile/settings/{key}`，注意每人最多 20 项、单项不超过 8000 字符。已有的其他个人设置：`printFormats`（每种单据上次使用的打印格式 `{ 模板标识: 格式 ID }`，Web 与小程序共用，见[多份打印格式](./doc-no-print#多份打印格式)）、`quickLookup`（商品速查选择的价格 `{ price }`，Web 与小程序共用，见[商品速查](./pricing#商品速查)）。
 - **新增预设主题色**：在 `PRESET_COLORS` 中加 `{ key, color }`，并在两种语言的 `layout.settings.colors.<key>` 中加名称。

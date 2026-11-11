@@ -225,6 +225,40 @@ issue #50。收付款表单可以勾选该单位未冲抵完的预收 / 预付�
 
 冲账单的红字单据在收付款中与其他红字单据一样冲抵，核销合计可以为 0；此时收付款凭证没有资金分录，`FinSettlementService.generateVouchers` 把往来科目按蓝字、红字分两行冲抵（`partnerLine`）。往来单位被冲账单引用时不能删除（`FinRefMapper.xml`）。
 
+## 挂接应付
+
+issue #95。客户在供应商资料中被设置为关联客户（`scm_supplier.customer_id`，见 [往来单位合并 - 客户与供应商关联](../architecture/integration#客户与供应商关联)）时，应收的查询可以把关联供应商的应付按负数一起列出，净额 = 应收 − 应付。查询参数 `withAp=true`，**只对应收生效**（应付查询不挂接），需要 `fin:ap:list`，没有时提示无权限；前端在应收页面按 `hasPerm('fin:ap:list')` 显示「挂接应付」勾选框。
+
+| 查询 | 挂接后 |
+| --- | --- |
+| 应收列表 `GET /fin/bill/ar` | 同时列出关联供应商的应付单，金额、已核销等取负数，行上 `linkedAp = true`；往来单位按关联的客户筛选。前端（`BillPage.vue`）带「应付」标签、只读，不能勾选生成凭证，页面合计即应收 − 应付 |
+| 往来汇总 `GET /fin/bill/ar/summary`（及 `/total`） | 每个客户另列 `linkedAp`（应付单余额 − 预付未冲抵，负数），`net` 扣除它；只有应付的关联客户也列出。前端（`PartnerSummary.vue`）在「净欠款」前插入「关联应付」列，展开明细（`PartnerSummaryDetail.vue`，传入 `linkedSupplierId`）多一个「关联应付」页签，行上「更多 → 应收应付对冲」打开 `NettingForm`；跳转对账单时带 `withAp=1` |
+| 账龄 `GET /fin/bill/ar/aging` | 关联供应商的应付按到期日计入同一分段，取负数 |
+| 往来对账单 `GET /fin/partner-statement?kind=AR&withAp=true` | 期初、期末为 应收 − 应付；关联供应商的应付单计入减少，付款、预付、对冲计入增加（明细 `linkedAp`，类型显示「应付单（关联）」等），返回 `linkedSupplierName`，打印带关联供应商 |
+| 客户详情（CRM 统计） | 有关联供应商且有 `fin:ap:list` 时返回 `linkedSupplierName`、`linkedApBalance`，前端显示「关联供应商应付」「应收净额（应收 − 应付）」 |
+
+**信用额度不扣减关联应付**：应付在双方确认互抵之前不视为已回款，信用占用仍按应收余额（含未完成订单）计算；做了应收应付对冲后应收余额减少，占用随之释放。
+
+## 应收应付对冲
+
+issue #95。同一单位既是客户又是供应商时用应付抵减应收。现有[冲账单](#冲账单)只生成单边红字单据、对方科目为费用 / 收入，用它互抵时另一边的余额不变，所以单独提供对冲。
+
+`FinNettingService` / `FinNettingController`（`/fin/netting`），表 `fin_netting`（单号、对冲日期、客户、供应商、金额、凭证）/ `fin_netting_item`（单据、核销金额），单号规则 `FinNettingService.DOC_NO = "DC"`（在 `FinDocNos` 中声明）。前端为应收管理 / 应付管理的「应收应付对冲」页签（`components/fin/NettingPanel.vue`，新建 `NettingForm.vue`）。
+
+| 操作 | 接口 | 权限 | 说明 |
+| --- | --- | --- | --- |
+| 列表 / 详情 | `GET /fin/netting`、`/{id}` | `fin:ar:list` 或 `fin:ap:list` | 按客户、单号筛选；详情带核销明细 |
+| 候选单据 | `GET /fin/netting/candidates?customerId=` | `fin:netting:add` | 客户关联的供应商，两边未核销的本位币单据（含红字） |
+| 新建 | `POST` | `fin:netting:add` | `@Transactional`，`@OperLog` |
+| 删除 | `DELETE /{ids}` | `fin:netting:remove` | `@Transactional`，`@OperLog` |
+
+- **新建**：客户必须有关联供应商；每行单据属于该客户（应收）或其关联供应商（应付）、本位币、未核销完，核销金额与余额同号、不超过余额；应收合计必须等于应付合计且大于 0。单据经 `FinBillMapper.addSettled` 条件更新已核销，并发超额时整单回滚；同时生成未审核凭证 **借 应付账款（供应商辅助）/ 贷 应收账款（客户辅助）**，凭证来源 `VoucherSource.NETTING`（系统字典 `fin_voucher_source` 的「应收应付对冲」），不能在凭证管理中单独删除。前端「自动分配」：红字单据全部冲抵，其余按日期先后核销到两边余额中较小的一方；
+- **删除**：凭证未审核、期间未结账时，恢复单据的已核销，删除凭证和对冲单；
+- **外币单据不能对冲**，需先按收付款处理；
+- **对报表的影响**：往来汇总按已核销自动反映；账龄截至查询日期的核销包含对冲（`FinBillMapper.xml` aging 的截至日核销子查询）；往来对账单的应收、应付各有一行「应收应付对冲」（类型 `PartnerLedgerType.NETTING`，减少），挂接应付时两行抵消。
+
+菜单按钮：`fin:netting:add` 1835、`fin:netting:remove` 1836（在应收管理 183 下），内置给会计。测试 `PartnerMergeTests`（挂接应付、应收应付对冲两个用例）。
+
 ## 折让与冲账的凭证科目
 
 `AccountRole` 新增四个用途（「收入与费用」组），业务代码通过 `FinAccountRuleService.accountId(AccountRole.X)` 取科目：
@@ -273,12 +307,15 @@ issue #50。收付款表单可以勾选该单位未冲抵完的预收 / 预付�
 | `service/FinPartnerLedgerService`、`mapper/fin/FinPartnerLedgerMapper.xml` | 往来对账单、往来汇总（`summary` / `summaryTotal`） |
 | `entity/FinSettlementAdvance`、`mapper/fin/FinSettlementAdvanceMapper.xml` | 收付款选用的预收预付 |
 | `service/FinOffsetService`、`controller/FinOffsetController` | 冲账单 |
+| `service/FinNettingService`、`controller/FinNettingController` | 应收应付对冲 |
+| `service/FinPartnerMergeHandler`、`mapper/fin/FinMergeMapper.xml` | 合并客户 / 供应商时迁移财务表（含凭证辅助核算），见[往来单位合并](../architecture/integration#往来单位合并) |
 | `service/FinBillService` | `createOffsetBill`、`deleteOffsetBill`、`writeOffBadDebt`、`lines`（冲账单分录） |
 | `model/AccountRole`、`model/BillSource`、`model/OffsetStatus` | 凭证用途、单据来源 `OFFSET`、冲账单状态 |
 | `service/FinBizRules` | `fin.offset.reviewSeparate`、`fin.settlement.draft` |
 | `mapper/fin/FinSettlementItemMapper.xml`、`FinOffsetMapper.xml`、`FinBillMapper.xml`、`FinAdvanceMapper.xml`、`FinPartnerLedgerMapper.xml` | 折让记录、冲账单列表、核销条件更新、账龄、往来对账 |
 | 前端 `components/fin/SettlementPage.vue`、`SettlementForm.vue`、`SettlementAdvances.vue`、`SettlementDiscounts.vue`、`settlementConf.js`、`fin.js`（`allocateSettle`、`settleAllAmounts`） | 收付款列表、新增 / 修改、冲抵预收预付、折让记录、按收付款区分的文字、自动核销 / 全部核销 |
-| 前端 `components/fin/PartnerSummary.vue`、`PartnerSummaryDetail.vue` | 往来汇总页签 |
+| 前端 `components/fin/PartnerSummary.vue`、`PartnerSummaryDetail.vue` | 往来汇总页签（含挂接应付） |
+| 前端 `components/fin/NettingPanel.vue`、`NettingForm.vue` | 应收应付对冲页签、新建对冲 |
 | 前端 `components/common/SourceDocLink.vue`、`sourceDocs.js`，`composables/useRouteOpen.js` | 来源单据穿透 |
 | 前端 `views/fin/advance/index.vue`、`views/fin/offset/index.vue`、`components/fin/BillPage.vue` | 预收预付、冲账单、应收应付（坏账按钮） |
 

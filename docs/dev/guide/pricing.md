@@ -223,7 +223,7 @@ function onReferencePick(price) {
 | --- | --- |
 | `GET /scm/quick-lookup?keyword=&price=&current=&size=` | 搜索；每行有商品图片时带主图 `imageUrl` |
 | `POST /wms/material/images/urls` | 点击商品看全部商品图片（[物料图片](./material#商品图片)，公开文件地址，登录即可读取） |
-| `GET /scm/quick-lookup/{id}/stock` | 点击库存看各仓库 / 库位 / 批次，成本按 `wms:stock:cost` |
+| `GET /scm/quick-lookup/{id}/stock` | 点击库存看各仓库 / 库位 / 批次，成本按 `wms:stock:cost`；有库存查询权限 `wms:stock:list` 时弹窗底部有「经营历史（进销存）」，以子页打开与库存查询、物料资料相同的经营历史 `components/wms/StockHistory.vue`（已按物料筛选），返回后回到商品速查，与小程序一致 |
 | `GET /scm/quick-lookup/{id}/summary?kind=SALES\|PURCHASE` | 点击价格看**历史参考**：最近 3 次、系统最新价、最高价、最低价，同价取最近一次；进货类价格默认打开进价，其他打开售价 |
 | `GET /scm/quick-lookup/{id}/trades` | **更多交易历史**，分页：日期范围、单位编号 / 名称 / 电话筛选，列 日期、数量、单价、单位名称、单位编号、单号、制单、复核 |
 

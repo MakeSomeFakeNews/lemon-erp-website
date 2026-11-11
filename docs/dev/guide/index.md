@@ -42,7 +42,7 @@
 4. **审批**：在 `XxxFlowBusinesses` 中声明 `FlowBusiness`，Service 中声明 `ApprovalFlow`，提交时 `approvalSupport.submit`，在 `FlowFinishedEvent` 监听器中用 `FLOW.onFinished` 回写状态；在 `init.sql` 中内置一个未发布的流程模型。
 5. **前端**：`npm run gen:enums` 生成状态常量 → `api/<模块>/*.js` 接口 → `views/<模块>/<页面>/index.vue` 列表页（单条操作用 `useAction`）→ 表单（`FormDrawer`，明细用 `useLineItems` + `LineItemsTable`）和详情（`SubPage`）组件 → 打印（`printDocs` + `PRINT_TYPES`）；页面文字用 `$t`，键加到 `locales/zh-CN`、`locales/en-US` 两个语言包。
 6. **菜单与授权**：登记模块目录、分组、页面和按钮权限，给需要的内置角色授权；内置菜单和字典在 `locales/en-US/menu.js`、`dict.js` 中加英文译文。
-7. **扩展点**（按需）：首页待办 `TodoProvider`、附件与自定义字段 `RecordTypeProvider`、主数据引用检查 `ReferenceChecker`、定时提醒 `JobHandler`、新租户基础数据 `TenantInitializer`、业务控制规则 `BizRuleProvider`、AI 问数工具 `AiTool` 与智能录入目标 `AiExtractTarget`（见 [AI 能力扩展开发](./ai)）。
+7. **扩展点**（按需）：首页待办 `TodoProvider`、附件与自定义字段 `RecordTypeProvider`、主数据引用检查 `ReferenceChecker`、往来单位合并 `PartnerMergeHandler`、定时提醒 `JobHandler`、新租户基础数据 `TenantInitializer`、业务控制规则 `BizRuleProvider`、AI 问数工具 `AiTool` 与智能录入目标 `AiExtractTarget`（见 [AI 能力扩展开发](./ai)）。
 8. **自测**：用 admin 和只有部分权限、不同数据权限的账号分别验证菜单、按钮、接口权限和数据隔离；开启 `LEMON_TENANT_ENABLED=true` 验证多租户；运行 `npm run i18n:check`（同时检查枚举常量是否与后端一致）、`python3 scripts/check_i18n.py`，并切换为英文界面检查。
 
 ## 代码风格要点

@@ -937,7 +937,7 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 | 自定义字段 | 登记业务类型后前端接入 `useCustomFields`，见 [业务实体接入自定义字段](./custom-field) |
 | 明细行、金额合计 | `DetailLines`、`Decimals`，前端 `useLineItems` + `LineItemsTable`，见 [单据开发公共组件](./doc-components) |
 | 可配置的业务规则（比例、开关、方式、表格） | 实现 `BizRuleProvider` 登记业务参数，见 [新增业务参数](./biz-rule)；界面要按开关显示时在 `publicKeys()` 中声明，前端用 `useBizRules` 读取 |
-| 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除 |
+| 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除；引用客户 / 供应商的表还要实现 `PartnerMergeHandler`（`XxxMergeMapper.xml`），合并资料时迁移，见 [往来单位合并](../architecture/integration#往来单位合并) |
 | 资料较多、需要模糊检索（拼音首字母、缩写） | 表加 `search_key` 检索列、实体实现 `Searchable`，下拉接口分页并支持 `ids`，见 [后端开发 → 主数据检索与下拉](./backend#主数据检索与下拉) |
 | 定时提醒 | [新增定时任务](./job) |
 | 新租户需要的基础数据 | [新租户初始化](./tenant-init) |

@@ -257,6 +257,7 @@ JRXML 中可用的参数与字段：
 - `utils/printTemplates.js` 的 `loadFormats` / `formatsOf` / `formatConfig` / `formatLabel`。预置名称「标准格式」「发货单（不含价格）」存库为中文，`formatLabel` 按界面语言显示；
 - `utils/print.js` 的 `printDocs` 在该单据有多份启用格式时，经 `formatPicker` 状态弹出 `components/print/PrintFormatPicker.vue`（挂在 `App.vue`），批量打印只选择一次；
 - 预选用户上次使用的格式，没有时为默认格式。上次的选择保存在个人设置 `printFormats`（`/profile/settings/printFormats`，内容 `{ 模板标识: 格式 ID }`，见[界面设置](./ui-settings)），换浏览器 / 设备也能记住；首次需要选择时读取一次，选择与上次相同时不再保存，只保留仍存在的单据；
+- 小程序打印 / 分享 PDF（`lemon-mp/src/pkg-wms/print.js`）按同样的规则选择格式，并与 Web 端共用 `printFormats`，见[微信小程序开发 - 手机开单的保存、草稿与打印](./miniapp)；
 - 打印模板页面 `views/system/print-template` 按区域拆为同目录子组件：格式栏 `FormatBar.vue`、基本设置 `BasicSettings.vue`、JRXML `JrxmlPanel.vue`、套打 `OverlaySection.vue`、字段 / 列 / 签字栏 `SectionRows.vue`、预览 `PreviewPane.vue`，编辑配置的合并与整理在 `templateConfig.js`。
 
 **预置格式**：销售出库单预置「发货单（不含价格）」（标题「发货单」，隐藏含税单价、税率、价税合计列和金额类表头字段，不作为默认），与默认的标准格式一起写在 `init.sql`。新租户由 `SysPrintTenantInitializer` 从平台复制（只复制名称和配置，不复制平台的 JRXML、底图；平台删除了这份示例时不复制）。已有库执行升级脚本 `sql/upgrade/20261111_print_formats.sql`，见[升级](../deploy/upgrade)。

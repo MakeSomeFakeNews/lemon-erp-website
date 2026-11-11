@@ -80,7 +80,7 @@ order: 1
 
 框架层还提供了不需要业务模块实现、直接注入使用的通用组件，如审批的 `workflow.ApprovalSupport`（基于 `FlowApi`）、`data.StatusTransitions`、`data.DetailLines`、`data.Queries`、`security.datascope.DataScopes`，见 [单据开发公共组件](../guide/doc-components)。
 
-另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总（`framework/ai` 的 `AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource` 由智能模块汇总，见 [AI 能力扩展开发](../guide/ai)）：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`TenantInitializer`（新租户基础数据）、`BizRuleProvider`（业务参数定义）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
+另外还有一类「多实现」的扩展接口，每个业务模块各自实现、由框架或系统模块汇总（`framework/ai` 的 `AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource` 由智能模块汇总，见 [AI 能力扩展开发](../guide/ai)）：`TodoProvider`（首页待办）、`JobHandler`（定时任务）、`RecordTypeProvider`（附件与变更历史的业务类型）、`ReferenceChecker`（主数据删除前的引用检查）、`PartnerMergeHandler`（客户 / 供应商合并时迁移本模块的表）、`TenantInitializer`（新租户基础数据）、`BizRuleProvider`（业务参数定义）、`DocNoCatalog` Bean（单据编号类型）、`FlowBusiness` Bean（审批流程）。详见 [业务联动](./integration)。
 
 ## 新增模块
 

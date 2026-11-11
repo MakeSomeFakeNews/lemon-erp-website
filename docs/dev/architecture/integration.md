@@ -382,6 +382,7 @@ Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCatego
 | `job.JobHandler` | system（`SysJobService`） | 定时任务 | `WmsBatchExpiryJob` |
 | `record.RecordTypeProvider` | system（附件、变更历史、自定义字段） | 登记可挂附件、记录变更历史、扩展自定义字段的业务类型 | `WmsRecordTypes` |
 | `ref.ReferenceChecker` | `ReferenceGuard` | 删除物料、仓库、客户、供应商、用户、部门前检查本模块单据是否引用 | 每个模块一个 `XxxReferenceChecker` + `XxxRefMapper.xml` |
+| `ref.PartnerMergeHandler` | scm（`ScmPartnerMergeService`） | 合并客户 / 供应商时预览本模块的影响范围、检查冲突、迁移本模块的表 | 每个模块一个 `XxxPartnerMergeHandler` + `XxxMergeMapper.xml` |
 | `tenant.TenantInitializer` | system（新建租户） | 新租户基础数据 | `FinTenantInitializer` |
 | `rule.BizRuleProvider` | system（`SysBizRuleService`，「业务参数」页面） | 登记本模块按租户配置的业务控制规则 | `ScmBizRules`、`FinBizRules` |
 | `DocNoCatalog`（Bean） | 编码规则页面 | 声明本模块的单据编号类型 | `ScmDocNos` |
@@ -399,6 +400,42 @@ referenceGuard.checkDeletable(RefType.MATERIAL, id, Messages.get("wms.text.mater
 `ReferenceChecker.findReference` 返回的是引用它的单据名称的**消息键**（由实现的模块登记），`ReferenceGuard` 用 `Messages.get` 取消息后拼成提示。
 
 上游模块（如仓库）看不到下游模块（如生产、客户关系）的表，因此由下游模块实现 `ReferenceChecker`。新增业务表引用主数据时，在本模块的 `XxxRefMapper.xml` 中加一条查询。
+
+### 往来单位合并
+
+同一客户（或供应商）建了多份资料时，用户在资料列表「更多 → 合并到…」把重复的资料合并到保留的资料（issue #95，用户手册见 [客户 - 资料合并](/manual/scm/customer#资料合并)、[供应商 - 资料合并](/manual/scm/supplier#资料合并)）。
+
+| 接口 | 权限 | 说明 |
+| --- | --- | --- |
+| `POST /scm/{customer\|supplier}/merge/preview` | `scm:customer:merge` / `scm:supplier:merge` | 请求 `{ targetId, sourceIds }`（被合并的最多 20 份），返回各类数据的数量及其中按规则合并 / 舍弃的重复行（`MergeImpact`），以及合并后的关联单位 |
+| `POST /scm/{customer\|supplier}/merge` | 同上 | 执行合并，`@OperLog`（客户管理-合并 / 供应商管理-合并） |
+
+`ScmPartnerMergeService.merge` 在一个事务中依次调用全部 `framework/ref/PartnerMergeHandler`（另有 `PartnerType`、`MergeImpact`），任一模块报告冲突或出错时整次回滚。写法与 `ReferenceChecker` 相同：每个模块一个 `XxxPartnerMergeHandler` + `XxxMergeMapper.xml`，只注入本模块的 Mapper、只改本模块的表。
+
+```java
+public interface PartnerMergeHandler {
+    /** 合并前预览：本模块引用被合并资料的各类数据的行数（labelKey / total / conflicts） */
+    List<MergeImpact> impacts(PartnerType type, List<Long> sourceIds, Long targetId);
+    /** 不能自动处理的冲突（如两份资料参与了同一张询价单）抛 BizException；默认没有 */
+    default void check(PartnerType type, List<Long> sourceIds, Long targetId) { }
+    /** 把引用改为指向保留的资料；有名称快照的一并更新为 targetName */
+    void merge(PartnerType type, List<Long> sourceIds, Long targetId, String targetName);
+}
+```
+
+- **覆盖范围**：供应链（订单、出入库单、草稿、报价、发货通知、发运含承运商、返利、渠道库存、价目表、请购、询价、评估、采购合同、招标投标、ASN、客户执行价、供货价格、价格记忆、供应商的关联客户）、仓库（寄售仓、出入库单和库存流水的往来单位及名称快照、来料暂存）、生产质量（MRP 建议、来料检验、不合格品、索赔）、财务（应收应付、收付款、预收预付、冲账单、发票、其他收支、票据及操作记录、对冲单、供应商对账单、凭证分录的客户 / 供应商辅助核算，含已记账凭证）、客户关系（经营信息、联系人、线索、跟进、商机、合同、工单）、项目、商务智能事实表、系统（门户账号，提交后清除其登录缓存；附件；自定义字段）；
+- **按种类区分**：`partner_id` 同时存放客户和供应商的表（订单 / 出入库 / 应收应付 / 收付款 / 发票的 kind、出入库单的业务类型、其他收支的关联单位类型、票据种类与操作类型）必须带种类条件，客户和供应商的 ID 会重复；
+- **冲突规则**：保留资料的属性（名称、信用额度、账期、价格等级、负责人等）不变；单据金额、币种（记在单据上，往来单位没有币种）、核销关系不变；客户执行价 / 供货价格同一物料以保留资料为准（保留资料没有时取被合并资料中最近修改的一条；被删除的供货价格是默认供应商时保留的设为默认，阶梯价一并删除），价格记忆合为一行（最新价取日期最近的，最低 / 最高价取各自的最低 / 最高）；CRM 经营信息以保留客户为准（没有时移过来一份，最近跟进取较晚的），保留客户已有首要联系人时移过来的不再是首要；自定义字段保留资料已填写的优先；
+- **拒绝合并**：同一询价单、同一招标（邀请或投标）、同一期间的渠道库存、合并后会有多个关联单位；
+- **被合并的资料**：停用并记录 `merged_to`（`scm_customer` / `scm_supplier`，列表显示「已合并」），不能再启用、再合并或被选为保留的资料；变更记录中被合并的有「合并到」、保留的有「合并的资料」；之后没有引用时可删除，所以是停用 + 标记而不是直接删除。
+
+**新增业务表引用客户 / 供应商时**，除了在 `XxxRefMapper.xml` 中登记删除保护，还要在所属模块的 `XxxMergeMapper.xml` 中同时登记影响范围（`impacts`）和迁移语句（`merge`），有冲突可能的（唯一约束包含往来单位的）在 `check` 中拒绝或在迁移中按规则合并。测试 `PartnerMergeTests`。
+
+### 客户与供应商关联
+
+同一单位既是客户又是供应商时，在供应商资料中设置「关联客户」：`scm_supplier.customer_id`，一对一（唯一约束 `uk_supplier_customer`），只在供应商一侧存一列，不会出现两边不一致。保存时校验该客户未被其他供应商关联、未被合并；删除客户时解除关联；合并客户时关联改为保留的客户。客户列表显示关联的供应商，供应商列表显示关联客户。
+
+关联后财务可以「挂接应付」查看净额、做「应收应付对冲」，见 [应收应付核销开发 - 挂接应付](../guide/settlement#挂接应付)、[应收应付对冲](../guide/settlement#应收应付对冲)。
 
 ### 站内消息
 

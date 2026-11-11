@@ -91,7 +91,7 @@ com.lemon.erp.framework
 ├── portal        PortalKind、PortalFeatures、PortalAccounts：供应商 / 经销商门户
 ├── quality       SupplierQualityProvider：供应商质量统计
 ├── record        RecordTypeProvider、ChangeLogger：附件与字段变更历史
-├── ref           ReferenceChecker、ReferenceGuard：主数据删除前的引用检查
+├── ref           ReferenceChecker、ReferenceGuard：主数据删除前的引用检查；PartnerMergeHandler：客户 / 供应商合并
 ├── rule          BizRule、BizRuleProvider、BizRules：按租户的业务参数
 ├── security      JWT 过滤器、TokenService 会话、LoginUser、@ss 权限判断
 │   └── datascope @DataPermission 数据权限，DataScopes（按数据权限读取单条数据）

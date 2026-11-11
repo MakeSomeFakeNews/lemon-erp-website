@@ -644,10 +644,11 @@ issue #97 补齐了手机开单：快速入库、统一的保存方式、单据�
 
 1. 保存并审核、草稿审核成功后询问是否打印，需要 `scm:{kind}:list` 读取单据详情，没有时不询问；
 2. 按 Web 端 `TradeDocDetail` 的打印内容组装单据。匹配键取 Web 端语言包 `zh-CN/print.js` 的打印名称，显示名称按界面语言；
-3. 套用打印模板（`/system/print-template`，即默认格式的隐藏 / 排序 / 改名 / 纸张；上传了 JRXML 的由后端按 JRXML），调用 `POST /system/print/pdf` 生成 PDF；
-4. 写入 `wx.env.USER_DATA_PATH` 后用 `uni.openDocument({ showMenu: true })` 打开，用户在右上角菜单转发，或用其他应用打开打印。小程序不能直接连接打印机；H5 调试时在新窗口打开。
+3. 选择打印格式，规则与 Web 端 `printDocs` 一致（见[多份打印格式](./doc-no-print#多份打印格式)，issue #96）：读取 `/system/print-template/formats`，取该单据启用的格式；没有保存过格式的单据按默认版式，只有一份启用格式时直接按它生成，有多份时先弹 action sheet 选择。上次使用的格式（没有时为默认格式）排在最前，并标注「上次使用」「默认」（action sheet 不能预选，用排序和标注代替）；微信 action sheet 最多 6 项，超过 6 份时每页列 5 项，最后一项为「更多格式…」。选择结果写入个人设置 `printFormats`（`{ 模板标识: 格式 ID }`，与 Web 端共用同一个 key），与上次相同时不保存，保存失败不影响打印。预置格式名称（标准格式、发货单（不含价格））在英文界面按 Web 端语言包显示。action sheet 不能叠在加载遮罩之上，所以先选格式、再显示「正在生成 PDF」，取消选择则不打印；
+4. 按所选格式的配置（`config`，上传了 JRXML 的加 `jrxml: true`，与 Web 端 `formatConfig` 一致）套用隐藏 / 排序 / 改名 / 纸张，调用 `POST /system/print/pdf` 生成 PDF，请求带 `formatId`，后端据此取该格式的 JRXML；
+5. 写入 `wx.env.USER_DATA_PATH` 后用 `uni.openDocument({ showMenu: true })` 打开，用户在右上角菜单转发，或用其他应用打开打印。小程序不能直接连接打印机；H5 调试时在新窗口打开。
 
-打印改动集中在 `print.js` 一个文件，以后支持[打印格式选择](./doc-no-print#多份打印格式)时只改这里。
+打印改动集中在 `print.js` 一个文件（格式选择也在这里，没有改后端）。
 
 销售 / 采购订单的手机录入暂未提供（订单字段多、需审批，仍在电脑端），订单出库 / 入库可用拣货、扫码收货。
 
