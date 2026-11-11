@@ -6,8 +6,8 @@
 
 | 页面 | 内容 |
 | --- | --- |
-| [后端开发规范](./backend) | 分层与拆分、统一返回 `R`、异常、校验分组、枚举约定、SQL 约定（`StatusTransitions`、`Queries`）、分页上限、`@PreAuthorize`、`@OperLog`、Controller 的职责、接口类型化、事务边界、跨模块访问数据、制单人自动填充、`Decimals` |
-| [前端开发规范](./frontend) | 列表页结构、`useTable`、`FormDrawer`、`SubPage`、`useDict` / `DictTag`（系统字典与业务字典）、`@/constants/enums` 状态常量、`useAction`、`useLineItems` / `LineItemsTable`、`utils/number.js`、下拉框与表格的显示约定、拆分大页面、`v-perm`、深色模式样式 |
+| [后端开发规范](./backend) | 分层与拆分、统一返回 `R`、异常、校验分组、枚举约定、SQL 约定（`StatusTransitions`、`Queries`）、分页上限、主数据检索与下拉（`SearchKeys`、检索列）、`@PreAuthorize`、`@OperLog`、Controller 的职责、接口类型化、事务边界、跨模块访问数据、制单人自动填充、`Decimals` |
+| [前端开发规范](./frontend) | 列表页结构、`useTable`、`FormDrawer`、`SubPage`、`useDict` / `DictTag`（系统字典与业务字典）、`@/constants/enums` 状态常量、`useAction`、`useLineItems` / `LineItemsTable`、`utils/number.js`、选择资料的下拉（`RemoteSelect`）、下拉框与表格的显示约定、拆分大页面、`v-perm`、深色模式样式 |
 | [新增一个业务模块](./new-module) | 从建 Gradle 模块、建表与字典（系统字典 / 业务字典）、写实体 / Mapper / Service / Controller，到前端页面与菜单的完整步骤 |
 | [单据开发公共组件](./doc-components) | `ApprovalFlow` / `ApprovalSupport`、`StatusTransitions`、`DataScopes`、`DetailLines`、`Queries`、`Decimals`、制单人自动填充，前端 `useAction`、`useLineItems` + `LineItemsTable`、`useBizRules`，供应链的 `TradeDocItems`、`PriceReference`；带明细行单据的完整示例 |
 | [单据编号与打印](./doc-no-print) | `DocNoService` 取号、`DocNoCatalog` 声明、`printDocs` 打印、`PRINT_TYPES` 登记打印模板，后端 JasperReports 生成 PDF、JRXML 与套打 |

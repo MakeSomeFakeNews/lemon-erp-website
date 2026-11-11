@@ -883,6 +883,7 @@ const rowActions = (record) => [
 
 - 判断状态用生成的常量 `CarRequestStatus.DRAFT`，不写 `'DRAFT'`；用车类型是业务字典，下拉选项全部来自 `dict.oa_car_type`，不写死可选值；
 - 删除等单条操作用 `useAction`，失败时请求拦截器已提示，不需要 catch；
+- 选择客户、物料、员工等可能上千条的资料用远程搜索组件（`PartnerSelect`、`MaterialSelect`、`EmployeeSelect` 等，其他资料用 `RemoteSelect`），不要一次性加载全部再在前端过滤，见 [前端开发 → 选择资料的下拉](./frontend#选择资料的下拉)；
 - 操作列用 `TableActions` + `actionColumn`：编辑、删除显示为图标（悬停显示文字），按状态用 `show`、按权限用 `perm` 控制；不常用的操作写 `more: true` 放进「更多」，规则见 [前端开发 → 操作列](./frontend#操作列)；
 - `scroll.x` 用 `useColumns` 返回的 `scrollX`；所有列默认显示，一列只放一项信息，宽度不够时横向滚动；
 - 列表列的 `dict` 让导出 Excel 时输出字典标签，`useColumns` 还会按当前语言最长的标签自动加宽该列（英文标签较长时不从单词中间断开）；单元格中随语言变化较大的说明文字用 `subTextWidth` 测量列宽，见 [前端开发 → 列表页](./frontend#列表页)。
@@ -937,6 +938,7 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES
 | 明细行、金额合计 | `DetailLines`、`Decimals`，前端 `useLineItems` + `LineItemsTable`，见 [单据开发公共组件](./doc-components) |
 | 可配置的业务规则（比例、开关、方式、表格） | 实现 `BizRuleProvider` 登记业务参数，见 [新增业务参数](./biz-rule)；界面要按开关显示时在 `publicKeys()` 中声明，前端用 `useBizRules` 读取 |
 | 引用主数据（物料、客户等） | 实现 `ReferenceChecker`，防止被引用的主数据被删除 |
+| 资料较多、需要模糊检索（拼音首字母、缩写） | 表加 `search_key` 检索列、实体实现 `Searchable`，下拉接口分页并支持 `ids`，见 [后端开发 → 主数据检索与下拉](./backend#主数据检索与下拉) |
 | 定时提醒 | [新增定时任务](./job) |
 | 新租户需要的基础数据 | [新租户初始化](./tenant-init) |
 | AI 问数、智能录入、数据整理、智能报告 | 在本模块的 `ai` 包中实现 `framework/ai` 的契约（`AiTool`、`AiExtractTarget`、`AiCleanseSource`、`AiReportSource`），不依赖 `lemon-ai`，见 [AI 能力扩展开发](./ai) |

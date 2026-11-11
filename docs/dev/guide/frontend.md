@@ -14,9 +14,9 @@ order: 2
 | `src/views/<模块>/<页面>/index.vue` | 菜单页面，路径即菜单的「组件路径」（`wms/warehouse/index`） |
 | `src/components/<模块>/` | 本模块的单据表单（`XxxForm.vue`）、详情（`XxxDetail.vue`）等组件 |
 | `src/components/` | 通用组件：`TableToolbar`、`SearchForm`、`FormDrawer`、`SubPage`、`DictTag`、`StatusSwitch`、`AttachmentPanel`、`ChangeLogPanel`、`ImportModal` |
-| `src/components/common/` | `LineItemsTable`（单据明细行表格）、`CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
+| `src/components/common/` | `RemoteSelect`（远程分页搜索下拉）、`LineItemsTable`（单据明细行表格）、`CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
 | `src/components/print/` | `PrintPreview`（全局打印预览窗口）、`OverlayDesigner`（套打设计器） |
-| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useCustomFields`、`useBizRules`（读取前端可读的业务参数） |
+| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useRemoteOptions`（远程搜索下拉）、`useCustomFields`、`useBizRules`（读取前端可读的业务参数） |
 | `src/constants/enums.js` | 由后端枚举生成的状态、类型常量（`npm run gen:enums`），见 [状态与类型常量](#状态与类型常量) |
 | `src/utils/number.js` | 金额、数量的格式化与舍入（`money`、`qty`、`round2` 等），见 [数字的显示与舍入](#数字的显示与舍入) |
 | `src/locales/<语言>/<模块>.js` | 界面文字的语言包（`zh-CN`、`en-US`，键一致），`en-US/menu.js`、`dict.js` 是菜单和字典的英文译文，见 [国际化](./i18n) |
@@ -544,6 +544,37 @@ fetch: async (record) => {
 | `sumBy(list, 字段或函数, round = round2)` | 求和 |
 
 模块中已有的 `formatMoney`（`components/scm/scm.js`）、`formatQty`（`components/wms/wms.js`）等是这些函数的封装，可以继续使用。
+
+## 选择资料的下拉
+
+可能上千条的资料用远程搜索组件，不要一次性加载全部再在前端过滤：
+
+| 资料 | 组件 |
+| --- | --- |
+| 客户 / 供应商（含承运商） | `components/scm/PartnerSelect.vue` |
+| 物料（支持扫码） | `components/wms/MaterialSelect.vue` |
+| 员工 | `components/hr/EmployeeSelect.vue` |
+| 用户 | `components/user/UserSelect.vue`、`components/common/IdentityUserSelect.vue`（流程身份中的用户） |
+| 设备 | `components/mes/EquipmentSelect.vue` |
+| 项目 | `components/pm/ProjectSelect.vue` |
+
+其他资料用通用的 `components/common/RemoteSelect.vue` 或组合式函数 `composables/useRemoteOptions.js`。`RemoteSelect` 的主要属性：
+
+| 属性 | 说明 |
+| --- | --- |
+| `fetch({ keyword, current, size })` | 按关键字取一页，返回数组或 `{ records, total }` |
+| `fetchByIds(ids)` | 按 ID 取已选记录的名称，用于回显 |
+| `toLabel` | 记录转为显示文字 |
+| `multiple` | 多选 |
+| `pinned` | 置顶的记录（如报工时工序所在工作中心的设备） |
+
+行为约定：
+
+- 打开时取第一页（20 条），输入时防抖 300ms 搜索，滚动到底部加载下一页，并提示「滚动加载更多，或输入编码、名称、拼音首字母查找」；
+- **按 ID 回显**：已选值优先用表单数据带的名称（`label`），没有时组件按 ID 取名称（接口的 `ids` 参数，`api` 中的 `xxxByIds`），不依赖把全部数据加载到前端；`utils/batchByIds.js` 把同一时刻多行的请求合并为一次（如凭证分录、报销明细每行的项目）；
+- 后端下拉接口的分页、`ids` 参数和关键字匹配规则见 [后端开发 → 主数据检索与下拉](./backend#主数据检索与下拉)。
+
+小程序的搜索弹层 `pkg-wms/components/SearchSheet.vue` 同样输入防抖搜索、上拉加载下一页（`has-more` + `@more`，父组件按当前关键字加载下一页并追加）。
 
 ## 下拉框与表格的显示
 

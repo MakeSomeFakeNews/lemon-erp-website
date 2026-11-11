@@ -180,7 +180,7 @@ lemon-web
     │                           ai/ 智能录入的输入与预览、「AI 识别」按钮、预填提示、导入字段对应、Markdown 渲染，
     │                           bi/jxc/ 进销存报表的汇总（JxcTradeReport）与明细子页（JxcDetail），
     │                           scm/ 中的 TradeDocItems（出入库明细）、PriceReference（价格参考）等供应链单据组件
-    ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useCustomFields、
+    ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useRemoteOptions（远程搜索下拉）、useCustomFields、
     │                           useAiPrefill（智能录入预填到新增表单）、useBizRules（读取前端可读的业务参数）
     ├── constants/enums.js      由后端枚举生成的状态、类型常量（不要手工修改）
     ├── directives/perm.js      按钮权限指令 v-perm
