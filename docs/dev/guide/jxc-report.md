@@ -46,8 +46,9 @@ order: 19
 
 销售报表（以及财务「经营分析」的销售毛利，`FinAnalysisMapper.xml` 同样的片段）另外返回 `badDebt`、`freight`，`fillSummary` 计算 `profitAfterBadDebt` = 毛利 − 坏账、`profitAfterFreight` = 再减运费（issue #38）：
 
-- 片段 `badDebtFreight`：LEFT JOIN 销售出库单应收单（`fin_bill.kind = 'AR' AND source_type = 'SALES_OUT'`）上的 `bad_debt_amount` 合计（含税，与坏账凭证计入营业外支出的金额一致），以及该出库单已发货（`status <> 'PENDING'`）、本公司承担（`freight_bearer = 'COMPANY'`）的发运运费合计；客户承担的代垫运费不计入；
-- 片段 `docShare` 按行金额 / 单据价税合计（合计为 0 时按数量）分摊到明细，退货单为 0；
+- 片段 `badDebtFreight`：LEFT JOIN 销售出库单应收单（`fin_bill.kind = 'AR' AND source_type = 'SALES_OUT'`）上的 `bad_debt_amount` 合计（含税，与坏账凭证计入营业外支出的金额一致），以及该出库单已发货（`status <> 'PENDING'`）、本公司承担（`freight_bearer = 'COMPANY'`）的发运运费合计（只在出库单没有登记运费时，即 `d.freight = 0`，出库单已登记运费时发运单从出库单带出，不重复计算）；客户承担的代垫运费不计入；
+- 片段 `freightAmount`（issue #72）：本公司承担的运费 = 上述发运运费 + 出库单上本公司承担的运费（`kind = 'SALES_OUT' AND freight_bearer = 'COMPANY'`）+ 销售退货客户代垫的运费（`kind = 'SALES_RETURN'` 的 `freight`，按退货单计入）；
+- 片段 `docShare` 按行金额 / 单据价税合计（合计为 0 时按数量）分摊到明细（坏账只有出库单有，退货单的运费同样按行分摊）；
 - 只是参考口径，销售额、成本、毛利本身不变：利润表中坏账在营业外支出、运费在销售费用，都不在营业成本，不会重复扣减。前端 `JxcTradeReport.vue` / `JxcDetail.vue`、`views/fin/analysis/index.vue` 增加四列，合计有值时显示卡片。
 
 ### 数据权限

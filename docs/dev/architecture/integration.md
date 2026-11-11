@@ -60,6 +60,7 @@ public void bindFreightBill(Long shipmentId, Long billId) {
 | --- | --- | --- |
 | `ScmShipmentService.bindFreightBill` / `bindFreightArBill` | scm | fin 处理 `ShipmentShippedEvent` 生成运费应付单 / 代垫运费应收单后 |
 | `ScmTradeDocService.bindFreightBill` | scm | fin 处理 `PurchaseFreightEvent` 生成采购运费应付单后 |
+| `ScmTradeDocService.bindFreight` | scm | fin 处理 `TradeFreightEvent` 生成承运商应付单、往来单位的运费单据、费用支出单后 |
 | `ScmRebateService.bindBill` | scm | fin 处理 `RebateSettledEvent` 生成红字应收单（销售返利）/ 红字应付单（采购返利）后 |
 | `QmsClaimService.bindBill` | mes | fin 处理 `SupplierClaimConfirmedEvent` 生成红字应付单后 |
 | `MesEquipmentService.bindVoucher` / `unbindVouchers` | mes | fin 处理 `MaintenanceFinishedEvent` 生成费用凭证后 / 删除凭证时 |
@@ -75,6 +76,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 | `OrderDeletedEvent` | scm | 草稿订单删除 | crm 商机解除对订单的引用；scm 报价、询价、请购解除引用 |
 | `ShipmentShippedEvent` | scm | 物流发运单首次发货 | fin 生成承运商运费应付单（本公司承担借 销售运费，客户承担借 代垫运费），客户承担时另生成代垫运费应收单，见[运费](#运费) |
 | `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（计入存货成本时借 存货，计入当期费用时借 采购运费科目 / 贷 应付账款），见[运费](#运费) |
+| `TradeFreightEvent` | scm | 销售出库、销售退货、采购退货填写了运费 | fin（`FinFreightService`）生成费用支出单（现付）或承运商应付单（月结），以及往来单位的代垫运费应收 / 红字应收 / 红字应付，见[运费](#运费) |
 | `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 返利结算 / 撤销（红字单据方式；事件带 `kind`、`partnerId`） | fin 生成 / 删除红字应收单（销售返利）或红字应付单（采购返利） |
 | `WorkOrderClosedEvent` | mes | 生产工单关闭 | mes 撤销未完成的补料申请 |
 | `WorkOrderCompletedEvent` | mes | 生产工单完工（完工入库满数量，或已有完工入库且 完工 + 报废 达到工单数量而自动完工；与完工同一事务同步发布） | mes 撤销审批中、待发料的补料申请（审批中的同时撤销流程） |
@@ -203,6 +205,7 @@ flowchart TD
   EV --> F1[fin 应收应付]
   EV --> F2[mes 委外]
   EV --> F3[scm 价格记忆]
+  C --> FE["发布 TradeFreightEvent<br/>销售出库 / 退货、采购退货有运费时"] --> F4[fin 运费单据]
 ```
 
 ### 直接开单与隐式订单
@@ -242,7 +245,7 @@ flowchart LR
 - 明细按列保存（不存 JSON），详情一次 JOIN 带出物料、库位信息，表单直接回显；`source_doc_id` 记录退货引用的原出入库单（只用于回显），订单优惠、运费、业务员、整单优惠、补发标识都保存在草稿表头；
 - 登记到 `ScmRefMapper`，被草稿引用的物料、仓库、往来单位、承运商、用户、部门不能删除（提示「出入库草稿」）；
 - 保存时就占用单据号（`DocNoService.next`，与订单、仓库单据的草稿一致），审核后出入库单沿用这个单号；
-- **只校验结构**：引用订单时订单可见、明细属于该订单（物料取订单明细）；直接开单有往来单位、每行有物料；运费只用于采购入库，赠品只用于销售出库，直接开单的退货不能补发，订单优惠只用于引用订单的采购入库。库存、可入库数量等在审核时才校验，因为草稿本来就是「还没确认」的内容。合计金额按订单单价 / 录入单价估算（直接开单扣除整单优惠），列表标为「金额（估算）」；
+- **只校验结构**：引用订单时订单可见、明细属于该订单（物料取订单明细）；直接开单有往来单位、每行有物料；运费承担方式须符合单据种类（`normalizeFreight`），赠品只用于销售出库，直接开单的退货不能补发，订单优惠只用于引用订单的采购入库。库存、可入库数量，以及运费现付的付款账户、月结的承运商（`checkFreight`）等在审核时才校验，因为草稿本来就是「还没确认」的内容；运费的付给方式、付款账户保存在 `scm_trade_draft.freight_settle / freight_account_id`。合计金额按订单单价 / 录入单价估算（直接开单扣除整单优惠），列表标为「金额（估算）」；
 - 草稿按制单人部门 + 制单人做数据权限（`DataScopes.require`），种类不符视为不存在（`scm.error.tradeDraftNotFound`）。
 
 **审核复用原有出入库流程**：`POST /scm/{kind}/drafts/{id}/post`（权限 `scm:{kind}:post`；带请求体时先按其修改草稿，需同时有新增权限）调用 `ScmTradeDraftService.post`，在一个事务中：
@@ -286,7 +289,7 @@ flowchart LR
 
 ## 运费
 
-运费分两处登记，承担方用系统字典 `scm_freight_bearer`（`scm/model/FreightBearer`：`COMPANY` 本公司承担、`CUSTOMER` 客户承担（代垫）、`SUPPLIER` 供应商代垫）：
+运费可以在发运单和四种出入库单上登记，承担方用系统字典 `scm_freight_bearer`（`scm/model/FreightBearer`：`COMPANY` 本公司承担、`CUSTOMER` 客户承担（代垫）、`SUPPLIER` 供应商代垫；退货单中往来单位一方的取值按单据种类表示代垫方向，界面按单据种类显示名称，没有新增取值）。所有运费都不是销售收入、只记一次：
 
 **发运单（销售运费）**：`scm_shipment.freight_bearer`（`COMPANY` / `CUSTOMER`，默认 `COMPANY`）。首次发货且运费大于 0、指定了承运商或客户承担时，`ScmShipmentService` 发布 `ShipmentShippedEvent(…, customerId, bearer)`，`FinBillService.onShipmentShipped` 在同一事务中：
 
@@ -295,7 +298,9 @@ flowchart LR
 
 已生成任一单据后不能再修改运费、承担方和承运商（前端 `billed`，后端比较旧值）。
 
-**采购入库（采购运费）**：`TradeDocRequest.freight / freightBearer / carrierSupplierId`，`ScmTradeDocService.checkFreight` 校验只能是采购入库（`scm.error.freightOnlyPurchaseIn`）、承担方只能是 `SUPPLIER`（默认）或 `COMPANY`（`freightBearerInvalid`），`COMPANY` 必须选承运商（`freightSelectCarrier`，前端下拉只列出物流公司，后端不限制承运商的类型，见下文[承运商](#承运商)）。两种承担方都只生成一张采购运费应付单，不另生成费用支出单，运费只计一次。
+**运费只记一次**（issue #72）：销售出库单已登记运费时，发运单带出出库单的运费、承担方和承运商（`ScmShipment.freightOnDoc`，只读，新建、修改时忽略请求中的运费字段，`checkFreight` 不再校验），发货时不发布运费事件（出库单审核时已生成运费单据），前端表单和详情提示「运费已在销售出库单 … 登记」；出库单没有运费时在发运单上填写，首次发货生成运费单据（与原来一致）。
+
+**采购入库（采购运费）**：`TradeDocRequest.freight / freightBearer / carrierSupplierId`，`ScmTradeDocService.normalizeFreight` 规范承担方（只能是 `SUPPLIER`（默认）或 `COMPANY`，否则 `freightBearerInvalid`），审核时 `checkFreight` 校验 `COMPANY` 必须选承运商（`freightSelectCarrier`，前端下拉只列出物流公司，后端不限制承运商的类型，见下文[承运商](#承运商)）。两种承担方都只生成一张采购运费应付单，不另生成费用支出单，运费只计一次。
 
 **入账方式**（`scm_trade_doc.freight_cost`，`scm/model/PurchaseFreightCost`，入库时确定并记在单据上，之后修改参数不影响已有单据）：供应商代垫的始终为 `INVENTORY`（随货款付给供应商，本质上是采购价格的一部分）；本公司承担的按业务参数「本公司承担的采购运费计入」（`scm.purchaseFreight.cost`，前端可读，见 [业务参数](../guide/biz-rule)）：
 
@@ -308,11 +313,34 @@ flowchart LR
 - 月末成本核算：`FinCostSourceMapper` 的出入库汇总 `net` 加上 `freight_share`（其他种类为 0），计入采购金额；
 - `FinBillService.onPurchaseFreight` 生成运费应付单（来源 `BillSource.PURCHASE_FREIGHT`，字典 `fin_bill_source`「采购运费」），应付对象为供应商（代垫）或承运商（本公司承担），回写 `ScmTradeDocService.bindFreightBill`（`freight_bill_id`）；凭证：计入存货成本时 借 存货（`FinBillMapper.selectFreightByCategory` 按物料分类汇总 `freight_share`，最后一个分类取差额）/ 贷 应付账款，计入当期费用时 借 `PURCHASE_FREIGHT` 科目（带部门）/ 贷 应付账款-承运商。
 
-前端 `TradeDocForm.vue` 按「运费付给」和参数显示实际入账方式的提示（供应商代垫 / 本公司承担计入存货成本 / 本公司承担计入当期费用），`TradeDocDetail.vue` 显示「计入存货成本 / 计入当期费用」。
+前端 `TradeFreight.vue`（`TradeDocForm.vue` 中使用，四种出入库单共用）按「运费付给」和参数显示实际入账方式的提示（供应商代垫 / 本公司承担计入存货成本 / 本公司承担计入当期费用），`TradeDocDetail.vue` 显示「计入存货成本 / 计入当期费用」。
+
+**销售出库、销售退货、采购退货的运费**（issue #72、#73）：`TradeDocRequest` 另有 `freightSettle`（付给承运商的方式，`scm/model/FreightSettle`，系统字典 `scm_freight_settle`：`CASH` 现付、`MONTHLY` 月结）和 `freightAccountId`（现付的付款账户）。`normalizeFreight` 按单据种类规范（草稿保存、审核共用，只校验取值组合，不合法时 `scm.error.freightBearerNotAllowed`）：
+
+| 单据 | 承担方（第一个为默认） | 付给承运商 |
+| --- | --- | --- |
+| 销售出库 | `COMPANY` 本公司承担 / `CUSTOMER` 代垫运费（客户承担） | 现付（默认，记录付款账户）/ 月结 |
+| 销售退货 | 只有 `CUSTOMER` 客户代垫（本公司承担，客户已付给承运商） | 没有 |
+| 采购退货 | 只有 `SUPPLIER` 代垫运费（本公司替供应商垫付） | 现付（默认）/ 月结 |
+
+审核时 `checkFreight` 校验：月结必须选承运商（`freightMonthlySelectCarrier`），现付必须选付款账户（`freightSelectAccount`，是否为现金 / 银行科目由财务生成费用支出单时 `requireCashAccount` 校验），现付时承运商可空。单据记录 `freight`、`freight_bearer`、`freight_settle`、`freight_account_id`、`carrier_supplier_id`，并发布 `TradeFreightEvent(docId, kind, docNo, partnerId, bizDate, freight, bearer, settle, carrierId, accountId, deptId)`，`FinFreightService.onTradeFreight` 在同一事务中生成单据（任一失败整单回滚，例如现付时业务日期所在期间已结账，`FinBizPeriodGuard.checkOpen` 抛异常，出入库单审核失败）：
+
+| 单据 | 往来单位的单据 | 付给承运商：现付 / 月结 |
+| --- | --- | --- |
+| 销售出库 本公司承担 | 无 | 费用支出单「销售运费」借 销售运费 / 贷 付款账户；承运商应付（来源 `SALES_FREIGHT`）借 销售运费 / 贷 应付账款 |
+| 销售出库 代垫运费 | 客户的代垫运费应收（来源 `SALES_FREIGHT`，不含税）借 应收账款 / 贷 代垫运费 | 费用支出单「代垫运费」借 代垫运费 / 贷 付款账户；承运商应付 借 代垫运费 / 贷 应付账款 |
+| 销售退货 客户代垫 | 红字应收（来源 `SALES_RETURN_FREIGHT`）借 销售运费 / 贷 应收账款 | 无 |
+| 采购退货 代垫运费 | 红字应付（来源 `PURCHASE_RETURN_FREIGHT`）借 应付账款 / 贷 代垫运费 | 同销售出库代垫运费（承运商应付的来源为 `PURCHASE_RETURN_FREIGHT`） |
+
+- 科目取 `AccountRole.SALES_FREIGHT`（默认 6601）、`FREIGHT_ADVANCE`（默认 1221 其他应收款），沿用发运单的口径，没有新增科目用途；代垫运费科目由往来单位的单据与付承运商的单据冲平；
+- **现付不直接生成凭证**，而是调用 `FinIoService.createGenerated` 生成待确认的费用支出单（记录来源出入库单，类别取内置类别 `IoCategoryCode.SALES_FREIGHT` / `FREIGHT_ADVANCE`），由出纳确认后生成凭证，与其他收支的流程一致：业务人员审核出入库单时不受凭证辅助核算、科目设置的影响，资金流水由出纳把关，见 [其他收支开发](../guide/cash-rebate#业务单据生成的费用支出单)；
+- **往来单位的运费单据单独一张**，不并入货款单据：收付款时一起勾选，往来汇总中的欠款即货款 ± 运费；货款单据的凭证按物料分类拆收入 / 存货、计销项 / 进项税，提成、毛利、坏账折算也按货款单据统计，并进去会把不含税的运费混进这些口径。单独一张也与发运单的代垫运费应收一致；
+- 生成的单据由 `ScmTradeDocService.bindFreight` 回写到出入库单（`freight_bill_id` 承运商应付、`freight_partner_bill_id` 往来单位单据、`freight_io_id` 费用支出单）。详情（`TradeDocDetail.vue`）显示运费承担（按单据种类取名称）、付给方式、承运商、付款账户，「费用支出单」链接跳转 `/fin/income-expense?id=`；代垫时显示「应收合计 / 应退合计 / 应付冲减合计（货款 + 代垫运费）」，打印增加「运费承担」「含代垫运费合计」字段（`printTemplates.js` 已登记）；
+- 运费不分摊到明细（`freight_share` 只用于采购入库），不影响库存成本；本公司承担的销售运费、销售退货客户代垫的运费计入销售费用，毛利分析和进销存「销售报表」的扣运费后毛利同步，见 [进销存报表开发](../guide/jxc-report#坏账与运费的参考口径)。
 
 ### 承运商
 
-供应商资料的「物流公司（承运商）」标识（`scm_supplier.logistics`，可填写营运路线 `routes`）：采购入库本公司承担运费的承运商、发运单的运费结算供应商只列出物流公司（`PartnerSelect` 的 `carrier` 属性 → `GET /scm/supplier/carrier-options`，返回 `{ marked, options }`；还没有标记任何物流公司时回退到全部供应商并在下拉中提示去标记），供应商列表可按类型筛选、名称旁显示「物流公司」标签。物流公司复用供应商档案（编号、名称、联系人、电话、地址、备注都已有），应付、付款、对账、往来汇总与其他供应商相同，后端不限制所选承运商的类型（issue #68）。用标识而不是「供应商 / 协作单位」二选一的类型，是因为有的供应商既供货又帮忙送货，两种用途都能选到它。
+供应商资料的「物流公司（承运商）」标识（`scm_supplier.logistics`，可填写营运路线 `routes`）：采购入库本公司承担运费的承运商、销售出库和采购退货付给承运商的承运商、发运单的运费结算供应商只列出物流公司（`PartnerSelect` 的 `carrier` 属性 → `GET /scm/supplier/carrier-options`，返回 `{ marked, options }`；还没有标记任何物流公司时回退到全部供应商并在下拉中提示去标记），供应商列表可按类型筛选、名称旁显示「物流公司」标签。物流公司复用供应商档案（编号、名称、联系人、电话、地址、备注都已有），应付、付款、对账、往来汇总与其他供应商相同，后端不限制所选承运商的类型（issue #68）。用标识而不是「供应商 / 协作单位」二选一的类型，是因为有的供应商既供货又帮忙送货，两种用途都能选到它。
 
 ## 自动凭证的科目
 

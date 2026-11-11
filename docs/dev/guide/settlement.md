@@ -158,7 +158,7 @@ issue #50。收付款表单可以勾选该单位未冲抵完的预收 / 预付�
 
 | 方式 | 来源 | 实现 |
 | --- | --- | --- |
-| `trade` | 销售出库 / 退货、采购入库 / 退货、采购运费（打开采购入库单） | 在当前页面打开 `components/scm/TradeDocDetail.vue` |
+| `trade` | 销售出库 / 退货、采购入库 / 退货、采购运费（打开采购入库单）、销售运费 / 销售退货运费 / 采购退货运费（打开登记运费的出入库单；其他收支单现付的运费也以出入库单为来源） | 在当前页面打开 `components/scm/TradeDocDetail.vue` |
 | `ticket` / `project` | 服务收费 / 项目开票（按应收单上的 `projectId`） | 打开 `crm/TicketDetail.vue` / `pm/ProjectDetail.vue` |
 | `path` | 发运单、订单尾差（按 `billKind` 区分采购 / 销售订单）、返利（区分销售 / 采购返利）、冲账单、票据 | 跳转到页面并带 `?id=`，目标页面用 `composables/useRouteOpen` 打开详情 |
 | `path` + `byNo` | 质量索赔、固定资产（页面没有详情抽屉） | 跳转并带 `?keyword=单号` 筛选 |

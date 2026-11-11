@@ -4,7 +4,7 @@ order: 20.5
 
 # 其他收支、调拨与返利开发
 
-本页说明现金银行（其他收入单 / 费用支出单、收支类别、账户调拨（手续费支付账户、经办人、票据号码）、出纳日记账来源单据）和返利协议（销售返利 / 采购返利、两种计算方式）的实现。收付款核销、冲账单见[应收应付核销开发](./settlement)。
+本页说明现金银行（其他收入单 / 费用支出单、业务单据生成的费用支出单、收支类别、账户调拨（手续费支付账户、经办人、票据号码）、出纳日记账来源单据）和返利协议（销售返利 / 采购返利、两种计算方式）的实现。收付款核销、冲账单见[应收应付核销开发](./settlement)。
 
 ## 其他收支
 
@@ -16,9 +16,9 @@ order: 20.5
 
 | 表 | 说明 |
 | --- | --- |
-| `fin_io_doc` | 收支单：`doc_no`、`direction`（`FundDirection` `IN` / `OUT`，字典 `fin_fund_direction`）、`doc_date`、`ticket_no`、`partner_type`（`IoPartnerType` `CUSTOMER` / `SUPPLIER` / `OTHER`，字典 `fin_io_partner_type`）、`partner_id`（客户 / 供应商）、`partner_name`（其他单位名称）、`settle_method`（业务字典 `fin_settle_method`）、`account_id`（现金 / 银行末级科目）、`dept_id`（费用部门，只有支出）、`amount`（明细合计）、`status`（`IoStatus` `DRAFT` / `CONFIRMED`，字典 `fin_io_status`）、`voucher_id`、`confirm_by`、`confirm_time`、`create_by` |
+| `fin_io_doc` | 收支单：`doc_no`、`direction`（`FundDirection` `IN` / `OUT`，字典 `fin_fund_direction`）、`doc_date`、`ticket_no`、`partner_type`（`IoPartnerType` `CUSTOMER` / `SUPPLIER` / `OTHER`，字典 `fin_io_partner_type`）、`partner_id`（客户 / 供应商）、`partner_name`（其他单位名称）、`settle_method`（业务字典 `fin_settle_method`）、`account_id`（现金 / 银行末级科目）、`dept_id`（费用部门，只有支出）、`amount`（明细合计）、`status`（`IoStatus` `DRAFT` / `CONFIRMED`，字典 `fin_io_status`）、`voucher_id`、`confirm_by`、`confirm_time`、`create_by`；`source_type` / `source_id` / `source_no`（业务单据生成时的来源，`BillSource`，索引 `idx_io_doc_source`） |
 | `fin_io_doc_item` | 明细：`doc_id`、`category_id`、`amount`、`remark` |
-| `fin_io_category` | 收支类别：`name`、`direction`、`account_id`（末级科目）、`sort`、`status`（`EnableStatus`）、`remark`；唯一约束 `(direction, name, tenant_id)` |
+| `fin_io_category` | 收支类别：`name`、`direction`、`account_id`（末级科目）、`sort`、`status`（`EnableStatus`）、`remark`、`code`（内置类别标识 `IoCategoryCode`，程序使用，唯一键 `uk_io_category_code`）；唯一约束 `(direction, name, tenant_id)` |
 
 单号规则：其他收入单 `SR`、费用支出单 `ZC`（在 `FinDocNos` 中声明）。凭证来源 `VoucherSource.INCOME_EXPENSE`（字典 `fin_voucher_source`「其他收支」）。
 
@@ -26,7 +26,7 @@ order: 20.5
 
 | 操作 | 接口 | 权限 |
 | --- | --- | --- |
-| 列表 / 详情 | `GET /fin/io`、`/{id}` | `fin:io:list` |
+| 列表 / 详情 | `GET /fin/io`、`/{id}`（关键字也匹配来源单号） | `fin:io:list` |
 | 新增 / 修改 / 删除 | `POST`、`PUT /{id}`、`DELETE /{ids}` | `fin:io:add` / `edit` / `remove` |
 | 确认 / 取消确认 | `POST /{id}/confirm`、`/{id}/cancel-confirm` | `fin:io:confirm` |
 | 收支汇总 / 明细 | `GET /summary`、`/lines`（`transferFee=true` 只看调拨手续费） | `fin:io:list` |
@@ -38,7 +38,7 @@ order: 20.5
 ### 规则
 
 - **保存校验**（`validate`）：结算账户经 `FinAccountService.requireCashAccount` 校验；业务期间未结账（`FinBizPeriodGuard.checkOpen`）；结算方式用 `DictLookup.check` 校验，且不能是 `SettleMethods.NOTE`（票据由票据管理生成，前端用 `SETTLE_METHOD_NOTE` 过滤）；关联单位为客户 / 供应商时 `partnerId` 必填并校验存在；明细的类别须存在、启用、方向与单据一致；明细 1～200 行。
-- **修改、删除**：只能处理待确认的单据（条件更新 `status = DRAFT`），方向不能修改；明细用 `DetailLines.replace` 整体替换。
+- **修改、删除**：只能处理待确认的单据（条件更新 `status = DRAFT`），方向不能修改；明细用 `DetailLines.replace` 整体替换。有来源单据的（业务单据生成）不能修改、删除（`fin.error.ioDocGenerated`）。
 - **确认**（`@Transactional`）：`FinVoucherService.createGenerated` 生成未审核凭证，`StatusTransitions.change` 改为已确认并记录凭证、确认人。分录：
 
 | 方向 | 分录 |
@@ -58,6 +58,7 @@ order: 20.5
 - 同一方向下名称唯一（`fin.error.ioCategoryNameExists`）；科目经 `FinAccountService.requireLeaves` 校验为末级。
 - 已被收支单使用的类别不能删除（`fin.error.ioCategoryUsed`）、不能改方向（`ioCategoryUsedDirection`），可以停用；列表返回 `used` 供前端隐藏删除按钮、锁定方向。
 - 被类别或收支单引用的科目视为已使用（`FinAccountService`），不能删除、不能再加下级；客户、供应商、部门被收支单引用时不能删除（`FinRefMapper.xml`）。
+- 内置类别（`code` 不为空）不能删除（`fin.error.ioCategoryBuiltinDelete`）、不能改方向（`ioCategoryBuiltinDirection`），可以修改名称和科目、停用；列表返回 `code`，前端 `IoCategory.vue` 显示「内置」标签、隐藏删除、锁定方向。
 
 内置类别（init.sql 同时在管理费用 6602 下补充了 660206 业务招待费、660207 水电费、660208 租赁费、660209 快递费）：
 
@@ -68,6 +69,19 @@ order: 20.5
 | 支出 | 差旅费、业务招待费、办公费、房租、水电费、快递费、工资 | 660204、660206、660202、660208、660207、660209、660201 |
 | | 银行手续费 | 6603 |
 | | 其他支出 | 6711 |
+| | 销售运费（内置，`SALES_FREIGHT`） | 6601 |
+| | 代垫运费（内置，`FREIGHT_ADVANCE`） | 1221 |
+
+两个内置类别的默认科目与凭证科目设置的销售运费 / 代垫运费默认值一致；升级脚本给平台和已有租户各增加一份，科目取该租户凭证科目设置中的销售运费 / 代垫运费（没有设置按编码 6601 / 1221），已有同名支出类别时直接标记为内置。
+
+### 业务单据生成的费用支出单
+
+`FinIoService.createGenerated(code, date, accountId, supplierId, deptId, amount, sourceType, sourceId, sourceNo, remark)`：销售出库、采购退货现付的运费（`FinFreightService` 处理 `TradeFreightEvent`，见 [业务联动 - 运费](../architecture/integration#运费)）生成待确认的费用支出单，与出入库同一事务：
+
+- 结算账户经 `requireCashAccount` 校验，业务期间未结账（`FinBizPeriodGuard.checkOpen`，已结账时抛 `fin.error.hasClosedBusinessDatePeriodNo`，出入库单整体回滚）；类别取 `FinIoCategoryService.getBuiltin(code)`，缺少时抛 `fin.error.ioCategoryBuiltinMissing`；
+- 关联单位为承运商（供应商，可空），费用部门为出入库单的部门，明细一行；`source_type` 为 `SALES_OUT` / `PURCHASE_RETURN`，`source_id` / `source_no` 为出入库单；
+- 金额与来源一致，不能修改、删除，可确认、取消确认（规则同手工单据）；
+- 前端列表增加「来源单据」列、详情增加「来源单据」行（`SourceDocLink`，按 `sourceDocs.js` 打开出入库单），有来源时隐藏编辑、删除；`index.vue` 用 `useRouteOpen` 处理出入库单详情跳转过来的 `?id=`。
 
 ## 账户调拨
 

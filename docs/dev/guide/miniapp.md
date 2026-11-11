@@ -31,7 +31,7 @@ order: 16
 | 员工自助 | `/hr/self/*`、`/hr/perf/appraisal/{id}` | 登录即可（需关联员工档案） |
 | 项目工时 | `/pm/my/timesheet`、`/pm/my/timesheet/tasks`、`/pm/my/tasks`、`/pm/timesheet`、`/pm/timesheet/review` | 填报登录即可（须为项目成员）：选择任务用 `GET /pm/my/timesheet/tasks?projectId=`（本人参与的项目的任务树，不需要项目权限，读取失败时改用 `/pm/my/tasks`）；审核 `pm:timesheet:list`，「待审批」分段请求 `/pm/timesheet` 时带 `excludeSelf=true`（不列出本人的工时，与 Web 端工时审批一致） |
 | 销售与服务 | `/crm/*`、`/scm/sales/order`、`/bi/trace/order/sales/{id}`、`/system/attachment/*` | `crm:customer:list`、`crm:followup:list`、`crm:lead:list`、`crm:opp:list`、`crm:ticket:list`、`scm:sales:list` |
-| 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`POST /scm/salesOut`（业务参数 `scm.tradeDoc.draft` 开启且没有 `scm:salesOut:post` 时改为 `POST /scm/salesOut/drafts` 存草稿）、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
+| 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`/fin/account/options`、`/fin/account/scopes`、`/scm/supplier/carrier-options`（运费）、`POST /scm/salesOut`（业务参数 `scm.tradeDoc.draft` 开启且没有 `scm:salesOut:post` 时改为 `POST /scm/salesOut/drafts` 存草稿）、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
 | 扫码作业 | `/wms/*`（含经营历史 `/wms/stock/history`）、`/scm/purchaseIn`（收货在 `scm.tradeDoc.draft` 开启且没有 `scm:purchaseIn:post` 时改为 `/scm/purchaseIn/drafts`）、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
 | 设备与质量 | `/mes/equipment`、`/mes/maintenance/*`、`/mes/inspection/*`、`/qms/plan/match`、`/qms/ncr` | `mes:equipment:list`、`mes:maintain:list`、`mes:qc:list`、`qms:ncr:list` |
 
@@ -71,7 +71,7 @@ lemon-mp
     ├── pkg-pm                  分包：我的工时、填报、工时审核
     ├── pkg-crm                 分包：客户、跟进、商机、销售订单、线索、服务工单（photos.js 跟进照片）
     ├── pkg-wms                 分包：库存、经营历史、快速开单、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
-    │                           sale/ 快速开单的明细行 SaleRow.vue、lines.js、gifts.js；components/ 搜索弹层、价格参考弹层）
+    │                           sale/ 快速开单的明细行 SaleRow.vue、运费 SaleFreight.vue、lines.js、gifts.js；components/ 搜索弹层、价格参考弹层）
     ├── pkg-mes                 分包：设备、保养维修、质量检验、不合格品
     ├── pkg-notice              分包：通知公告列表、详情（markdown.js 正文转 rich-text）
     ├── api/<区>.js              接口封装：auth、workflow、dashboard、message、notice、hr、pm、crm、wms、mes
@@ -571,6 +571,7 @@ runAction(() => changeOpportunityStage(o.id, data), { success: t('crm.opportunit
 | 促销与赠品 | 明细变化后 500 ms 调 `POST /scm/promotion/preview`（只传普通行），预览返回前不能保存；赠品行由 `gifts.js` 按预览重建，`scm.salesOut.lineWarehouse` 开启时可拆成多行从不同仓库出，提交前校验各组数量合计等于预览的赠品数量。没有预览权限时不显示赠品，由后端保存时从表头仓库先到期先出补上（序列号赠品除外） |
 | 库位批次 | 每行按 `/wms/stock` 的可用库存先到期先出排序（过期的排最后），默认第一项；赠品所选库位批次不够时提交时自动拆到其他库位批次 |
 | 整单优惠 | 基数为扣除促销优惠后的合计，抹分 / 抹角 / 抹元按分计算差额累加到 `wholeDiscount` |
+| 运费 | `pkg-wms/sale/SaleFreight.vue`，与 Web 端销售出库相同：本公司承担 / 代垫运费，现付选付款账户（`/fin/account/options` + `/fin/account/scopes`），月结选承运商（`/scm/supplier/carrier-options`）；通过 ref 调用 `check()`、`payload()`、`reset()`，提交时合并到请求 |
 
 成本金额只在后端控制：没有「查看成本金额」（`wms:stock:cost`）权限时，`/wms/stock/summary` 不返回 `unitCost`、`amount`，`/wms/stock/history` 返回 `costVisible: false` 且不带单价金额；盘点单详情的 `costVisible` 在有 `wms:stock:cost`，或盘点单未完成且有 `wms:check:add` / `wms:check:edit` 时为真（小程序盘点入口要求 `wms:check:edit` 且只列草稿盘点单，因此盘盈行总能填成本价）；当前均价 `avgCost` 只在有 `wms:stock:cost` 时返回，没有时输入框提示「默认按确认时的当前均价」，不显示「默认均价 X」。页面按字段是否返回或 `costVisible` 显示，不自己判断权限。
 
