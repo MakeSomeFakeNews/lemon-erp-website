@@ -184,7 +184,7 @@ lemon-web
     │                           useAiPrefill（智能录入预填到新增表单）、useBizRules（读取前端可读的业务参数）
     ├── constants/enums.js      由后端枚举生成的状态、类型常量（不要手工修改）
     ├── directives/perm.js      按钮权限指令 v-perm
-    ├── layout                  BasicLayout（顶部模块导航、侧边栏、多标签页）、MobileLayout（移动作业）
+    ├── layout                  BasicLayout（四种布局、侧边栏、顶部菜单、模块栏、多标签页、界面设置抽屉 settings/）、menuItems.js（菜单项）、MobileLayout（移动作业）
     ├── locales                 界面语言包：index.js（createI18n、语言列表、切换），zh-CN/、en-US/ 下按模块的
     │                           <模块>.js（common、layout、route、print 等通用文件），en-US/menu.js、dict.js 为菜单和字典的英文译文
     ├── router/index.js         静态路由 + 按菜单动态注册路由

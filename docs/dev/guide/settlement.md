@@ -14,7 +14,7 @@ order: 20
 | --- | --- |
 | `amount` / `amount_fc` | 本位币金额 / 原币金额（本位币单据两者相同），`exchange_rate` 为记账汇率 |
 | `settled_amount` / `settled_fc` | 已核销（本位币 / 原币），**包含折让、预收预付冲抵、坏账** |
-| `discount_amount` | 其中收付款时的折让 / 抹零（本位币），列表显示用 |
+| `discount_amount` | 其中收付款时的折让 / 抹零（本位币，与金额同号；同一单据多次收付款时累计，作废 / 删除收付款时扣回），列表显示用；`FinBill.getNetAmount()` = `amount − discount_amount`，即应收应付列表的「应收净额 / 应付净额」（只用于显示，不入库；未核销余额仍为 `amount − settled_amount`），报表口径见下文[折让对报表的影响](#折让对报表的影响) |
 | `bad_debt_amount` | 其中坏账核销（应收）/ 无法支付转销（应付） |
 | `status` | `BillStatus`：未核销 / 部分核销 / 已核销 |
 
@@ -69,6 +69,13 @@ order: 20
 ### 折让记录
 
 `GET /fin/settlement/{kind}/discounts`（权限 `fin:{kind}:list`，`SettlementDiscountRow` / `FinSettlementItemMapper.selectDiscountPage`）：已生效（`APPROVED`）收付款中 `discount <> 0` 的核销明细，可按往来单位、日期范围、收付款单号 / 原单据号查询，前端 `SettlementDiscounts.vue`（收付款页面的「折让记录」标签页，可导出）。
+
+### 折让对报表的影响
+
+issue #89。折让不改出入库单，销售额 / 进货额不变，各处只作为参考口径展示：
+
+- **应收应付列表**（`BillPage.vue`）：「应收净额 / 应付净额」列 = `netAmount`，下方显示折让，本页合计另显示净额合计；**往来汇总**单列 `PartnerSummaryRow.discount`（`fin_bill.discount_amount` 合计，已含在已核销中），展开的未核销单据在金额下显示「折让 · 净额」；
+- **经营分析「销售毛利」**、进销存**销售报表**：增加「收款折让」（`settleDiscount`）和「扣折让后毛利」（`profitAfterDiscount`），`profitAfterBadDebt` / `profitAfterFreight` 改为在扣折让的基础上依次再减坏账、运费（列名「扣折让、坏账后毛利」「扣折让、坏账、运费后毛利」）；**进货报表**增加「付款折让」「扣折让后净进货额」（只作参考：付款折让按准则计入财务费用，不冲减已入库存货的成本，实时成本和月末核算都不调整）。取数和明细中的折让行见[进销存报表开发 · 收付款折让](./jxc-report#收付款折让的参考口径)。
 
 ## 收付款中冲抵预收预付
 
@@ -139,9 +146,10 @@ issue #50。收付款表单可以勾选该单位未冲抵完的预收 / 预付�
 - `bill_balance`：其他来源的 `amount − settled_amount`（红字为负数；`settled_amount` 含收付款、折让、预收预付冲抵、坏账）；
 - `advance_balance`：`fin_advance` 的 `amount − used_amount`，取负数；
 - `bad_debt`：`bad_debt_amount` 合计，已含在已核销中，单列参考；
+- `discount`：`discount_amount` 合计（收付款折让累计，issue #89），同样已含在已核销中，单列参考；
 - `net` = `opening + bill_balance + advance_balance`，按 `net DESC` 排序；全部为本位币。
 
-与往来对账单一致：对账单截至今天的期末余额 = `net + bad_debt`（对账单不扣坏账；外币单据另有收付汇率与记账汇率的差额）。草稿、审批中的收付款没有改变单据的 `settled_amount`，所以不影响汇总。
+与往来对账单一致：对账单截至今天的期末余额 = `net + bad_debt`（对账单同样按 核销 + 折让 冲减余额，只是不扣坏账；外币单据另有收付汇率与记账汇率的差额）。草稿、审批中的收付款没有改变单据的 `settled_amount`，所以不影响汇总。
 
 展开明细复用已有接口：`GET /fin/bill/{kind}/unsettled`、预收预付分页（需要 `fin:advance:list`）、收付款分页（需要 `fin:{receipt,payment}:list`，取最近 20 笔）。行上的「收款 / 付款」调用 `SettlementForm.open({ partnerId, partnerName })`；「对账单」跳转 `/fin/partner-statement?kind=AR&partnerId=&partnerName=`，`views/fin/partner-statement/index.vue` 读取参数后直接查询并清除地址参数。
 

@@ -621,6 +621,7 @@ views/mes/wo/
 ## 样式与深色模式
 
 - 自定义样式使用全局 CSS 变量（定义在 `src/style.css`）：`--app-primary`、`--app-bg`、`--app-card`、`--app-border`、`--app-hover`、`--app-text`、`--app-text-2`、`--app-text-3` 等。亮色为默认值，`html[data-theme='dark']` 时切换为暗色，使用变量的样式自动适配深色模式。
+- 主题色由用户在[界面设置](./ui-settings)中选择，强调色一律用 `--app-primary`、`--app-primary-bg`、`--app-primary-hover`、`--app-primary-border`（`components/ThemeVars.vue` 按 antd token 写到 html 上），半透明写 `color-mix(in srgb, var(--app-primary) 20%, transparent)`，**不要写死 `#1677ff`、`rgba(22, 119, 255, …)`**；图表系列色、状态色、第三方品牌色是数据颜色，不跟随主题色，见 [界面设置 · 主题色与 CSS 变量](./ui-settings#主题色与-css-变量)。
 - 页面私有样式写在 `<style scoped>` 中。
 - 必须针对深色模式单独写的样式（变量覆盖不到的渐变、图片透明度等），写在**非 scoped** 的 `<style>` 中，并用页面根类名限定范围，因为需要匹配根元素 `html` 上的 `data-theme`，而 scoped 样式中的 `:global()` 不生效：
 
@@ -690,4 +691,4 @@ html[data-theme='dark'] .workbench .hero {
 - 需要支持自定义字段的表单、列表、详情使用 `useCustomFields`、`CustomFieldsForm`、`useCustomColumns`、`CustomFieldsView`，见 [业务实体接入自定义字段](./custom-field)。
 - 界面要随业务参数变化（如是否允许直接开单）时用 `useBizRules`，不要把参数写死在页面里，也不要为一个开关单独加接口，见 [新增业务参数](./biz-rule#前端按参数显示界面-publickeys-usebizrules)。
 - 供应链单据需要带出单价、查看历史价格时复用 `defaultPrices`（`api/scm/pricing.js`）和 `components/scm/PriceReference.vue`，见 [开单取价与价格参考](./pricing)。
-- 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题、中英文两种语言和窄屏显示。
+- 前端没有配置 lint 和测试，提交前请在浏览器中验证亮色、深色两种主题、中英文两种语言和窄屏显示；改动布局相关代码时还要验证[界面设置](./ui-settings#布局)的四种布局。

@@ -37,19 +37,31 @@ order: 19
 
 - 金额为本位币，销售额 / 进货额为**不含税**（`i.amount - i.tax_amount`），另列价税合计；
 - 销售成本与财务「毛利分析」一致：数量 × 单据所在月份的成本核算单价（`fin_material_cost.unit_cost`），没有核算时取物料的参考成本价，并统计按参考成本计算的行数；
-- 毛利、毛利率、均价在 `BiJxcService.fillSummary` 中计算（`Decimals` 统一精度），SQL 只做求和；销售另有坏账核销、本公司运费及扣除后的毛利，见下文；
+- 毛利、毛利率、均价在 `BiJxcService.fillSummary` 中计算（`Decimals` 统一精度），SQL 只做求和；销售另有收款折让、坏账核销、本公司运费及依次扣除后的毛利，进货另有付款折让及扣除后的净进货额，见下文；
 - 金额取出入库明细的成交金额 `amount`（已扣除整单优惠的分摊），不用优惠前单价 `gross_price`；
 - 汇总最多返回 `SUMMARY_LIMIT`（1000）行，合计（`selectTotal`）仍为全部；明细、单据列表导出最多 `EXPORT_LIMIT`（5000）行；
 - 日期范围由 `checkRange` 校验：销售、进货、商品分析不超过 366 天，经营状况、RFM 不超过 731 天。
 
 ### 坏账与运费的参考口径
 
-销售报表（以及财务「经营分析」的销售毛利，`FinAnalysisMapper.xml` 同样的片段）另外返回 `badDebt`、`freight`，`fillSummary` 计算 `profitAfterBadDebt` = 毛利 − 坏账、`profitAfterFreight` = 再减运费（issue #38）：
+销售报表（以及财务「经营分析」的销售毛利，`FinAnalysisMapper.xml` 同样的片段）另外返回 `badDebt`、`freight`，`fillSummary` 计算 `profitAfterBadDebt` = 毛利 − 坏账、`profitAfterFreight` = 再减运费（issue #38；issue #89 起先扣收款折让，见[收付款折让的参考口径](#收付款折让的参考口径)）：
 
 - 片段 `badDebtFreight`：LEFT JOIN 销售出库单应收单（`fin_bill.kind = 'AR' AND source_type = 'SALES_OUT'`）上的 `bad_debt_amount` 合计（含税，与坏账凭证计入营业外支出的金额一致），以及该出库单已发货（`status <> 'PENDING'`）、本公司承担（`freight_bearer = 'COMPANY'`）的发运运费合计（只在出库单没有登记运费时，即 `d.freight = 0`，出库单已登记运费时发运单从出库单带出，不重复计算）；客户承担的代垫运费不计入；
 - 片段 `freightAmount`（issue #72）：本公司承担的运费 = 上述发运运费 + 出库单上本公司承担的运费（`kind = 'SALES_OUT' AND freight_bearer = 'COMPANY'`）+ 销售退货客户代垫的运费（`kind = 'SALES_RETURN'` 的 `freight`，按退货单计入）；
 - 片段 `docShare` 按行金额 / 单据价税合计（合计为 0 时按数量）分摊到明细（坏账只有出库单有，退货单的运费同样按行分摊）；
-- 只是参考口径，销售额、成本、毛利本身不变：利润表中坏账在营业外支出、运费在销售费用，都不在营业成本，不会重复扣减。前端 `JxcTradeReport.vue` / `JxcDetail.vue`、`views/fin/analysis/index.vue` 增加四列，合计有值时显示卡片。
+- 只是参考口径，销售额、成本、毛利本身不变：利润表中坏账在营业外支出、运费在销售费用，都不在营业成本，不会重复扣减。前端 `JxcTradeReport.vue` / `JxcDetail.vue`、`views/fin/analysis/index.vue` 增加这些列，合计有值时显示卡片。
+
+### 收付款折让的参考口径
+
+issue #89。收付款时的折让 / 抹零（`fin_bill.discount_amount`，见[应收应付核销开发 · 折让对报表的影响](./settlement#折让对报表的影响)）不改变出入库单金额，销售额 / 进货额不变，报表另列参考列：
+
+- 片段 `settleDiscount`（`BiJxcMapper.xml`、`FinAnalysisMapper.xml` 各一份）：LEFT JOIN 该出入库单生成的应收应付单（按 `source_id` 关联）的 `discount_amount` 合计——销售取 `AR` 的 `SALES_OUT` / `SALES_RETURN` / `SALES_FREIGHT` / `SALES_RETURN_FREIGHT`（货款，以及客户代垫运费、退货运费），进货取 `AP` 的 `PURCHASE_IN` / `PURCHASE_RETURN` / `PURCHASE_FREIGHT` / `PURCHASE_RETURN_FREIGHT`；按单据自身的不含税比例 `(amount − tax_amount) ÷ amount` 折算（与坏账相同，与不含税的收入、毛利同一口径），再用 `docShare` 按行金额分摊；
+- 同一单据多次收付款累计、作废收付款时扣回，外币单据已按记账汇率折算为本位币；跟随出入库单的业务日期归属，不按收付款日期；退货的红字单据折让为负数（少退给客户，扣除后毛利增加）；
+- 返回字段 `settleDiscount`（单据列表 `DocRow` 中与整单优惠 `discount` 区分）。销售：`profitAfterDiscount` = 毛利 − 折让，`profitAfterBadDebt`（扣折让、坏账后毛利）= 再减坏账，`profitAfterFreight`（扣折让、坏账、运费后毛利）= 再减运费，没有折让时与原来一致；进货：`netAfterDiscount`（汇总，扣折让后净进货额）/ `amountAfterDiscount`（单据列表、明细，扣折让后金额），只作参考——付款折让按准则计入财务费用，不冲减已入库存货的成本，实时成本和月末核算都不调整；
+- 与利润表的关系：折让在财务费用（`RECEIPT_DISCOUNT` / `PAYMENT_DISCOUNT`，含税、按收付款日期），不在营业成本里，毛利本身不扣，所以报表中扣除不会重复，但按期间与利润表不一定一致（页面口径说明已写明）；
+- **折让行**：明细按整张单据列出时（`JxcQuery.isWholeDocs()`：没有商品、分类、品牌、仓库、关键字条件，如按客户 / 供应商 / 业务员 / 区域 / 日 / 月穿透、全部明细，以及从单据列表进入该单的明细 `docId`），`detailSelect` 把商品行（片段 `detailLines`，折让为 0）与折让行（片段 `discountLines`，`discountLine = 1`，只有折让和扣除后的毛利 / 金额）`UNION ALL` 后按 单据日期 → 单据 → 行 排序，分页总数和导出都包含它，数据权限同样作用于该分支；否则折让按行分摊到各行。两种方式下明细的折让合计都与汇总一致。经营分析的毛利明细同理：不按关键字筛选时追加折让行，按关键字筛选时分摊；
+- 前端：`JxcTradeReport.vue`、`JxcDocs.vue`、`JxcDetail.vue`（折让行在物料列显示「收款折让 / 付款折让 / 抹零」，数量、金额、成本等显示「-」，导出时为空）、`views/fin/analysis/index.vue`（参考列 `REFERENCE_KEYS`）；
+- 商品分析（畅销、滞销等）按商品的销售额 / 毛利排序，折让是收款层面的调整，不在其中；需要看商品分摊后的折让用销售报表按商品汇总。
 
 ### 数据权限
 
@@ -147,11 +159,11 @@ docsRef.value.open({ params: params() })
 
 ### 单据列表
 
-`BiJxcService.docs` / `exportDocs` 复用明细的取数（`tradeFrom` / `tradeWhere`）、筛选条件、`dim` + `key` 的转换和 `@DataPermission`，在 `BiJxcMapper.xml` 中按出入库单 `GROUP BY`（`selectDocs` 分页、`selectDocList` 导出，共用片段 `docSelect`；整单优惠取明细行的 `discount_share`）。每张单据一行（`DocRow`）：单号、类型、日期、往来单位、业务员、表头仓库、行数、数量、不含税金额、价税合计、分摊的整单优惠（含税，参考，金额中已扣除）、成本、毛利、毛利率、坏账核销、本公司运费、扣除后毛利，以及按参考成本计算的行数；进货报表没有成本相关列。
+`BiJxcService.docs` / `exportDocs` 复用明细的取数（`tradeFrom` / `tradeWhere`）、筛选条件、`dim` + `key` 的转换和 `@DataPermission`，在 `BiJxcMapper.xml` 中按出入库单 `GROUP BY`（`selectDocs` 分页、`selectDocList` 导出，共用片段 `docSelect`；整单优惠取明细行的 `discount_share`）。每张单据一行（`DocRow`）：单号、类型、日期、往来单位、业务员、表头仓库、行数、数量、不含税金额、价税合计、分摊的整单优惠（含税，参考，金额中已扣除）、成本、毛利、毛利率、收款折让、坏账核销、本公司运费、依次扣除后的毛利，以及按参考成本计算的行数；进货报表没有成本相关列，另有付款折让、扣折让后金额。
 
-- **口径与汇总一致**：金额为该单中属于汇总项的明细行合计，退货为负数，已扣除整单优惠，坏账和运费按行分摊（`docShare`）。按类别、品牌、商品汇总时只计入单据中匹配的明细行，所以各单据加起来等于汇总行，单据数等于汇总行的 `docCount`；
+- **口径与汇总一致**：金额为该单中属于汇总项的明细行合计，退货为负数，已扣除整单优惠，收付款折让、坏账和运费按行分摊（`docShare`）。按类别、品牌、商品汇总时只计入单据中匹配的明细行，所以各单据加起来等于汇总行，单据数等于汇总行的 `docCount`；
 - 返回全部单据的合计 `summary`（`SummaryRow`，与汇总行相同），前端显示为合计行；
-- **单据 → 明细**：明细接口加 `docId`（`JxcQuery.docId`）条件，同时保留汇总项的 `dim` + `key`（按类别等汇总时只列匹配的商品），在 `JxcDocs.vue` 中打开新的 `JxcDetail` 子页；操作列也可以直接打开单据详情 `TradeDocDetail`；
+- **单据 → 明细**：明细接口加 `docId`（`JxcQuery.docId`）条件，同时保留汇总项的 `dim` + `key`（按类别等汇总时只列匹配的商品；按客户等汇总时属于按整张单据列出，最后追加折让行），在 `JxcDocs.vue` 中打开新的 `JxcDetail` 子页；操作列也可以直接打开单据详情 `TradeDocDetail`；
 - 子页层级：汇总 → 单据子页（标题「客户A · 单据」）→ 明细子页（标题「客户A / 单号 · 明细」），每层都有返回按钮；
 - `GET /bi/jxc/{sales,purchase}/docs/export` 最多返回 `EXPORT_LIMIT`（5000）行（`DocExport(rows, truncated)`），前端 `writeExcel`。
 
