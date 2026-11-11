@@ -292,7 +292,7 @@ const { formRef, form } = drawer
 | `create(payload)` / `update(id, payload)` | 保存，按表单是否有 `id` 调用 |
 | `toPayload(form)` | 提交数据，默认去掉 `id`、`createTime`、`updateTime`、`children` |
 | `onSuccess` | 保存成功后回调，一般用于刷新列表 |
-| `successMessage` | 默认 `t('common.msg.saveSuccess')`（「保存成功」） |
+| `successMessage` | 默认 `t('common.msg.saveSuccess')`（「保存成功」）；也可以传函数，在保存成功后取值，用于同一表单有多种保存方式时按方式提示（如出入库表单的「保存草稿」「审核」） |
 
 自带的行为：打开时加载详情（失败自动关闭）、保存前校验、有未保存的修改时关闭会二次确认、`Ctrl / ⌘ + Enter` 快捷保存。返回值中的 `openCreate(defaults)`、`openEdit(record)` 打开表单。
 
@@ -302,6 +302,8 @@ const { formRef, form } = drawer
 | --- | --- |
 | 字段少的简单资料（仓库、库位、职位等） | 默认的抽屉：`<FormDrawer :drawer="drawer">` |
 | 有明细行、字段多的单据（订单、出入库单、凭证等） | 子页：`<FormDrawer page :drawer="drawer" width="min(1200px, 100vw)">` |
+
+需要替换底部的「保存」按钮时（如出入库表单的「保存草稿」「审核」，`components/scm/TradeDocForm.vue`），用 `FormDrawer` 的 `actions` 插槽，插槽参数为 `{ saving, loading }`，按钮中先记下保存方式再调用 `drawer.submit()`。
 
 子页占满内容区、覆盖在列表之上，返回后列表的筛选、分页、滚动位置不变。单据表单一般封装为组件（如 `components/scm/OrderForm.vue`），通过 `defineExpose({ openCreate, openEdit: drawer.openEdit })` 暴露给列表页，保存成功后 `emit('success')` 通知列表页刷新；列表页需要据此刷新已打开的详情时带上单据 ID（如 `OrderForm`、`QuotationForm` 的 `emit('success', id)`）。
 

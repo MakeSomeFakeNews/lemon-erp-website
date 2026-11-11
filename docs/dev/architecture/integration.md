@@ -180,15 +180,15 @@ flowchart LR
 - 由业务单据生成的仓库单据**保存即确认**，`wms_stock_doc.source_no` 记录来源单号；库存不足、序列号不在库等错误会让整张业务单据回滚。
 - 仓库的手工入库只能选「其他入库 / 寄售入库」，手工出库只能选「其他出库 / 报废出库」（`StockInType.MANUAL`、`StockOutType.MANUAL`，判断用 `StockDocType.isManual()`，校验在 `StockDocRules.checkManualType`）；采购、销售、生产、项目、委外等类型只由对应的业务单据生成，否则会绕过应收应付和成本归集。出入库单的类型下拉列出字典中的全部类型，业务单据生成的类型不可选并提示由哪种单据生成（前端 `components/wms/wms.js` 的 `AUTO_TYPE_SOURCES`，新增由业务单据生成的类型时同步登记）。出入库类型 `biz_type` 是系统字典，成本核算按它区分，不能由租户扩充。
 - 收发类别（`wms_stock_doc.io_category`，可不填）：其他入库选「入库类别」（业务字典 `wms_in_category`），其他出库、报废出库选「出库类别」（`wms_out_category`），由 `StockDocType.ioCategoryDict()` 决定，保存时 `DictLookup.check` 按当前租户的字典校验；月末成本凭证按类别取对方科目（见下文「自动凭证的科目」）。
-- 采购入库 / 退货、销售出库 / 退货、工单领料 / 退料 / 完工入库都是保存即确认，不能修改删除，错误通过退货、退料冲回。
+- 采购入库 / 退货、销售出库 / 退货、工单领料 / 退料 / 完工入库都是保存即确认，不能修改删除，错误通过退货、退料冲回（没有反审核）。采购入库 / 退货、销售出库 / 退货可以由业务参数「进销存单据先存草稿」改为先存草稿、审核后才出入库，见下文[草稿与审核](#草稿与审核)。
 - 多规格物料的款式（`is_template = 1`）只用于生成 SKU 和按规格矩阵录入订单，`StockService.apply` 拒绝款式的库存变动，所有出入库都落在具体的 SKU 上。
 
 - 组装拆卸单在仓库模块内完成：确认时在同一事务中生成并确认出入库单（出入库类型 `ASSEMBLY`，来源单号为组装拆卸单号），成本核算按子件成本结转成套件。
 - 销售提成的代码在 fin（统计销售出库、成本、收款核销），工资表由 hr 直接调用 `FinCommissionService.confirmedAmounts(期间)` 取已确认的提成（hr 依赖 fin，属于「下游调用上游」）。
 
-## 出入库单：直接开单、明细仓库与价格记忆
+## 出入库单：直接开单、草稿、明细仓库与价格记忆
 
-采购入库 / 退货、销售出库 / 退货（`scm_trade_doc`，`ScmTradeDocService.create`）有两种录入方式，最终都走同一条「按订单出入库」的链路：
+采购入库 / 退货、销售出库 / 退货（`scm_trade_doc`，`ScmTradeDocService.create`）有两种录入方式，最终都走同一条「按订单出入库」的链路（`ScmTradeDocService.post`，保存即审核和[草稿审核](#草稿与审核)共用）。单据按订单明细录入，可拆成多个库位、批次；回写订单明细的已完成 / 已退货数量用条件更新，不会超收超发；单价取订单。保存即审核：出入库、生成应收应付，并记录审核人 `post_by` / 审核时间 `post_time`；审核后不能修改、删除，错误的单据通过退货冲回（没有反审核）：
 
 ```mermaid
 flowchart TD
@@ -223,6 +223,44 @@ flowchart TD
 客户寄售结算（`ScmConsignService`，来源 `CONSIGN`）也是「先生成已审核订单、再按订单出库」的做法，直接开单与它一致。
 
 退货有两种方式：前端选择原出入库单时带出其订单（请求中 `orderId` 不为空，按原订单回写退货数量）；不选原单时为直接开单，生成的隐式订单只用于回写退货数量，库存按退货入库 / 出库，应收应付按退货金额冲减。
+
+### 草稿与审核
+
+业务参数「进销存单据先存草稿」（`scm.tradeDoc.draft`，`ScmBizRules.TRADE_DRAFT`，默认关闭，前端可读，issue #68）开启后，采购入库、采购退货、销售出库、销售退货（含直接开单）的表单底部为「保存草稿」「审核」。做法参照收付款草稿（`fin.settlement.draft`，见 [应收应付核销开发](../guide/settlement#草稿与确认)）。
+
+```mermaid
+flowchart LR
+  F["表单「保存草稿」"] -- "POST /scm/{kind}/drafts" --> D[("scm_trade_draft<br/>scm_trade_draft_item")]
+  D -- "POST /scm/{kind}/drafts/{id}/post" --> P["ScmTradeDraftService.post<br/>条件删除草稿 → 还原 TradeDocRequest"]
+  P --> T["ScmTradeDocService.post<br/>（与保存即审核相同）"]
+  S["表单「审核」<br/>POST /scm/{kind}"] --> T
+  T --> DOC[("scm_trade_doc<br/>post_by / post_time")]
+```
+
+**草稿单独建表，不在 `scm_trade_doc` 上加状态**。`scm_trade_doc` 被约 40 处查询直接读取（库存成本、订单执行、应收应付、提成、商务智能、进销存报表、追溯、客户关系、项目成本等），这些查询都默认它是已生效的单据；如果把草稿放进去，每处跨模块查询都要加状态过滤，漏掉一处就会让草稿影响报表或成本，以后新写的查询也要记得加。草稿单独存放在 `scm_trade_draft` / `scm_trade_draft_item`（`ScmTradeDraftService`，接口 `/scm/{kind}/drafts`，`ScmTradeDraftController`）后，在结构上就不会出现在任何业务数据里，可修改、删除：
+
+- 明细按列保存（不存 JSON），详情一次 JOIN 带出物料、库位信息，表单直接回显；`source_doc_id` 记录退货引用的原出入库单（只用于回显），订单优惠、运费、业务员、整单优惠、补发标识都保存在草稿表头；
+- 登记到 `ScmRefMapper`，被草稿引用的物料、仓库、往来单位、承运商、用户、部门不能删除（提示「出入库草稿」）；
+- 保存时就占用单据号（`DocNoService.next`，与订单、仓库单据的草稿一致），审核后出入库单沿用这个单号；
+- **只校验结构**：引用订单时订单可见、明细属于该订单（物料取订单明细）；直接开单有往来单位、每行有物料；运费只用于采购入库，赠品只用于销售出库，直接开单的退货不能补发，订单优惠只用于引用订单的采购入库。库存、可入库数量等在审核时才校验，因为草稿本来就是「还没确认」的内容。合计金额按订单单价 / 录入单价估算（直接开单扣除整单优惠），列表标为「金额（估算）」；
+- 草稿按制单人部门 + 制单人做数据权限（`DataScopes.require`），种类不符视为不存在（`scm.error.tradeDraftNotFound`）。
+
+**审核复用原有出入库流程**：`POST /scm/{kind}/drafts/{id}/post`（权限 `scm:{kind}:post`；带请求体时先按其修改草稿，需同时有新增权限）调用 `ScmTradeDraftService.post`，在一个事务中：
+
+1. 先条件删除草稿（`deleteById` 返回 0 说明已被审核或删除，抛 `scm.error.tradeDraftNotFound`），并发审核同一张草稿只有一个成功；
+2. 把草稿还原为 `TradeDocRequest`，调用与保存即审核相同的 `ScmTradeDocService.post(kind, req, origin)`。库存、信用额度、限价、促销、可入库数量、订单优惠都按审核当时的数据校验，任一项失败整体回滚，草稿保持不变。所以库存、应收应付、成本、凭证的规则只有一套；
+3. `Origin(docNo, createBy, deptId)` 让出入库单沿用草稿的单据号、制单人、制单部门（数据权限不变），审核人 `post_by` 为当前用户、`post_time` 为审核时间（详情显示「审核」行；升级前的单据回填为制单人、创建时间）。直接开单的销售出库没有指定业务员时取客户负责人，没有负责人时取草稿制单人，不取审核人。
+
+**权限**：`scm:{purchaseIn,purchaseReturn,salesOut,salesReturn}:post`（菜单 1411 / 1421 / 1441 / 1451），内置角色中采购员（采购两种）、仓库管理员、会计有。保存、修改、删除草稿用新增权限；开启草稿后直接「保存并审核」（`POST /scm/{kind}`，`ScmTradeDocController` 中判断）也需要审核权限，否则抛 `scm.error.noPermissionPostTrade`；只有审核权限的人可以审核草稿但不能改内容。关闭时保存即审核、只需新增权限（与原来一致），不能新建草稿（`scm.error.tradeDraftDisabled`），已有草稿仍可修改、审核、删除。
+
+**审核后不能修改**：沿用现有做法，错误的单据通过退货冲回，不加反审核。反审核要回退库存、批次序列号、订单数量、应收应付、成本和凭证，风险大；而草稿已经解决了「先存、确认后再生效」的需求。
+
+**其他入口**：
+
+- 列表页（`TradeDocPage.vue`）在参数开启或有草稿时显示「已审核」「草稿（N）」页签（`?tab=draft` 直接打开），草稿列表 `TradeDraftTable.vue` 的操作为编辑、审核、删除；表单 `TradeDocForm.vue` 用 `FormDrawer` 的 `actions` 插槽放两个按钮，`useFormDrawer` 的 `successMessage` 传函数按保存方式提示；
+- 首页待办（`ScmTodoProvider`）对有审核权限的用户显示各类待审核的草稿数量，链接到草稿页签；
+- 移动作业的扫码收货、小程序的扫码收货和快速开单在开启草稿且没有审核权限时调用草稿接口保存为草稿；
+- 发货通知拣货出库、ASN 收货、寄售结算等由其他业务生成的出入库单各自已有确认步骤，仍直接审核（直接调用 `ScmTradeDocService.create`，不经过草稿，也不检查审核权限）。
 
 ### 销售出库的明细仓库
 
