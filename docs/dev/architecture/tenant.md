@@ -84,6 +84,7 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
   ```
 
 - 前端用法相同（`useDict`、`DictTag`、`/system/dict/data/type/{type}` 自动返回当前租户的业务字典）；新增字典的步骤见 [新增一个业务模块](../guide/new-module#_2-建表与字典)。
+- **扩展值**：个别业务字典的取值需要附带一个数字时（如发票类型 `scm_invoice_kind` 的税率），由使用它的模块声明 framework 的 `DictExtension` Bean（字典类型、名称消息键、小数位、范围；示例 `ScmTaxRates.Dicts`），字典页面（`views/system/dict/DataDrawer.vue`，按 `SysDictType.ext` 判断）多显示一列扩展值，新增 / 修改时必填并按范围、小数位校验（`system.error.dictExtRequired` / `dictExtInvalid`），存于 `sys_dict_data.ext_value`（新租户随业务字典复制）。业务代码用 `DictLookup.extValues(字典)` 读取（启用取值的 值 → 扩展值），前端字典数据带 `extValue`；没有声明的字典不保存扩展值。
 - 需要层级、在业务页面维护的分类（如[物料分类](#物料分类)）由业务模块建表，实现 framework 的 `DictSource` 后仍可按字典类型读取：`SysDictService` 按类型读取时优先取 `DictSource`（只读、不缓存，不出现在字典管理和业务字典中）。
 
 ### 物料分类

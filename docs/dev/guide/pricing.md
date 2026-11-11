@@ -85,11 +85,67 @@ private DefaultPrice salesPrice(...) {
 
 `api/scm/pricing.js` 的 `defaultPrices({ kind, partnerId, materialIds, qtys, date })`。销售订单（`OrderForm.vue`）、销售报价（`QuotationForm.vue`）、出入库直接开单（`TradeDocItems.vue`）的约定相同：
 
-- 选择商品后带出该行的单价、税率，并在行上记 `priceAuto = true`、`priceSource = source`；多行一次请求，按下标取结果（`res[i]?.materialId === row.materialId ? res[i] : undefined`），不要按物料 ID 建 `Map`，否则同一物料多行会拿到同一个价格；
+- 选择商品后带出该行的单价、税率（税率经 `useTaxRates().sourceRate(发票类型, p.taxRate)`：表头选了发票类型时以发票类型为准，见下文[税率](#税率)），并在行上记 `priceAuto = true`、`priceSource = source`；多行一次请求，按下标取结果（`res[i]?.materialId === row.materialId ? res[i] : undefined`），不要按物料 ID 建 `Map`，否则同一物料多行会拿到同一个价格；
 - 默认价是基本单位、本位币，销售订单按行上的单位和订单币种换算后填入（`OrderForm.vue` 的 `fetchSalesPrices`）；采购订单目前不调用这个接口，仍按合同价、供货价取价；
 - 往来单位或单据日期变化时，对 `priceAuto` 仍为 `true` 的行重新取价（只覆盖没有手工改过的单价）；
 - 用户手工修改单价、或在价格参考中选用价格后，`priceAuto = false`，不再自动覆盖；
 - 单价下方显示来源：`$t(`pricing.source.${record.priceSource}`)`（语言包 `locales/<语言>/pricing.js` 的 `source`）。
+
+## 税率
+
+issue #82。明细税率的默认值与发票类型集中在两处：后端 `scm/service/ScmTaxRates`，前端 `components/scm/taxRate.js` 的 `useTaxRates()`。
+
+**默认税率**：业务参数「默认税率」（`scm.defaultTaxRate`，`ScmBizRules.DEFAULT_TAX_RATE`，DECIMAL 0 ~ 100，默认 13，前端可读），替代原来前后端写死的 13%：新建采购 / 销售订单、报价单、出入库直接开单、订单变更新增行、外部订单导入、商机产品、采购合同、招标投标（供应商门户账号不能读取业务参数，门户的招标详情返回 `defaultTaxRate`）、供货价格、价目表等，明细或价格资料没有填写税率且没有其他来源时取它；物料的供货价格、价目表、客户执行价、采购合同、最近成交价带出的税率仍优先（规则不变），买赠赠品行（`PromotionCalculator.calculate` 的 `giftTaxRate` 由调用方传入）、返利红字单据的税额也按它。小程序快速开单读取同一参数显示新明细的税率，也可选发票类型（见 [小程序开发](./miniapp)）。
+
+**发票类型**：业务字典「发票类型」`scm_invoice_kind`（开票类型，每个租户一份，默认 增值税专票 13% / 9% / 6%、增值税普票 13% / 3% / 1%、不开票 0%，租户可在「业务字典」中自行增加），每个取值的**扩展值**是税率（`sys_dict_data.ext_value`，由 `ScmTaxRates` 声明的 `DictExtension` 定义，见 [SaaS 多租户 - 字典](../architecture/tenant#字典)）。没有复用系统字典 `fin_invoice_type`：它描述发票介质（专票 / 普票 / 数电票），同一类型对应多个税率，且系统字典租户不能新增取值。
+
+- 采购 / 销售订单、销售报价单、出入库（直接开单，含草稿）的表头可选发票类型（`scm_order` / `scm_quotation` / `scm_trade_draft` 的 `invoice_kind`），保存时用 `DictLookup.check` 校验（`ScmTaxRates.checkInvoiceKind`），未修改的已停用旧值不再校验；
+- 选择后前端把明细税率（赠品、引用合同锁定税率的行除外）统一调整为该税率，之后仍可逐行修改；选了发票类型时价格来源带出的税率不再覆盖，以发票类型为准；
+- 后端在明细未填写税率时按 发票类型的税率 → 默认税率 兜底（`ScmOrderAssembler`、报价单、订单变更、赠品）；
+- 报价转销售订单带出发票类型；出入库单不另存，显示所属订单（直接开单为隐式订单）的发票类型，引用订单时表单中只读；草稿中直接开单的发票类型存在草稿上，审核时记到隐式订单；
+- 详情、打印（表头字段「发票类型」，出入库单打印增加「税率」列，`printTemplates.js` 已登记）同步显示；
+- 明细表的税率列头有「统一设置税率」（`TaxRateTitle`，快捷选项为默认税率和各发票类型的税率），作为不用发票类型时的批量方式（订单、报价单、出入库直接开单，以及询价单的报价录入）。
+
+| 位置 | 方法 / 组件 | 说明 |
+| --- | --- | --- |
+| 后端 `ScmTaxRates` | `defaultRate()` | 业务参数「默认税率」 |
+| | `rateOf(发票类型)` | 发票类型的税率（`DictLookup.extValues(INVOICE_KIND_DICT)`），为空、已停用或没有税率时为 `null` |
+| | `fallback(发票类型)` | 明细未填写税率时的税率：发票类型的税率 → 默认税率 |
+| | `resolve(税率, 发票类型)` | 填写了用填写的，否则按 `fallback` |
+| | `checkInvoiceKind(值, 未修改的值)` | 校验并规范发票类型（空白为 `null`） |
+| 前端 `useTaxRates()` | `defaultRate`、`kinds`、`ready` | 默认税率（经 `useBizRules` 读取）、发票类型字典项、读取完成的 Promise |
+| | `rateOf(kind)`、`fallback(kind)` | 同后端；新明细的税率用 `fallback(form.invoiceKind)` |
+| | `sourceRate(kind, rate)` | 价格来源带出的税率：选了发票类型时为发票类型的税率，否则为带出的税率（没有时 `undefined`，保持行上原值） |
+| 前端 `taxRate.js` | `applyTaxRate(rows, rate)` | 批量设置明细税率（跳过 `gift` 行），返回调整的行数 |
+| 前端组件 | `InvoiceKindSelect.vue` | 发票类型下拉（每项显示税率，当前值已停用时仍显示），触发 `change(kind, rate)`，由表单调用 `applyTaxRate` |
+| | `TaxRateTitle.vue` | 税率列头的「统一设置税率」，触发 `apply(rate)` |
+
+`TaxRateTitle` 放在列头插槽中：直接用 `a-table` 的写在 `#headerCell`，用 `LineItemsTable` 的写在 `#header` 插槽（见 [前端开发规范 - 单据明细](./frontend#单据明细-uselineitems-lineitemstable)）：
+
+```vue
+<LineItemsTable :items="form.items" :columns="columns">
+  <template #header="{ column }">
+    <TaxRateTitle v-if="column.key === 'taxRate'" :title="column.title" @apply="applyAllTaxRate" />
+  </template>
+  ...
+</LineItemsTable>
+```
+
+```js
+import { applyTaxRate, useTaxRates } from '@/components/scm/taxRate'
+
+const tax = useTaxRates()
+const newRow = () => ({ materialId: undefined, qty: undefined, price: undefined, taxRate: tax.fallback(form.value.invoiceKind) })
+function onInvoiceKindChange(kind, rate) {
+  if (rate == null) return // 清空发票类型时明细税率不变
+  message.success(t('scm.taxRate.invoiceKindApplied', { n: applyTaxRate(form.value.items, rate), rate }))
+}
+function applyAllTaxRate(rate) {
+  message.success(t('scm.taxRate.applied', { n: applyTaxRate(form.value.items, rate), rate }))
+}
+```
+
+只需要默认税率的页面（采购合同、招标代录、供货价格、价目表、商机、询价报价录入）直接用 `tax.defaultRate.value` 作为新明细的税率。
 
 ## 价格参考
 

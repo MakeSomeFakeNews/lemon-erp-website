@@ -70,7 +70,7 @@ order: 1
 | `org.UserAccountProvisioner` | 为新员工开通登录账号 | system |
 | `org.UserLookup` | 按 ID 查询登录账号的简要信息（`find`、`require`、`requireActive`、`nameOf`），客户关系、项目校验负责人、成员 | system（`SysUserLookup`） |
 | `org.DeptLookup` | 部门树查询：`selfAndDescendantIds(部门IDs)` 返回各部门自身及全部下级部门的 ID（只查一次部门表），业务模块按「本部门及以下」汇总时使用，如部门预算的执行数与报销预算控制（`FinBudgetService`） | system（`SysDeptLookup`） |
-| `dict.DictLookup` | 按当前租户的字典校验业务字典的取值（`contains`、`check(字典, 值, 字段名称键)`），`options(字典)` 返回启用的取值 → 名称 | system（`SysDictService`） |
+| `dict.DictLookup` | 按当前租户的字典校验业务字典的取值（`contains`、`check(字典, 值, 字段名称键)`），`options(字典)` 返回启用的取值 → 名称，`extValues(字典)` 返回启用取值的扩展值（见 `dict.DictExtension`） | system（`SysDictService`） |
 | `finance.PartnerBalanceProvider` | 客户应收余额（信用额度校验） | fin |
 | `finance.ExchangeRateProvider` | 外币记账汇率 | fin（`FinCurrencyService`） |
 | `period.BizPeriodGuard` | 会计期间已结账时禁止新增 / 确认业务单据 | fin（`FinBizPeriodGuard`） |

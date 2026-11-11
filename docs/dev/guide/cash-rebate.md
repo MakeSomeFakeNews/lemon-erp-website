@@ -133,7 +133,7 @@ order: 20.5
 - **销售返利**：`CREDIT_NOTE` 红字应收，或 `NEXT_ORDER` 计入客户返利余额（`selectEarned` − 销售订单已抵扣 `selectUsed`），新建 / 修改销售订单时填写返利抵扣（不超过余额，按行金额分摊到单价）。
 - **采购返利**：只能 `CREDIT_NOTE`（`scm.error.purchaseRebateCreditNoteOnly`），不在采购订单中抵扣。
 
-红字单据方式发布 `RebateSettledEvent(rebateId, rebateNo, kind, partnerId, amount, settleDate)`，fin 的 `FinBillService.onRebateSettled` 同一事务生成来源 `BillSource.REBATE` 的红字单据（税额按 13% 价内计算），再调用 `ScmRebateService.bindBill` 回写。`FinBillService.lines` 中的分录：
+红字单据方式发布 `RebateSettledEvent(rebateId, rebateNo, kind, partnerId, amount, settleDate)`，fin 的 `FinBillService.onRebateSettled` 同一事务生成来源 `BillSource.REBATE` 的红字单据（税额按业务参数「默认税率」`scm.defaultTaxRate`（默认 13%）价内计算，经 `ScmTaxRates.defaultRate()` 读取），再调用 `ScmRebateService.bindBill` 回写。`FinBillService.lines` 中的分录：
 
 | 种类 | 单据 | 分录 |
 | --- | --- | --- |

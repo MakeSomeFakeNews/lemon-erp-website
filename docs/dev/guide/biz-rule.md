@@ -43,6 +43,7 @@ order: 13
 | --- | --- | --- | --- | --- | --- |
 | `scm.purchaseIn.overRate` | 供应链 | 采购入库超收比例（%） | 数字 0~100 | 0 | `ScmTradeDocService`：采购入库时订单明细的已入库数量按比例放宽（`addDone` 的 `overRate`） |
 | `scm.salesOut.overRate` | 供应链 | 销售出库超发比例（%） | 数字 0~100 | 0 | 同上，销售出库 |
+| `scm.defaultTaxRate` | 供应链 | 默认税率（%） | 小数（2 位）0~100 | 13 | `ScmTaxRates.defaultRate()` / `fallback(发票类型)`：新建订单、报价单、出入库直接开单、订单变更新增行、商机产品、采购合同、招标投标、供货价格、价目表等明细或价格资料没有填写税率且没有其他来源时使用，买赠赠品行、返利红字单据的税额也按它；前端可读，前端用 `components/scm/taxRate.js` 的 `useTaxRates()`，见 [开单取价 - 税率](./pricing#税率) |
 | `scm.credit.control` | 供应链 | 客户信用额度控制 | 下拉（`CreditControl`） | `ALL` 审核和出库时控制 | `ScmOrderService`：`ALL` 时审核销售订单和出库都校验，`SHIPMENT` 只在出库时校验，`NONE` 不校验 |
 | `scm.directDoc.enabled` | 供应链 | 允许直接开单 | 是否 | true | `ScmTradeDocService.createDirect`：销售出库、采购入库及退货可以不选订单，生成隐式订单（见 [业务联动](../architecture/integration#直接开单与隐式订单)）；前端可读 |
 | `scm.salesOut.lineWarehouse` | 供应链 | 销售出库明细可选仓库 | 是否 | true | `ScmTradeDocService.create`：销售出库的明细行可以另选仓库；前端可读 |

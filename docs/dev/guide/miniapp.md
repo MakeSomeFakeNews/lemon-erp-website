@@ -567,6 +567,7 @@ runAction(() => changeOpportunityStage(o.id, data), { success: t('crm.opportunit
 | --- | --- |
 | 辅助单位 | 行上的 `qty`、`price` 是所选录入单位的数量和含税单价；默认价、促销预览、库存比较和提交都折算为基本单位（`lines.js` 的 `baseQty` / `basePrice`，基本单价保留 4 位小数），`unitName` 只用于显示。扫包装条码新增的行默认按该包装单位录入；序列号物料和赠品只按基本单位 |
 | 默认价 | `GET /scm/pricing/default`（`kind=SALES`，按行传 `materialIds`、`qtys`），按行返回，同一物料多行时各自按数量匹配起订量；只覆盖没有手工改过（`priceAuto`）的单价，客户、日期、数量、单位变化时重新带出 |
+| 税率与发票类型 | 表头可选发票类型（业务字典 `scm_invoice_kind`，`store/dict` 的 `useDict`，取值带 `extValue` 即税率），选择后明细税率（赠品除外）统一调整为该税率，每行可再修改税率（`SaleRow.vue`，0 ~ 100、2 位小数，清空为按默认）；新明细的税率为发票类型的税率，没有时为业务参数「默认税率」（`scm.defaultTaxRate`，经 `store/bizRules.js` 读取）；未选发票类型时默认价带出的税率按来源，选了时以发票类型为准；提交时带 `invoiceKind`（记在隐式订单上），明细税率为空时由后端按 发票类型 → 默认税率 补上，见 [开单取价 - 税率](./pricing#税率) |
 | 价格参考 | `components/PriceRefSheet.vue` 只取 `/scm/pricing/reference` 的销售历史分区（该客户、全部客户），后端按权限裁剪分区，没有 `sales` 分区时显示没有权限 |
 | 促销与赠品 | 明细变化后 500 ms 调 `POST /scm/promotion/preview`（只传普通行），预览返回前不能保存；赠品行由 `gifts.js` 按预览重建，`scm.salesOut.lineWarehouse` 开启时可拆成多行从不同仓库出，提交前校验各组数量合计等于预览的赠品数量。没有预览权限时不显示赠品，由后端保存时从表头仓库先到期先出补上（序列号赠品除外） |
 | 库位批次 | 每行按 `/wms/stock` 的可用库存先到期先出排序（过期的排最后），默认第一项；赠品所选库位批次不够时提交时自动拆到其他库位批次 |

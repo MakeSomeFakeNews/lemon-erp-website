@@ -146,7 +146,7 @@ BigDecimal tax = amount.multiply(taxRate).divide(Decimals.HUNDRED, Decimals.MONE
 | `@/constants/enums` | 判断状态、类型 | `record.status === CarRequestStatus.DRAFT`；由 `npm run gen:enums` 从后端枚举生成，见 [状态与类型常量](./frontend#状态与类型常量) |
 | `useAction(api, { confirm, successKey, reload, loading })` | 删除、提交、审核、关闭等单条操作 | 返回的函数直接写在 `@click` / `@confirm` 上，见 [单条操作](./frontend#单条操作-useaction) |
 | `useLineItems(() => form.value.items, { newRow })` | 明细行的增删、行 key、合计、校验路径 | `addRow`、`removeRow`、`withKey`、`total`、`itemName` |
-| `<LineItemsTable :items :columns>` | 明细行表格 | `#cell` 插槽、默认的删除列、`min-rows`、`confirm-remove`，见 [单据明细](./frontend#单据明细-uselineitems-lineitemstable) |
+| `<LineItemsTable :items :columns>` | 明细行表格 | `#cell` 插槽、`#header` 列头插槽、默认的删除列、`min-rows`、`confirm-remove`，见 [单据明细](./frontend#单据明细-uselineitems-lineitemstable) |
 | `utils/number.js` | 金额、数量的显示与舍入 | `money`、`moneyOrBlank`、`price`、`qty`、`num`、`round2`、`round4`、`sumBy` |
 | `<FormDrawer page>` | 单据表单（子页） | 占满内容区，返回后列表状态不变 |
 | `<SubPage>` | 单据详情（子页） | 用法同 `a-drawer`，`defineExpose({ reload })` |

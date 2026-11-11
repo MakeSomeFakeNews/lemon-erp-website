@@ -521,6 +521,7 @@ fetch: async (record) => {
 | `confirm-remove` | `(行) => 确认框标题`，返回空时直接删除 |
 | `pagination`、`empty-text` | 同 `a-table` |
 | `#cell` | 除操作列外的单元格，参数同 `a-table` 的 `bodyCell`（`column`、`record`、`index`） |
+| `#header` | 自定义列头，参数同 `a-table` 的 `headerCell`（`column` 等），不处理的列仍显示 `title`；示例为税率列头的「统一设置税率」，见 [开单取价 - 税率](./pricing#税率) |
 | `#action` | 替换默认的删除按钮 |
 | `@remove` | 删除一行后触发，参数为该行 |
 
