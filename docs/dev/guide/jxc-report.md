@@ -10,15 +10,15 @@ order: 19
 
 | 层 | 位置 | 说明 |
 | --- | --- | --- |
-| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM |
-| 查询条件 | `bi/dto/JxcQuery` | 日期范围（必填）、往来单位、业务员、物料、分类、品牌、区域、仓库、关键字，穿透的 `dim` + `key`，商品分析的阈值 |
-| 返回结构 | `bi/dto/JxcViews` | `Summary`（行、合计、是否截断）、`SummaryRow`、`DetailRow`、`Business`、`Assets`、`GoodsRow`、`Rfm` 等 |
+| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、单据列表（`docs`）、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM |
+| 查询条件 | `bi/dto/JxcQuery` | 日期范围（必填）、往来单位、业务员、物料、分类、品牌、区域、仓库、关键字，穿透的 `dim` + `key`、单据 `docId`（单据列表 → 该单的明细），商品分析的阈值 |
+| 返回结构 | `bi/dto/JxcViews` | `Summary`（行、合计、是否截断）、`SummaryRow`、`DetailRow`、`DocRow` / `DocPage` / `DocExport`（单据列表）、`Business`、`Assets`、`GoodsRow`、`Rfm` 等 |
 | 汇总维度 | `bi/model/JxcDimension` | 销售、进货各自可用的维度 |
 | Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService` | |
 | SQL | `resources/mapper/bi/BiJxcMapper.xml` | 只读 JOIN scm、wms、fin 的表 |
 | 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
-| 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
-| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm` |
+| 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDocs.vue`（单据列表子页）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称、穿透操作 `drillActions` / `drillColumn` / `drillsToLines`） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
+| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcDocs`、`jxcDocsExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm` |
 | 语言包 | `locales/<语言>/jxc.js` | 维度名称在 `jxc.dim.<维度>` |
 
 菜单：分组「进销存报表」（ID 966，供应链下）及 6 个页面（370–375），权限 `bi:jxc:sales`、`bi:jxc:purchase`、`bi:jxc:business`、`bi:jxc:asset`、`bi:jxc:goods`、`bi:jxc:rfm`；SaaS 功能模块为 `JXC_REPORT`（依赖销售、采购），见 [新增菜单与授权](./menu#功能模块与行业模板)。
@@ -39,7 +39,7 @@ order: 19
 - 销售成本与财务「毛利分析」一致：数量 × 单据所在月份的成本核算单价（`fin_material_cost.unit_cost`），没有核算时取物料的参考成本价，并统计按参考成本计算的行数；
 - 毛利、毛利率、均价在 `BiJxcService.fillSummary` 中计算（`Decimals` 统一精度），SQL 只做求和；销售另有坏账核销、本公司运费及扣除后的毛利，见下文；
 - 金额取出入库明细的成交金额 `amount`（已扣除整单优惠的分摊），不用优惠前单价 `gross_price`；
-- 汇总最多返回 `SUMMARY_LIMIT`（1000）行，合计（`selectTotal`）仍为全部；明细导出最多 `EXPORT_LIMIT`（5000）行；
+- 汇总最多返回 `SUMMARY_LIMIT`（1000）行，合计（`selectTotal`）仍为全部；明细、单据列表导出最多 `EXPORT_LIMIT`（5000）行；
 - 日期范围由 `checkRange` 校验：销售、进货、商品分析不超过 366 天，经营状况、RFM 不超过 731 天。
 
 ### 坏账与运费的参考口径
@@ -105,24 +105,35 @@ public enum JxcDimension {
 4. **前端常量**：运行 `npm run gen:enums`，`constants/enums.js` 中的 `JxcDimension` 出现 `WAREHOUSE`；在 `components/bi/jxc/jxc.js` 的 `SALES_DIMS` / `PURCHASE_DIMS` 中按显示顺序加入。
 5. **汇总行名称**：`jxc.js` 的 `groupLabel` 默认显示 `row.groupName`，字典类维度（如分类、品牌）在其中按字典取标签；纯文本键（如日、区域）直接显示键。
 6. **语言包**：在 `locales/zh-CN/jxc.js`、`locales/en-US/jxc.js` 的 `dim` 中加 `WAREHOUSE`（汇总列标题、维度切换按钮、导出文件名都用 `jxc.dim.<维度>`）。
-7. **验证**：汇总合计与其他维度一致；点击汇总行打开的明细只包含该仓库的行；明细导出、汇总导出正常。
+7. **默认穿透**：新维度与商品直接相关（点击汇总行应到商品明细）时，加入 `jxc.js` 的 `LINE_DIMS`；否则默认到单据列表，不用修改。
+8. **验证**：汇总合计与其他维度一致；点击汇总行打开的明细只包含该仓库的行，单据列表的行数、合计与汇总行一致；明细、单据、汇总导出正常。
 
 ::: warning 注意
 `dim` 在 XML 中按枚举名称比较（`dim == 'CATEGORY'`），这是 mapper XML 中允许的字面量；Java 和前端一律用 `JxcDimension` 枚举 / 常量。`BiJxcService.prepare` 的 `switch` 中 `default` 分支什么也不做：新维度漏掉第 3 步时不会报错，但穿透会忽略键、返回整个筛选范围的明细，新增维度时不要漏掉。
 :::
 
-## 穿透查询：汇总 → 明细 → 单据
+## 穿透查询：汇总 → 单据 / 明细 → 单据详情
 
-汇总与明细使用**同一个 `JxcQuery`**，前端打开明细时把汇总页的查询条件原样带上，再加上被点击的汇总行：
+汇总行有两种穿透（issue #88），操作列的【单据】【商品明细】两个图标（`jxc.js` 的 `drillActions`，操作列 `drillColumn`，`TableActions` 显示，中间竖线分隔）：
+
+| 穿透 | 接口 | 前端 | 内容 |
+| --- | --- | --- | --- |
+| 商品明细 | `GET /bi/jxc/{sales,purchase}/detail` | `JxcDetail.vue` | 出入库明细，每行一种物料，退货为负数，分页 |
+| 单据 | `GET /bi/jxc/{sales,purchase}/docs` | `JxcDocs.vue` | 该汇总项下的出入库单 / 退货单，每张一行，分页，返回 `DocPage(records, total, summary)` |
+
+点击汇总行的默认穿透由 `drillsToLines(dim)` 决定：按类别、品牌、商品（与商品直接相关，`LINE_DIMS`）汇总时到商品明细，按客户 / 供货商、区域、业务员、日、月汇总时到单据列表。经营状况的员工销售、客户分布和客户 RFM 同样提供两种穿透、默认到单据（需要 `bi:jxc:sales`）；商品分析本身按商品分行，一张单据中同一商品通常只有一行，只穿透商品明细。汇总页头部「全部单据」「全部明细」不带 `dim` / `key`。
+
+汇总、单据列表与明细使用**同一个 `JxcQuery`**，前端打开子页时把汇总页的查询条件原样带上，再加上被点击的汇总行：
 
 ```js
 // components/bi/jxc/JxcTradeReport.vue
-detailRef.value.open({ params: params(), dim: groupBy.value, key: row.groupKey, label: groupLabel(groupBy.value, row, dict) })
-// 合计行：不带 dim / key，列出全部明细
-detailRef.value.open({ params: params() })
+const opts = { params: params(), dim: groupBy.value, key: row.groupKey, label: groupLabel(groupBy.value, row, dict) }
+drillsToLines(groupBy.value) ? detailRef.value.open(opts) : docsRef.value.open(opts)
+// 「全部单据」「全部明细」：不带 dim / key
+docsRef.value.open({ params: params() })
 ```
 
-`GET /bi/jxc/{sales|purchase}/detail?...&dim=&key=&current=&size=` 由 `BiJxcService.prepare` 把 `dim` + `key` 转换为筛选条件：
+`?dim=&key=` 由 `BiJxcService.prepare` 转换为筛选条件（明细、单据列表相同）：
 
 | 维度 | 转换 |
 | --- | --- |
@@ -134,7 +145,17 @@ detailRef.value.open({ params: params() })
 
 键格式不对时抛 `bi.error.jxcInvalidKey`；进货报表忽略业务员、区域条件。明细 `selectDetail` 分页返回出入库明细（退货为负数），`JxcDetail.vue` 中点击单据号用 `TRADE_PATHS[record.kind]` 打开 `TradeDocDetail`。
 
-导出：汇总在前端直接用当前结果 `writeExcel`（汇总超过 1000 行时 `Summary.truncated = true`，页面提示只显示净额最大的 1000 行）；明细调用 `/export` 取最多 5000 行再 `writeExcel`，超过时 `DetailExport.truncated = true`，前端提示只导出了前 5000 行。
+### 单据列表
+
+`BiJxcService.docs` / `exportDocs` 复用明细的取数（`tradeFrom` / `tradeWhere`）、筛选条件、`dim` + `key` 的转换和 `@DataPermission`，在 `BiJxcMapper.xml` 中按出入库单 `GROUP BY`（`selectDocs` 分页、`selectDocList` 导出，共用片段 `docSelect`；整单优惠取明细行的 `discount_share`）。每张单据一行（`DocRow`）：单号、类型、日期、往来单位、业务员、表头仓库、行数、数量、不含税金额、价税合计、分摊的整单优惠（含税，参考，金额中已扣除）、成本、毛利、毛利率、坏账核销、本公司运费、扣除后毛利，以及按参考成本计算的行数；进货报表没有成本相关列。
+
+- **口径与汇总一致**：金额为该单中属于汇总项的明细行合计，退货为负数，已扣除整单优惠，坏账和运费按行分摊（`docShare`）。按类别、品牌、商品汇总时只计入单据中匹配的明细行，所以各单据加起来等于汇总行，单据数等于汇总行的 `docCount`；
+- 返回全部单据的合计 `summary`（`SummaryRow`，与汇总行相同），前端显示为合计行；
+- **单据 → 明细**：明细接口加 `docId`（`JxcQuery.docId`）条件，同时保留汇总项的 `dim` + `key`（按类别等汇总时只列匹配的商品），在 `JxcDocs.vue` 中打开新的 `JxcDetail` 子页；操作列也可以直接打开单据详情 `TradeDocDetail`；
+- 子页层级：汇总 → 单据子页（标题「客户A · 单据」）→ 明细子页（标题「客户A / 单号 · 明细」），每层都有返回按钮；
+- `GET /bi/jxc/{sales,purchase}/docs/export` 最多返回 `EXPORT_LIMIT`（5000）行（`DocExport(rows, truncated)`），前端 `writeExcel`。
+
+导出：汇总在前端直接用当前结果 `writeExcel`（汇总超过 1000 行时 `Summary.truncated = true`，页面提示只显示净额最大的 1000 行）；明细调用 `/export`、单据列表调用 `/docs/export` 取最多 5000 行再 `writeExcel`，超过时 `truncated = true`，前端提示只导出了前 5000 行。
 
 ## 经营状况、商品分析、RFM
 
