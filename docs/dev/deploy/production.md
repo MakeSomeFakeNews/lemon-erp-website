@@ -45,7 +45,7 @@ logging:
 | `REDIS_PASSWORD` | 是 | `***` | Redis 没有密码时也要设置为空字符串 |
 | `REDIS_DATABASE` | 否 | `0` | 与其他系统共用 Redis 时指定单独的库 |
 | `JWT_SECRET` | 是 | 64 位随机字符串 | 至少 32 字节，见下文 |
-| `UPLOAD_PATH` | 是 | `/data/lemon-erp/uploads` | 头像等公开文件目录 |
+| `UPLOAD_PATH` | 是 | `/data/lemon-erp/uploads` | 头像、商品图片等公开文件目录，需要持久化并备份 |
 | `LEMON_UPLOAD_ATTACHMENTPATH` | 建议 | `/data/lemon-erp/attachments` | 业务附件目录，默认是工作目录下的 `./attachments` |
 | `LEMON_TENANT_ENABLED` | 否 | `false` | 是否开启 SaaS 多租户 |
 | `LEMON_DEMO_ENABLED` | 否 | `false` | 是否开启演示模式（只能查看），见 [搭建演示环境](./demo) |

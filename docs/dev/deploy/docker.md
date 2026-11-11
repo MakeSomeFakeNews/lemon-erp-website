@@ -109,7 +109,7 @@ Release 中还有后端 jar（`lemon-erp-<版本>.jar`）、前端静态文件�
 
 - 构建阶段使用 `eclipse-temurin:17-jdk` 和项目自带的 Gradle Wrapper 执行 `:lemon-admin:bootJar`，Gradle 依赖缓存在 BuildKit 缓存中，再次构建不会重新下载；
 - 运行阶段使用 `eclipse-temurin:17-jre`，安装了 `fonts-noto-cjk` 中文字体——单据打印由 JasperReports 生成 PDF，排版时需要中文字体测量文字宽度，见 [生产环境配置](./production#中文字体)；
-- 默认 `SPRING_PROFILES_ACTIVE=prod`、`TZ=Asia/Shanghai`，上传文件和业务附件保存在 `/data/uploads`、`/data/attachments`（`docker-compose.yml` 中挂载为 `lemon-files` 卷）；
+- 默认 `SPRING_PROFILES_ACTIVE=prod`、`TZ=Asia/Shanghai`，上传文件（头像、商品图片）和业务附件保存在 `/data/uploads`、`/data/attachments`（`docker-compose.yml` 中挂载为 `lemon-files` 卷）；
 - 健康检查访问 `GET /api/auth/config`，启动后 2 分钟内不计失败次数。
 
 ### 前端镜像

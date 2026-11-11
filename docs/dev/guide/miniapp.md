@@ -40,6 +40,7 @@ order: 16
 - 跟进记录登记为可挂附件的业务类型 `crm_followup`（`CrmRecordTypes`，用于现场照片）：查看权限与跟进列表一致（`crm:followup:list`、`crm:customer:list`、`crm:lead:list`、`crm:opp:list` 任一），上传需要 `crm:followup:add`，按跟进人、部门做数据权限。
 - `POST /system/attachment/batch?bizType=`：请求体为记录 ID 列表，按记录分组返回附件信息（不含文件内容），用于列表中的缩略图，见 [文件与附件](../architecture/file)。
 - 销售 / 采购订单查询参数 `partnerName`：按往来单位名称或编码搜索。
+- 物料主图：物料下拉、库存查询返回 `imageUrl`（公开文件地址），库存查询、快速开单的商品搜索显示缩略图（`utils/request.js` 的 `fileUrl` 转为完整地址，库存查询点击用 `uni.previewImage` 查看大图）；库存明细显示批次的生产日期。见 [物料资料与批次管理](./material#商品图片)。
 
 ## 技术栈与项目结构
 

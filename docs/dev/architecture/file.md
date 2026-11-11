@@ -8,7 +8,7 @@ order: 11
 
 | 类别 | 示例 | 存储目录 | 访问方式 |
 | --- | --- | --- | --- |
-| 公开文件 | 用户头像 | `lemon.upload.path`（默认 `./uploads`，prod 为 `UPLOAD_PATH`） | `GET /api/files/**` 直接访问，不需要登录 |
+| 公开文件 | 用户头像、商品图片 | `lemon.upload.path`（默认 `./uploads`，prod 为 `UPLOAD_PATH`） | `GET /api/files/**` 直接访问，不需要登录 |
 | 业务附件 | 合同、简历、原始凭证、物料图纸 | `lemon.upload.attachment-path`（默认 `./attachments`） | 不能直接访问，只能通过附件接口下载，按业务记录的功能权限和数据权限校验 |
 
 两个目录都在本地磁盘，由 `framework/file/FileStorageService` 读写。多实例部署时需要挂载同一个共享存储（NFS 等）。
@@ -19,7 +19,10 @@ order: 11
 
 - 只接受 `png`、`jpg`、`jpeg`、`gif`、`webp`，且 Content-Type 为 `image/*`；
 - 按 `{业务目录}/{yyyy}/{MM}/{uuid}.{扩展名}` 保存，返回可直接访问的 URL，如 `/api/files/avatar/2026/10/xxx.png`；
-- `WebMvcConfig` 把 `/files/**` 映射到上传根目录，`SecurityConfig` 对 GET `/files/**` 放行。
+- `WebMvcConfig` 把 `/files/**` 映射到上传根目录，`SecurityConfig` 对 GET `/files/**` 放行；
+- `copyImage(url, dir)` 把一张公开图片复制到同一业务目录（新文件名随机，如复制物料时复制商品图片），`deleteImage(url)` 删除公开图片（URL 不在公开目录下或删除失败时忽略）。
+
+目前使用公开文件的：用户头像（`avatar/`）、物料的商品图片（`material/`，`WmsMaterialImageService`，见 [物料资料与批次管理](../guide/material#商品图片)）。商品图片本来就要对外展示（后续电商小程序直接使用 URL），文件名为随机 UUID，不能枚举。
 
 公开目录中的文件任何人知道地址即可访问，**不要把业务资料保存到公开目录**。
 
