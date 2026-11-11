@@ -22,6 +22,7 @@ order: 18.5
 | `scm_order_item.close_adjust_net` | 尾差的不含税金额（本位币），采购订单计入月末成本核算 |
 | `scm_order_item.gift` | 1 为买赠的赠品行（单价 0） |
 | `scm_trade_doc.discount_amount` | 本单分摊的整单优惠（本位币，含税），优惠前合计 = 价税合计 + 本项；退货单为原单优惠分摊 |
+| `scm_trade_doc.discount_adjust` | 采购入库修改的订单优惠与按订单分摊之差（本位币，含税），0 为与订单一致，见[采购入库的订单优惠](#采购入库的订单优惠) |
 | `scm_trade_doc_item.gross_price` | 优惠前含税单价（本位币），为空同单价（`price` 仍是扣除分摊后的成交单价） |
 | `scm_trade_doc_item.discount_share` | 本行分摊的整单优惠（本位币，含税） |
 | `scm_inquiry_supplier.whole_discount` | 询价单供应商的整单优惠承诺 |
@@ -56,7 +57,16 @@ void apply(List<ScmOrderItem> items, BigDecimal discount)
 - **退货**：按扣除优惠后的成交价退款（`returned` 本来就按 `qty × price`），退货单的 `discount_share` 为 `OrderLineAmounts.returnShare(item, qty, amount)` = 按优惠前单价计的金额 − 实际退货金额（不小于 0），即退回的那部分原单优惠，详情显示「原单优惠分摊」「退款金额」；
 - **价格记忆、价格参考、供货价格**：`ScmPriceMemoryService` 登记 `COALESCE(gross_price, price)`；`ScmPricingMapper` 的销售 / 进货历史取 `COALESCE(i.gross_price, i.price)` 和 `amount + discount_share`，进货数量的均价同口径；`ScmSupplierPriceMapper` 的采购历史同样取优惠前单价。客户下次开单不会带出分摊后的零碎单价；
 - **促销、返利抵扣**仍直接改变单价（成交价），按改变后的价格记忆；订单详情只在 `origPrice` 与优惠前单价不同时（有促销、返利）显示划线原价；
-- **引用订单开单**：`TradeDocItems.vue` 的明细按 `grossPrice` 显示，合计 = Σ `qty × grossPrice`，另按成交价估算 `netAmount`，差额显示为「订单优惠分摊」/「原单优惠分摊」，金额以后端保存结果为准。小程序订单详情（`pkg-crm/order/detail.vue`）同口径。
+- **引用订单开单**：`TradeDocItems.vue` 的明细按 `grossPrice` 显示，合计 = Σ `qty × grossPrice`，另按成交价估算 `netAmount`，差额显示为「订单优惠」/「原单优惠分摊」（界面名称是「订单优惠」，不叫「分摊」，以免让人以为单价被改了；退货保留「原单优惠分摊」，与打印模板的字段名一致，改名会影响已上传的 JRXML），金额以后端保存结果为准。详情（`TradeDocDetail.vue`）中引用订单的单据叫「订单优惠」，直接开单的叫「整单优惠」。小程序订单详情（`pkg-crm/order/detail.vue`）同口径。
+
+### 采购入库的订单优惠
+
+issue #68：明细单价始终是订单 / 供应商送货单上的优惠前单价，不改单价；订单优惠作为整单减少应付，存货成本按各行金额比例冲减。引用订单的采购入库可以按供应商实际给的优惠修改本单的订单优惠：
+
+- 表单合计区默认带出本次按订单计算的优惠（最后一批为订单剩余的优惠），可修改（`TradeDocRequest.orderDiscount`，含税、订单币种，不能为负（`scm.error.orderDiscountNegative`）、不能超过本单优惠前价税合计（`scm.error.orderDiscountExceedsTotal`，上限按含税合计，与订单整单优惠的口径一致）；为空按订单），修改后前端提示与订单不一致并提供「恢复按订单」；
+- 后端 `ScmTradeDocService.applyOrderDiscount` 按各行优惠前金额比例重新分摊（`WholeDiscounts.allocate`，尾差在金额最大的一行），改写本单各行金额、税额、分摊额，应付、实时库存成本、月末成本核算、入库凭证都按修改后的金额；差额记入 `scm_trade_doc.discount_adjust`，详情显示「已修改，比按订单分摊多 / 少 ¥x」；
+- **不回写订单**：订单的已入库金额、已消耗分摊额、关闭尾差仍按订单计算（否则后面几批会把差额补回来），代价是之后引用该订单的退货按订单成交价退款；
+- 无订单的小额采购用直接开单的整单优惠，直接开单传 `orderDiscount` 会被拒绝（`scm.error.orderDiscountNeedsOrder`）；只有采购入库可以修改（`scm.error.orderDiscountOnlyPurchaseIn`），销售出库的优惠由销售订单（审批）确定，出库时改会绕过审批，退货按原单计算。
 
 升级脚本 `20261110_trade_discount_freight.sql` 按订单明细的分摊额回填已有出入库明细的 `gross_price`、`discount_share` 和单据的 `discount_amount`，并对含整单优惠的往来单位 × 物料重算价格记忆。
 

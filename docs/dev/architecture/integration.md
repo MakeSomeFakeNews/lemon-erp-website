@@ -74,7 +74,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 | `OrderStatusChangedEvent` | scm | 订单反审核、关闭等状态变化 | mes 检查或关闭生产计划；scm 释放库存预留 |
 | `OrderDeletedEvent` | scm | 草稿订单删除 | crm 商机解除对订单的引用；scm 报价、询价、请购解除引用 |
 | `ShipmentShippedEvent` | scm | 物流发运单首次发货 | fin 生成承运商运费应付单（本公司承担借 销售运费，客户承担借 代垫运费），客户承担时另生成代垫运费应收单，见[运费](#运费) |
-| `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（借 存货 / 贷 应付账款） |
+| `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（计入存货成本时借 存货，计入当期费用时借 采购运费科目 / 贷 应付账款），见[运费](#运费) |
 | `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 返利结算 / 撤销（红字单据方式；事件带 `kind`、`partnerId`） | fin 生成 / 删除红字应收单（销售返利）或红字应付单（采购返利） |
 | `WorkOrderClosedEvent` | mes | 生产工单关闭 | mes 撤销未完成的补料申请 |
 | `WorkOrderCompletedEvent` | mes | 生产工单完工（完工入库满数量，或已有完工入库且 完工 + 报废 达到工单数量而自动完工；与完工同一事务同步发布） | mes 撤销审批中、待发料的补料申请（审批中的同时撤销流程） |
@@ -257,11 +257,24 @@ flowchart TD
 
 已生成任一单据后不能再修改运费、承担方和承运商（前端 `billed`，后端比较旧值）。
 
-**采购入库（采购运费）**：`TradeDocRequest.freight / freightBearer / carrierSupplierId`，`ScmTradeDocService.checkFreight` 校验只能是采购入库（`scm.error.freightOnlyPurchaseIn`）、承担方只能是 `SUPPLIER`（默认）或 `COMPANY`（`freightBearerInvalid`），`COMPANY` 必须选承运商（`freightSelectCarrier`）。运费由 `ScmFreights.allocate(freight, 各行不含税金额, 各行数量)` 按金额比例分摊到 `scm_trade_doc_item.freight_share`（尾差放在金额最大的一行，金额合计为 0 时按数量），单据记录 `freight`、`freight_bearer`、`carrier_supplier_id`，并发布 `PurchaseFreightEvent`（同一事务）：
+**采购入库（采购运费）**：`TradeDocRequest.freight / freightBearer / carrierSupplierId`，`ScmTradeDocService.checkFreight` 校验只能是采购入库（`scm.error.freightOnlyPurchaseIn`）、承担方只能是 `SUPPLIER`（默认）或 `COMPANY`（`freightBearerInvalid`），`COMPANY` 必须选承运商（`freightSelectCarrier`，前端下拉只列出物流公司，后端不限制承运商的类型，见下文[承运商](#承运商)）。两种承担方都只生成一张采购运费应付单，不另生成费用支出单，运费只计一次。
+
+**入账方式**（`scm_trade_doc.freight_cost`，`scm/model/PurchaseFreightCost`，入库时确定并记在单据上，之后修改参数不影响已有单据）：供应商代垫的始终为 `INVENTORY`（随货款付给供应商，本质上是采购价格的一部分）；本公司承担的按业务参数「本公司承担的采购运费计入」（`scm.purchaseFreight.cost`，前端可读，见 [业务参数](../guide/biz-rule)）：
+
+- `INVENTORY` 存货成本（默认，企业会计准则的一般做法）：运费由 `ScmFreights.allocate(freight, 各行不含税金额, 各行数量)` 按金额比例分摊到 `scm_trade_doc_item.freight_share`（尾差放在金额最大的一行，金额合计为 0 时按数量），计入实时库存成本和月末成本核算的采购金额；
+- `EXPENSE` 当期费用（商品流通企业进货费用金额较小时的简化做法）：不分摊（`freight_share` 为 0，存货成本不含运费），应付单记录费用科目 `AccountRole.PURCHASE_FREIGHT`「采购运费（本公司承担、计入当期费用时）」（默认销售费用 6601，与销售运费分开设置）。
+
+单据记录 `freight`、`freight_bearer`、`freight_cost`、`carrier_supplier_id`，并发布 `PurchaseFreightEvent`（同一事务）：
 
 - `ScmStockCosts`：采购入库的实时成本单价 = (行不含税金额 + `freight_share`) / 数量；采购退货仍按退货单价冲减（运费不退）；
 - 月末成本核算：`FinCostSourceMapper` 的出入库汇总 `net` 加上 `freight_share`（其他种类为 0），计入采购金额；
-- `FinBillService.onPurchaseFreight` 生成运费应付单（来源 `BillSource.PURCHASE_FREIGHT`，字典 `fin_bill_source`「采购运费」），应付对象为供应商（代垫）或承运商（本公司承担），回写 `ScmTradeDocService.bindFreightBill`（`freight_bill_id`）；凭证 借 存货（`FinBillMapper.selectFreightByCategory` 按物料分类汇总 `freight_share`，最后一个分类取差额）/ 贷 应付账款。
+- `FinBillService.onPurchaseFreight` 生成运费应付单（来源 `BillSource.PURCHASE_FREIGHT`，字典 `fin_bill_source`「采购运费」），应付对象为供应商（代垫）或承运商（本公司承担），回写 `ScmTradeDocService.bindFreightBill`（`freight_bill_id`）；凭证：计入存货成本时 借 存货（`FinBillMapper.selectFreightByCategory` 按物料分类汇总 `freight_share`，最后一个分类取差额）/ 贷 应付账款，计入当期费用时 借 `PURCHASE_FREIGHT` 科目（带部门）/ 贷 应付账款-承运商。
+
+前端 `TradeDocForm.vue` 按「运费付给」和参数显示实际入账方式的提示（供应商代垫 / 本公司承担计入存货成本 / 本公司承担计入当期费用），`TradeDocDetail.vue` 显示「计入存货成本 / 计入当期费用」。
+
+### 承运商
+
+供应商资料的「物流公司（承运商）」标识（`scm_supplier.logistics`，可填写营运路线 `routes`）：采购入库本公司承担运费的承运商、发运单的运费结算供应商只列出物流公司（`PartnerSelect` 的 `carrier` 属性 → `GET /scm/supplier/carrier-options`，返回 `{ marked, options }`；还没有标记任何物流公司时回退到全部供应商并在下拉中提示去标记），供应商列表可按类型筛选、名称旁显示「物流公司」标签。物流公司复用供应商档案（编号、名称、联系人、电话、地址、备注都已有），应付、付款、对账、往来汇总与其他供应商相同，后端不限制所选承运商的类型（issue #68）。用标识而不是「供应商 / 协作单位」二选一的类型，是因为有的供应商既供货又帮忙送货，两种用途都能选到它。
 
 ## 自动凭证的科目
 
