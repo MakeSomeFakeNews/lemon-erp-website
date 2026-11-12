@@ -34,7 +34,7 @@ order: 16
 | 商品速查 | `/scm/quick-lookup/*`、`/profile/settings/quickLookup`、`POST /wms/material/images/urls`、`/scm/pricing/reference` | `scm:quickLookup:list` |
 | 单据草稿 | `/scm/{salesOut,purchaseIn}/drafts/*` | `scm:salesOut:list` / `scm:purchaseIn:list`（且业务参数 `scm.tradeDoc.draft` 开启），审核 `scm:{kind}:post`、删除 `scm:{kind}:add` |
 | 快速开单 | `/scm/customer/options`、`/wms/material/options`、`/wms/material/{id}/units`、`/scm/pricing/default`、`/scm/pricing/reference`、`/scm/promotion/preview`、`/wms/stock`、`/fin/account/options`、`/fin/account/scopes`、`/scm/supplier/carrier-options`（运费）、`POST /scm/salesOut`（业务参数 `scm.tradeDoc.draft` 开启时可 `POST /scm/salesOut/drafts` 存草稿，见[手机开单的保存、草稿与打印](#手机开单的保存、草稿与打印)）、`/system/biz-rule/values` | `scm:salesOut:add`，且业务参数 `scm.directDoc.enabled` 开启 |
-| 扫码作业 | `/wms/*`（含经营历史 `/wms/stock/history`）、`/scm/purchaseIn`（扫码收货、快速入库；`scm.tradeDoc.draft` 开启时可存草稿 `/scm/purchaseIn/drafts`）、`/scm/supplier/options`（快速入库选供应商）、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`scm:purchaseIn:add`（快速入库还要业务参数 `scm.directDoc.enabled` 开启）、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
+| 扫码作业 | 库存查询显示「下限 ~ 上限」，低于下限标红、高于上限标橙，分仓库预警显示低于 / 高于的仓库数，可只看低于下限（`lowStock`）或高于上限（`highStock`），预警由后端按物料的预警方式判断（见 [物料资料 · 库存上下限](./material#库存上下限)）；积压分析（`pkg-wms/overstock`，与 Web 端同一接口）。`/wms/*`（含经营历史 `/wms/stock/history`）、`/bi/jxc/overstock`（积压分析）、`/scm/purchaseIn`（扫码收货、快速入库；`scm.tradeDoc.draft` 开启时可存草稿 `/scm/purchaseIn/drafts`）、`/scm/supplier/options`（快速入库选供应商）、`/scm/delivery/*`、`/mes/wo/*` | `wms:stock:list`、`bi:jxc:overstock`（积压分析入口）、`scm:purchaseIn:add`（快速入库还要业务参数 `scm.directDoc.enabled` 开启）、`wms:transfer:add`、`scm:delivery:pick`、`wms:check:edit`、`mes:wo:report` + `mes:wo:list` |
 | 设备与质量 | `/mes/equipment`、`/mes/maintenance/*`、`/mes/inspection/*`、`/qms/plan/match`、`/qms/ncr` | `mes:equipment:list`、`mes:maintain:list`、`mes:qc:list`、`qms:ncr:list` |
 
 为小程序补充的后端能力：
@@ -73,7 +73,7 @@ lemon-mp
     ├── pkg-hr                  分包：打卡、考勤、请假加班、工资条、绩效
     ├── pkg-pm                  分包：我的工时、填报、工时审核
     ├── pkg-crm                 分包：客户、跟进、商机、销售订单、线索、服务工单（photos.js 跟进照片）
-    ├── pkg-wms                 分包：库存、经营历史、快速开单、快速入库、商品速查、单据草稿、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
+    ├── pkg-wms                 分包：库存、经营历史、积压分析 overstock/、快速开单、快速入库、商品速查、单据草稿、收货、上架、拣货、盘点、报工（mobile.js / mobile.scss 扫码作业公共逻辑；
     │                           sale/ 快速开单的明细行 SaleRow.vue、运费 SaleFreight.vue、lines.js、gifts.js；purchase/ 快速入库；lookup/ 商品速查（voice.js 语音）；
     │                           draft/ 单据草稿；tradeSave.js 保存方式；print.js 打印 / 分享 PDF；components/ 搜索弹层、价格参考弹层）
     ├── pkg-mes                 分包：设备、保养维修、质量检验、不合格品

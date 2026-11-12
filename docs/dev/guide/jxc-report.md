@@ -4,24 +4,24 @@ order: 19
 
 # 进销存报表开发
 
-「供应链 → 进销存报表」包括销售报表、进货报表、经营状况、资产状况、商品分析、客户分析（RFM）。页面挂在供应链菜单下，代码在 bi 模块；与商务智能的多维分析不同，进销存报表**实时查询业务表**，不依赖数据仓库同步。本页说明它的代码结构、口径、汇总维度的扩展方式和穿透查询。
+「供应链 → 进销存报表」包括销售报表、进货报表、经营状况、资产状况、商品分析、客户分析（RFM）、积压分析。页面挂在供应链菜单下，代码在 bi 模块；与商务智能的多维分析不同，进销存报表**实时查询业务表**，不依赖数据仓库同步。本页说明它的代码结构、口径、汇总维度的扩展方式和穿透查询。
 
 ## 代码位置
 
 | 层 | 位置 | 说明 |
 | --- | --- | --- |
-| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、单据列表（`docs`）、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM |
+| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、单据列表（`docs`）、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM、积压分析（`/bi/jxc/overstock`，与商品分析的 `goods/overstock` 不同） |
 | 查询条件 | `bi/dto/JxcQuery` | 日期范围（必填）、往来单位、业务员、物料、分类、品牌、区域、仓库、关键字，穿透的 `dim` + `key`、单据 `docId`（单据列表 → 该单的明细），明细的调整项显示方式 `adjustMode`，商品分析的阈值 |
 | 返回结构 | `bi/dto/JxcViews` | `Summary`（行、合计、是否截断）、`SummaryRow`、`DetailRow` / `DetailPage` / `DetailExport`（明细，带调整行 `adjustments` 和合计 `summary`）、`DocRow` / `DocPage` / `DocExport`（单据列表）、`Business`、`Assets`、`GoodsRow`、`Rfm` 等 |
 | 汇总维度 | `bi/model/JxcDimension` | 销售、进货各自可用的维度 |
-| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService` | |
+| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService`；积压分析 `BiOverstockService`（条件 `OverstockQuery`，积压基数 `OverstockBase`） | |
 | SQL | `resources/mapper/bi/BiJxcMapper.xml` | 只读 JOIN scm、wms、fin 的表 |
-| 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
+| 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm,overstock}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
 | 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDocs.vue`（单据列表子页）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称、穿透操作 `drillActions` / `drillColumn` / `drillsToLines`） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
-| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcDocs`、`jxcDocsExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm` |
+| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcDocs`、`jxcDocsExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm`、`jxcOverstock` |
 | 语言包 | `locales/<语言>/jxc.js` | 维度名称在 `jxc.dim.<维度>` |
 
-菜单：分组「进销存报表」（ID 966，供应链下）及 6 个页面（370–375），权限 `bi:jxc:sales`、`bi:jxc:purchase`、`bi:jxc:business`、`bi:jxc:asset`、`bi:jxc:goods`、`bi:jxc:rfm`；SaaS 功能模块为 `JXC_REPORT`（依赖销售、采购），见 [新增菜单与授权](./menu#功能模块与行业模板)。
+菜单：分组「进销存报表」（ID 966，供应链下）及 7 个页面（370–376），权限 `bi:jxc:sales`、`bi:jxc:purchase`、`bi:jxc:business`、`bi:jxc:asset`、`bi:jxc:goods`、`bi:jxc:rfm`、`bi:jxc:overstock`（积压分析，内置角色与商品分析相同：普通用户、总经理、会计、采购员、仓库管理员）；SaaS 功能模块为 `JXC_REPORT`（依赖销售、采购），见 [新增菜单与授权](./menu#功能模块与行业模板)。
 
 ## 数据口径
 
@@ -205,6 +205,32 @@ docsRef.value.open({ params: params() })
 | 客户 RFM | `selectRfm` 取期间有销售出库的客户的最近订货日期、出库单数、净销售额（不含税）；`ScmRfmService.settings(params)` 合并页面传入的参数（`mode`、`recencyDays`、`frequency`、`monetary`，不传的取业务参数 `scm.rfm.*`）并校验范围；`RfmCalculator.calculate(metrics, settings, months)` 计算：R = 最近订货距今天数、F = 每月订货次数（出库单数 ÷ `months`，`months(begin, asOf)` = 天数 ÷ 30.4375）、M = 平均每次订货金额（净销售额 ÷ 出库单数）；固定阈值（`RfmMode.THRESHOLD`）下 R ≤ 天数、F ≥ 次 / 月、M ≥ 元 / 次为高，平均分（`AVERAGE`）下五分位得分（⌈5 × 不优于它的客户占比⌉，并列同分，按单数和净额打分）不低于平均分为高；`RfmSegment.of(recent, frequent, valuable)` 分为八类。返回结果带实际使用的 `settings` 和统计月数 `months` |
 
 `RfmCalculator` 是不依赖 Spring 的纯计算类，修改打分规则时可以单独验证。客户关系的客户分析（`CrmAnalysisService.rfm`，`GET /crm/analysis/rfm?mode=&recencyDays=&frequency=&monetary=`）用同一个计算类和参数，统计近一年，金额不含税（价税合计 − 税额）扣除退货，与进销存报表的客户 RFM 一致（两处共用同一个 M 阈值），分层返回 `RfmSegment` 枚举（前端按 `jxc.rfm.seg.*` 翻译）。客户分析的成交趋势（`CrmAnalysisMapper.selectMonthlySales`）、行业分布（近一年，期间与 RFM 一致：今天往前一年 + 1 天）和客户详情的近一年销售额（`CrmCustomerMapper.selectSummary`）与 RFM 同一口径：不含税净销售额 = 销售出库的（价税合计 − 税额）− 销售退货的（价税合计 − 税额），界面上标注「不含税」。前端两个页面共用分群参数条 `components/bi/RfmSettingsBar.vue`：切换方式、修改阈值后 `@apply(params)` 重新查询，「恢复默认」传 `{}`，有 `sys:bizRule:edit` 时「保存为默认」写入业务参数。
+
+## 积压分析
+
+截至某一天库存数量超过「积压基数」的商品（issue #111），`BiOverstockService.page`，`GET /bi/jxc/overstock?current=&size=`（`bi:jxc:overstock`），返回 `JxcViews.OverstockPage`（`records`、`total`、全部积压商品的合计 `summary`、截至日 `date`、销量期间 `salesBegin` / `salesEnd`、`costVisible`）。
+
+**条件**（`OverstockQuery`）：仓库、类别（含下级）、品牌、商品描述 `keyword`（编码 / 名称 / 规格包含，或检索列 `search_key` 包含规范化的关键字）、截至日期 `date`（默认今天，不能晚于今天，`bi.error.overstockDateAfterToday`）、积压基数方式 `base`（`OverstockBase`，不传为最近 N 天销量）和 `days`（1–366，默认 60，`bi.error.overstockDaysRange`）。
+
+| 积压基数 `OverstockBase` | 取值 |
+| --- | --- |
+| `MAX_STOCK` 库存上限 | 按总库存的物料取物料的上限；分仓库的取所选仓库的上限，不选仓库时为各仓库上限之和（即物料上的 `max_stock`）；没有设置上限的不参与 |
+| `LAST_MONTH` 上个月销量 | 截至日所在月份的上一个自然月 |
+| `RECENT_DAYS` 最近 N 天销量 | 截至日往前 N 天（含截至日），页面默认此项 |
+
+销量 = 销售出库 − 销售退货（按所选仓库，明细仓库为空时取表头仓库，口径同销售报表，为负按 0）。
+
+**口径**（`BiJxcMapper.xml` 的 `overstockStock`、`overstockBase`、`overstockRows`）：
+
+- 库存数量 = 截至日的库存：当前库存 − 业务日期晚于截至日的流水（日期口径同资产状况：单据业务日期，在途调拨的调入按收货日期），不含供应商寄售仓；截至今天时与库存查询一致；
+- 积压数量 = 库存数量 − 积压基数，只列出大于 0 的（多规格款式不列出）；
+- 在库天数 = 截至日 − 最新进货日期（截至日之前最近一次采购入库，全部仓库），没有进货时按登记日期（物料创建日期）；最新出库为最近一次销售出库；
+- 积压系数 = 库存数量 ÷ 积压基数，基数为 0 时为空（页面显示 —）；
+- 资金占用 = 积压数量 × 最新单位成本（同资产状况的 `latestCost`），需要 `wms:stock:cost`，没有时不返回也不按它排序。
+
+有成本权限时按资金占用、否则按积压数量排序；统计在 SQL 中完成（`selectOverstock` 分页 + `selectOverstockTotal` 合计）。方法加 `@DataPermission(table = "scm_trade_doc", ...)`，按出入库单的制单人部门 + 制单人做数据权限（与商品分析一致）。
+
+**前端**（`views/jxc/overstock/index.vue`）：列头问号说明口径，合计行，导出（分页取数，每次 500 行、最多 5000 行，带合计行）；有 `wms:stock:list` 时操作列可联查经营历史（`StockHistory`）和库存分布（`components/wms/StockDistributionModal.vue`，与商品速查共用，`loader` 传入取数函数，这里用库存查询的接口）。小程序工作台「积压分析」（`pkg-wms/overstock`）用同一接口。
 
 ## 新增一张进销存报表
 

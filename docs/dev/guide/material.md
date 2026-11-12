@@ -4,7 +4,7 @@ order: 18.6
 
 # 物料资料与批次管理
 
-仓库模块（`lemon-wms`）中物料资料的三项扩展：复制物料、商品图片、发生库存业务后切换批次 / 序列号管理，以及出库侧显示批次的生产日期（issue #94）。用户视角的说明见用户手册 [物料管理](../../manual/wms/material)。
+仓库模块（`lemon-wms`）中物料资料的扩展：复制物料、商品图片、发生库存业务后切换批次 / 序列号管理、出库侧显示批次的生产日期（issue #94），以及库存上下限（按总库存或分仓库预警，issue #111）。用户视角的说明见用户手册 [物料管理](../../manual/wms/material)。
 
 ## 相关概念
 
@@ -18,7 +18,7 @@ order: 18.6
 
 ## 复制物料
 
-物料列表「更多 → 复制」（需要 `wms:material:add`）：前端用 `asPrefilled(() => drawer.openCreate(...))` 打开新增表单，带出原物料的资料（名称、规格、单位、分类、品牌、价格列、安全库存、再订货点 / 再订货量、默认仓库库位、参考成本、计价方法、批次 / 序列号 / 来料检验、备注）、生产计划属性、替代料和自定义字段；去掉 `id`、`code`、`barcode`、状态、款式标记、主图等字段，编码留空（保存时按编码规则生成）、条码不带（条码不能重复）。
+物料列表「更多 → 复制」（需要 `wms:material:add`）：前端用 `asPrefilled(() => drawer.openCreate(...))` 打开新增表单，带出原物料的资料（名称、规格、单位、分类、品牌、价格列、库存预警（`alertMode`、安全库存、库存上限，分仓库时连同 `warehouseLimits`）、再订货点 / 再订货量、默认仓库库位、参考成本、计价方法、批次 / 序列号 / 来料检验、备注）、生产计划属性、替代料和自定义字段；去掉 `id`、`code`、`barcode`、状态、款式标记、主图等字段，编码留空（保存时按编码规则生成）、条码不带（条码不能重复）。
 
 保存时调用 `POST /wms/material?copyFrom=原物料ID`，后端在新增的同一事务中再复制：
 
@@ -60,6 +60,49 @@ order: 18.6
 - 上传后事务回滚时，删除已保存的文件（`afterCompletion` 中状态不是已提交）。
 
 部署时公开文件目录需要持久化并纳入备份，见 [升级与数据备份](../deploy/upgrade)。
+
+## 库存上下限
+
+物料的「库存预警」（`wms_material.alert_mode`，枚举 `StockAlertMode`，系统字典 `wms_stock_alert_mode`）决定上下限针对什么判断：
+
+| 预警方式 | 存储 | 判断 |
+| --- | --- | --- |
+| **按总库存** `TOTAL`（默认，即原来的安全库存预警） | 安全库存（库存下限）`safety_stock`、库存上限 `max_stock` | 与**所有仓库的库存合计**比较，适合单店多仓 |
+| **分仓库** `WAREHOUSE` | `wms_material_warehouse_limit`（物料 × 仓库 × `min_qty` × `max_qty`，`WmsStockLimitService`） | 按仓库判断，没有设置的仓库不预警；物料上的 `safety_stock` / `max_stock` 保存为各仓库设置之和 |
+
+分仓库时把合计写回物料，是为了让补货建议、MRP、商品分析的缺货等**按全公司计算**的功能直接使用 `safety_stock`，不必各自理解分仓库的设置，也避免「同一个值 × 仓库数」这样的口径。
+
+### 维护
+
+- 物料编辑抽屉的「库存预警」（`views/wms/material/MaterialStockLimits.vue`）：分仓库时出现仓库明细表，仓库不能重复（`wms.error.stockLimitWarehouseDuplicate`）、下限不能大于上限（`wms.error.warehouseStockLimitMinGreaterMax`；按总库存时为 `wms.error.stockLimitMinGreaterMax`）。新增、修改的请求体带 `warehouseLimits`；修改时不传 `warehouseLimits` 保持原设置，改回按总库存时删除分仓库的设置。物料详情 `GET /wms/material/{id}` 返回 `warehouseLimits`，复制物料一并复制。
+- 物料列表勾选后「库存预警」批量设置（`StockLimitBatchModal.vue`，`PUT /wms/material/stock-limits`，`StockLimitBatchRequest`，最多 500 个）：按总库存——设置下限、上限并清除分仓库设置；分仓库——设置所选仓库的下限、上限（两者都为空时删除该仓库的设置），物料改为分仓库预警，其他仓库不变，然后重算合计（`refreshTotals`）。批量设置前后比较，记入各物料的变更记录（`CHANGE_FIELDS` 含 `maxStock`、`alertMode`）。
+- 导入导出带库存上限，导入的物料按总库存。删除仓库时删除该仓库的设置并重算合计（`deleteByWarehouses`）；删除物料时删除其设置。
+
+### 预警口径
+
+口径统一在 `WmsMaterialWarehouseLimitMapper.xml` 的 `materialAlerts` 片段，其他模块的 XML 以完整 refid 只读引用（`<include refid="com.lemon.erp.modules.wms.mapper.WmsMaterialWarehouseLimitMapper.materialAlerts"><property name="wh" value="..."/></include>`，`wh` 为仓库 ID 的参数表达式，不限仓库时写 `null`）。片段只含设置了下限或上限的物料，返回：
+
+| 列 | 说明 |
+| --- | --- |
+| `min_qty`、`max_qty` | 预警用的下限、上限：按总库存取物料上的设置，分仓库取范围内各仓库设置之和 |
+| `alert` | `LOW` / `HIGH`（`StockAlert`），正常为空。按总库存比较**所有仓库的合计**（库存查询选了仓库也按合计，因为上下限是针对合计设置的）；分仓库时任一仓库低于下限为 `LOW`，否则任一仓库高于上限为 `HIGH` |
+| `low_count`、`high_count` | 分仓库时低于、高于的仓库数 |
+
+使用处：
+
+| 功能 | 说明 |
+| --- | --- |
+| 库存查询（按物料汇总） | `StockSummaryView` 返回 `stockAlert`、`lowWarehouses`、`highWarehouses`、`maxStock`、`alertMode`；查询参数「只看低于安全库存」`lowStock`、「只看高于库存上限」`highStock`，两者都勾选时都列出。分仓库的物料选了仓库时上下限取该仓库的设置，不选时为各仓库之和。分仓库的预警标签（`views/wms/stock/StockAlertTag.vue`）点击时取 `GET /wms/stock/limits?materialId=`（`wms:stock:list`，`WarehouseAlertView`：各仓库的库存与上下限） |
+| 首页待办 | `WmsTodoProvider`：库存低于安全库存（`/wms/stock?lowStock=1`）、库存高于库存上限（`aboveMax`，`/wms/stock?highStock=1`） |
+| BI 预警指标 | `STOCK_BELOW_SAFETY`、新增 `STOCK_ABOVE_MAX`（`BiAlertMetric`，`BiInsightMapper.xml`，没有内置规则） |
+| 仓储大屏 | 低库存列表和数量（`BiScreenMapper.xml`），安全库存显示为 `min_qty` |
+| AI 问数 | 工具 `wms_stock`：参数 `highStockOnly`，结果字段 `maxStock`、`alertMode`、`aboveMax`（`WmsStockAiTools`） |
+| 商品分析 · 缺货 | 选了仓库时分仓库的物料取该仓库的下限（`BiJxcMapper.xml` 的 `shortageSafety`），不选时取物料上的合计 |
+| 补货建议 | 按全公司计算（安全库存取各仓库下限之和），`ReorderSuggestion` 增加 `alertMode`、`lowWarehouses`，页面提示可在仓库之间调拨 |
+| 积压分析 | 积压基数为「库存上限」时取上限，见 [进销存报表开发 · 积压分析](./jxc-report#积压分析) |
+| 小程序库存查询 | 显示「下限 ~ 上限」，低于标红、高于标橙，分仓库显示低于 / 高于的仓库数，可只看低于下限或高于上限 |
+
+新增一个使用库存预警的地方时引用 `materialAlerts` 片段，不要自己比较 `safety_stock`，否则分仓库的物料会按合计误判。
 
 ## 批次 / 序列号管理的切换
 
@@ -125,7 +168,9 @@ scm 的实现 `ScmMaterialTrackingGuard`：尚未出库的发货通知（拣货�
 | 复制物料 | `wms:material:add` |
 | 商品图片查看 / 维护 | `wms:material:list` / `wms:material:edit`；批量取图登录即可 |
 | 批次 / 序列号管理切换 | `wms:material:edit` |
+| 批量设置库存上下限 | `wms:material:edit` |
+| 分仓库预警明细 | `wms:stock:list` |
 
 ## 数据库
 
-`sql/init.sql` 已包含新表 `wms_material_image` 和 `wms_material.image_url`；已有库执行 `sql/upgrade/20261111_wms_material_image.sql`（可重复执行），见 [升级与数据备份](../deploy/upgrade#数据库变更)。复制物料、批次管理的切换不需要改库。
+`sql/init.sql` 已包含新表 `wms_material_image` 和 `wms_material.image_url`；已有库执行 `sql/upgrade/20261111_wms_material_image.sql`（可重复执行），见 [升级与数据备份](../deploy/upgrade#数据库变更)。复制物料、批次管理的切换不需要改库。库存上下限：`wms_material.max_stock`、`alert_mode` 和新表 `wms_material_warehouse_limit`，系统字典 `wms_stock_alert_mode`，已有库执行 `sql/upgrade/20261112_stock_limit.sql`，原有的安全库存即库存下限、数据不变。
