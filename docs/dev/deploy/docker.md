@@ -56,13 +56,13 @@ docker compose logs -f backend      # 查看后端日志
 
 | 镜像 | 标签 |
 | --- | --- |
-| `ghcr.io/makesomefakenews/lemon-erp-backend` | 版本号（如 `1.0.0`）、`1.0`、`latest` |
+| `ghcr.io/makesomefakenews/lemon-erp-backend` | 版本号（如 `1.1.0`）、`1.1`、`latest` |
 | `ghcr.io/makesomefakenews/lemon-erp-web` | 同上 |
 
 从 Release 下载 `lemon-erp-docker-<版本>.zip`，其中只有 `docker/docker-compose.yml`、`docker/.env.example`、`sql/init.sql` 和升级脚本 `sql/upgrade`，`.env.example` 已填好镜像地址和版本：
 
 ```bash
-unzip lemon-erp-docker-1.0.0.zip && cd lemon-erp-docker-1.0.0/docker
+unzip lemon-erp-docker-1.1.0.zip && cd lemon-erp-docker-1.1.0/docker
 cp .env.example .env        # 修改其中的密码和 JWT_SECRET
 docker compose up -d
 ```
@@ -135,8 +135,8 @@ Docker 默认网络的地址在 172.16.0.0/12 范围内，属于后端默认信�
 
 ```bash
 ./docker/build.sh                                         # 构建 lemon-erp-backend:latest、lemon-erp-web:latest
-./docker/build.sh -t 1.0.0                                # 指定标签
-./docker/build.sh -p registry.example.com/lemon/lemon-erp -t 1.0.0 --push    # 构建并推送
+./docker/build.sh -t 1.1.0                                # 指定标签
+./docker/build.sh -p registry.example.com/lemon/lemon-erp -t 1.1.0 --push    # 构建并推送
 ./docker/build.sh --npm-registry https://registry.npmmirror.com             # 国内 npm 镜像
 ./docker/build.sh --platform linux/amd64                  # 在 Apple 芯片的电脑上构建 x86 服务器使用的镜像
 ```
