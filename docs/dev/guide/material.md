@@ -92,7 +92,7 @@ order: 18.6
 
 | 功能 | 说明 |
 | --- | --- |
-| 库存查询（按物料汇总） | `StockSummaryView` 返回 `stockAlert`、`lowWarehouses`、`highWarehouses`、`maxStock`、`alertMode`；查询参数「只看低于安全库存」`lowStock`、「只看高于库存上限」`highStock`，两者都勾选时都列出。分仓库的物料选了仓库时上下限取该仓库的设置，不选时为各仓库之和。分仓库的预警标签（`views/wms/stock/StockAlertTag.vue`）点击时取 `GET /wms/stock/limits?materialId=`（`wms:stock:list`，`WarehouseAlertView`：各仓库的库存与上下限） |
+| 库存查询（按物料汇总） | `StockSummaryView` 返回 `stockAlert`、`lowWarehouses`、`highWarehouses`、`maxStock`、`alertMode`；查询参数「只看低于安全库存」`lowStock`、「只看高于库存上限」`highStock`（有仓库高于上限即列出，即使另一仓库低于下限，与首页待办的计数一致），两者都勾选时都列出。分仓库的物料选了仓库时上下限取该仓库的设置，不选时为各仓库之和。分仓库的预警标签（`views/wms/stock/StockAlertTag.vue`）点击时取 `GET /wms/stock/limits?materialId=`（`wms:stock:list`，`WarehouseAlertView`：各仓库的库存与上下限） |
 | 首页待办 | `WmsTodoProvider`：库存低于安全库存（`/wms/stock?lowStock=1`）、库存高于库存上限（`aboveMax`，`/wms/stock?highStock=1`） |
 | BI 预警指标 | `STOCK_BELOW_SAFETY`、新增 `STOCK_ABOVE_MAX`（`BiAlertMetric`，`BiInsightMapper.xml`，没有内置规则） |
 | 仓储大屏 | 低库存列表和数量（`BiScreenMapper.xml`），安全库存显示为 `min_qty` |
