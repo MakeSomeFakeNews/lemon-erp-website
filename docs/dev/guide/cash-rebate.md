@@ -71,17 +71,18 @@ order: 20.5
 | | 其他支出 | 6711 |
 | | 销售运费（内置，`SALES_FREIGHT`） | 6601 |
 | | 代垫运费（内置，`FREIGHT_ADVANCE`） | 1221 |
+| | 调拨费用（内置，`TRANSFER_FEE`） | 6601 |
 
-两个内置类别的默认科目与凭证科目设置的销售运费 / 代垫运费默认值一致；升级脚本给平台和已有租户各增加一份，科目取该租户凭证科目设置中的销售运费 / 代垫运费（没有设置按编码 6601 / 1221），已有同名支出类别时直接标记为内置。
+内置类别的默认科目与凭证科目设置的销售运费 / 代垫运费 / 调拨费用默认值一致；升级脚本给平台和已有租户各增加一份，科目取该租户凭证科目设置中的销售运费 / 代垫运费 / 调拨费用（没有设置按编码 6601 / 1221 / 6601；调拨费用由 `20261112_transfer_price.sql` 增加），已有同名支出类别时直接标记为内置。
 
 ### 业务单据生成的费用支出单
 
 `FinIoService.createGenerated(code, date, accountId, supplierId, deptId, amount, sourceType, sourceId, sourceNo, remark)`：销售出库、采购退货现付的运费（`FinFreightService` 处理 `TradeFreightEvent`，见 [业务联动 - 运费](../architecture/integration#运费)）生成待确认的费用支出单，与出入库同一事务：
 
 - 结算账户经 `requireCashAccount` 校验，业务期间未结账（`FinBizPeriodGuard.checkOpen`，已结账时抛 `fin.error.hasClosedBusinessDatePeriodNo`，出入库单整体回滚）；类别取 `FinIoCategoryService.getBuiltin(code)`，缺少时抛 `fin.error.ioCategoryBuiltinMissing`；
-- 关联单位为承运商（供应商，可空），费用部门为出入库单的部门，明细一行；`source_type` 为 `SALES_OUT` / `PURCHASE_RETURN`，`source_id` / `source_no` 为出入库单；
+- 关联单位为承运商（供应商，可空），费用部门为出入库单的部门，明细一行；`source_type` 为 `SALES_OUT` / `PURCHASE_RETURN`，`source_id` / `source_no` 为出入库单；调拨单现付的调拨费用同样生成（`FinTransferFeeService` 处理 wms 的 `TransferFeeEvent`，类别 `IoCategoryCode.TRANSFER_FEE`，`source_type` 为 `TRANSFER_FEE`，来源为调拨单，冲销时金额为负数的红字单据，见 [实时库存成本 - 调拨费用](./stock-cost#调拨费用)）；
 - 金额与来源一致，不能修改、删除，可确认、取消确认（规则同手工单据）；
-- 前端列表增加「来源单据」列、详情增加「来源单据」行（`SourceDocLink`，按 `sourceDocs.js` 打开出入库单），有来源时隐藏编辑、删除；`index.vue` 用 `useRouteOpen` 处理出入库单详情跳转过来的 `?id=`。
+- 前端列表增加「来源单据」列、详情增加「来源单据」行（`SourceDocLink`，按 `sourceDocs.js` 打开出入库单；`TRANSFER_FEE` 跳转 `/wms/transfer?id=`，需要 `wms:transfer:list`，调拨单页面用 `useRouteOpen` 打开详情），有来源时隐藏编辑、删除；`index.vue` 用 `useRouteOpen` 处理出入库单详情跳转过来的 `?id=`。
 
 ## 账户调拨
 

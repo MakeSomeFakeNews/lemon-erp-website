@@ -61,6 +61,7 @@ public void bindFreightBill(Long shipmentId, Long billId) {
 | `ScmShipmentService.bindFreightBill` / `bindFreightArBill` | scm | fin 处理 `ShipmentShippedEvent` 生成运费应付单 / 代垫运费应收单后 |
 | `ScmTradeDocService.bindFreightBill` | scm | fin 处理 `PurchaseFreightEvent` 生成采购运费应付单后 |
 | `ScmTradeDocService.bindFreight` | scm | fin 处理 `TradeFreightEvent` 生成承运商应付单、往来单位的运费单据、费用支出单后 |
+| `WmsStockDocService.bindFee` | wms | fin 处理 `TransferFeeEvent` 生成调拨费用的费用支出单 / 承运商应付单后 |
 | `ScmRebateService.bindBill` | scm | fin 处理 `RebateSettledEvent` 生成红字应收单（销售返利）/ 红字应付单（采购返利）后 |
 | `QmsClaimService.bindBill` | mes | fin 处理 `SupplierClaimConfirmedEvent` 生成红字应付单后 |
 | `MesEquipmentService.bindVoucher` / `unbindVouchers` | mes | fin 处理 `MaintenanceFinishedEvent` 生成费用凭证后 / 删除凭证时 |
@@ -77,6 +78,7 @@ mapper XML 中跨模块的**只读** JOIN（报表、商务智能、首页统计
 | `ShipmentShippedEvent` | scm | 物流发运单首次发货 | fin 生成承运商运费应付单（本公司承担借 销售运费，客户承担借 代垫运费），客户承担时另生成代垫运费应收单，见[运费](#运费) |
 | `PurchaseFreightEvent` | scm | 采购入库填写了运费 | fin 生成采购运费应付单（计入存货成本时借 存货，计入当期费用时借 采购运费科目 / 贷 应付账款），见[运费](#运费) |
 | `TradeFreightEvent` | scm | 销售出库、销售退货、采购退货填写了运费 | fin（`FinFreightService`）生成费用支出单（现付）或承运商应付单（月结），以及往来单位的代垫运费应收 / 红字应收 / 红字应付，见[运费](#运费) |
+| `TransferFeeEvent` | wms | 调拨单确认（调出）或冲销时有调拨费用 | fin（`FinTransferFeeService`）生成费用支出单（现付，类别「调拨费用」）或承运商应付单（月结），冲销时为红字单据，见[运费](#运费) |
 | `RebateSettledEvent` / `RebateUnsettledEvent` | scm | 返利结算 / 撤销（红字单据方式；事件带 `kind`、`partnerId`） | fin 生成 / 删除红字应收单（销售返利）或红字应付单（采购返利） |
 | `WorkOrderClosedEvent` | mes | 生产工单关闭 | mes 撤销未完成的补料申请 |
 | `WorkOrderCompletedEvent` | mes | 生产工单完工（完工入库满数量，或已有完工入库且 完工 + 报废 达到工单数量而自动完工；与完工同一事务同步发布） | mes 撤销审批中、待发料的补料申请（审批中的同时撤销流程） |
@@ -338,9 +340,11 @@ flowchart LR
 - 生成的单据由 `ScmTradeDocService.bindFreight` 回写到出入库单（`freight_bill_id` 承运商应付、`freight_partner_bill_id` 往来单位单据、`freight_io_id` 费用支出单）。详情（`TradeDocDetail.vue`）显示运费承担（按单据种类取名称）、付给方式、承运商、付款账户，「费用支出单」链接跳转 `/fin/income-expense?id=`；代垫时显示「应收合计 / 应退合计 / 应付冲减合计（货款 + 代垫运费）」，打印增加「运费承担」「含代垫运费合计」字段（`printTemplates.js` 已登记）；
 - 运费不分摊到明细（`freight_share` 只用于采购入库），不影响库存成本；本公司承担的销售运费、销售退货客户代垫的运费计入销售费用，毛利分析和进销存「销售报表」从销售金额中扣除本公司运费，见 [进销存报表开发](../guide/jxc-report#坏账与运费)。
 
+**调拨单的调拨费用**（issue #104）：调拨单（wms）表头的调拨费用（配送费）由本公司承担，结算方式同 `scm_freight_settle`（`wms/model/TransferFeeSettle`）。确认时发布 `TransferFeeEvent`，`FinTransferFeeService` 在同一事务中生成：现付为待确认的费用支出单（内置类别 `IoCategoryCode.TRANSFER_FEE`「调拨费用」，来源类型 `TRANSFER_FEE`），月结为承运商应付单（来源 `BillSource.TRANSFER_FEE`，借 `AccountRole.TRANSFER_FEE`「调拨费用」，默认销售费用 6601 / 贷 应付账款），回写 `WmsStockDocService.bindFee`；冲销时生成红字单据。费用计入当期费用、不计入存货成本（内部调拨不增加存货价值，成本不分仓库），见 [实时库存成本 - 调拨费用](../guide/stock-cost#调拨费用)。
+
 ### 承运商
 
-供应商资料的「物流公司（承运商）」标识（`scm_supplier.logistics`，可填写营运路线 `routes`）：采购入库本公司承担运费的承运商、销售出库和采购退货付给承运商的承运商、发运单的运费结算供应商只列出物流公司（`PartnerSelect` 的 `carrier` 属性 → `GET /scm/supplier/carrier-options`，返回 `{ marked, options }`；还没有标记任何物流公司时回退到全部供应商并在下拉中提示去标记），供应商列表可按类型筛选、名称旁显示「物流公司」标签。物流公司复用供应商档案（编号、名称、联系人、电话、地址、备注都已有），应付、付款、对账、往来汇总与其他供应商相同，后端不限制所选承运商的类型（issue #68）。用标识而不是「供应商 / 协作单位」二选一的类型，是因为有的供应商既供货又帮忙送货，两种用途都能选到它。
+供应商资料的「物流公司（承运商）」标识（`scm_supplier.logistics`，可填写营运路线 `routes`）：采购入库本公司承担运费的承运商、销售出库和采购退货付给承运商的承运商、调拨单调拨费用的承运商、发运单的运费结算供应商只列出物流公司（`PartnerSelect` 的 `carrier` 属性 → `GET /scm/supplier/carrier-options`，返回 `{ marked, options }`；还没有标记任何物流公司时回退到全部供应商并在下拉中提示去标记），供应商列表可按类型筛选、名称旁显示「物流公司」标签。物流公司复用供应商档案（编号、名称、联系人、电话、地址、备注都已有），应付、付款、对账、往来汇总与其他供应商相同，后端不限制所选承运商的类型（issue #68）。用标识而不是「供应商 / 协作单位」二选一的类型，是因为有的供应商既供货又帮忙送货，两种用途都能选到它。
 
 ## 自动凭证的科目
 
@@ -423,7 +427,7 @@ public interface PartnerMergeHandler {
 }
 ```
 
-- **覆盖范围**：供应链（订单、出入库单、草稿、报价、发货通知、发运含承运商、返利、渠道库存、价目表、请购、询价、评估、采购合同、招标投标、ASN、客户执行价、供货价格、价格记忆、供应商的关联客户）、仓库（寄售仓、出入库单和库存流水的往来单位及名称快照、来料暂存）、生产质量（MRP 建议、来料检验、不合格品、索赔）、财务（应收应付、收付款、预收预付、冲账单、发票、其他收支、票据及操作记录、对冲单、供应商对账单、凭证分录的客户 / 供应商辅助核算，含已记账凭证）、客户关系（经营信息、联系人、线索、跟进、商机、合同、工单）、项目、商务智能事实表、系统（门户账号，提交后清除其登录缓存；附件；自定义字段）；
+- **覆盖范围**：供应链（订单、出入库单、草稿、报价、发货通知、发运含承运商、返利、渠道库存、价目表、请购、询价、评估、采购合同、招标投标、ASN、客户执行价、供货价格、价格记忆、供应商的关联客户）、仓库（寄售仓、出入库单和库存流水的往来单位及名称快照、调拨单调拨费用的承运商、来料暂存）、生产质量（MRP 建议、来料检验、不合格品、索赔）、财务（应收应付、收付款、预收预付、冲账单、发票、其他收支、票据及操作记录、对冲单、供应商对账单、凭证分录的客户 / 供应商辅助核算，含已记账凭证）、客户关系（经营信息、联系人、线索、跟进、商机、合同、工单）、项目、商务智能事实表、系统（门户账号，提交后清除其登录缓存；附件；自定义字段）；
 - **按种类区分**：`partner_id` 同时存放客户和供应商的表（订单 / 出入库 / 应收应付 / 收付款 / 发票的 kind、出入库单的业务类型、其他收支的关联单位类型、票据种类与操作类型）必须带种类条件，客户和供应商的 ID 会重复；
 - **冲突规则**：保留资料的属性（名称、信用额度、账期、价格等级、负责人等）不变；单据金额、币种（记在单据上，往来单位没有币种）、核销关系不变；客户执行价 / 供货价格同一物料以保留资料为准（保留资料没有时取被合并资料中最近修改的一条；被删除的供货价格是默认供应商时保留的设为默认，阶梯价一并删除），价格记忆合为一行（最新价取日期最近的，最低 / 最高价取各自的最低 / 最高）；CRM 经营信息以保留客户为准（没有时移过来一份，最近跟进取较晚的），保留客户已有首要联系人时移过来的不再是首要；自定义字段保留资料已填写的优先；
 - **拒绝合并**：同一询价单、同一招标（邀请或投标）、同一期间的渠道库存、合并后会有多个关联单位；

@@ -16,6 +16,9 @@ order: 18.5
 | `wms_stock_flow.partner_id` / `partner_name` | 往来单位与名称快照。wms 不关联 scm 的表，名称由调用方传入 |
 | `wms_stock_flow.cost_estimated` | 1 表示升级前的历史流水，成本是升级脚本回填的近似值 |
 | `wms_stock_doc.partner_id` / `partner_name` | 业务单据生成的出入库单的往来单位 |
+| `wms_stock_doc.transfer_pricing` / `price_level` / `price_factor` / `cost_amount` / `transfer_amount` | 调拨单的调拨价格（同价 / 差价调拨的依据与系数）、调出成本金额、调拨金额，见下文[调拨价格与调拨费用](#调拨价格与调拨费用) |
+| `wms_stock_doc.fee` / `fee_settle` / `fee_account_id` / `fee_carrier_id` / `fee_io_id` / `fee_bill_id` | 调拨费用（配送费）、结算方式、结算账户、承运商，以及生成的费用支出单 / 承运商应付单 |
+| `wms_stock_doc_item.transfer_price` / `transfer_amount` | 调拨明细的调拨价（内部结算价，6 位小数）、调拨金额；调出成本价记在 `cost_price` |
 | `wms_stock_doc_item.cost_price` / `biz_price` | 明细的成本单价（手工其他入库填写的、业务单据传入的）与业务单价 |
 | `wms_check_item.cost_price` | 盘盈成本价，为空按确认时的均价 |
 | `mes_wo_doc.cost_basis` / `material_cost` / `labor_cost` / `overhead_cost` | 完工入库的成本口径（`FinishCostBasis`：`STANDARD` / `ACTUAL` / `AVERAGE`）和转入产品的料工费；退料单的 `material_cost` 为冲减额（负数），`stock_cost_adjust` 为其中计入库存的部分 |
@@ -66,8 +69,8 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 期初入库 | 导入行的 `costPrice`，为空取参考成本价 | `WmsOpeningStockService` |
 | 盘点 | 盘盈 `wms_check_item.cost_price`（空则确认时的均价；前端输入 4 位小数，有 `wms:stock:cost` 时以均价作为输入提示），盘亏均价 | `WmsCheckService` |
 | 组装 / 拆卸 | 组装：成套件 = 子件出库成本合计（`docAmount`）/ 数量；拆卸：成套件出库成本按 子件数量 × 均价 的权重 `allocate` 到子件 | `WmsAssemblyService` |
-| 在途调拨收货 | 调出流水的成本单价（`StockCostService.transferOutCosts(docId, materialIds)`，取该调拨单的负数流水），没有时按均价。在途期间计价数量不变，按调出时的单价收货使调出、调入金额相抵，按流水汇总的库存金额不会与物料实时成本偏离 | `WmsStockDocService.receive` |
-| 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`）；调拨冲销不按原单成本，两边统一按均价（金额相抵） | `StockDocReverser` |
+| 在途调拨收货 | 调出流水的成本单价（`StockCostService.transferOutCosts(docId, materialIds)`，取该调拨单的负数流水），没有时按均价。在途期间计价数量不变，按调出时的单价收货使调出、调入金额相抵，按流水汇总的库存金额不会与物料实时成本偏离。调出成本价、调拨价和调拨费用在确认（调出）时生成，收货时调入流水的业务单价取调拨价，不再生成费用 | `WmsStockDocService.receive` |
+| 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`）；调拨冲销不按原单成本，两边统一按均价（金额相抵）；调拨单的调出成本价、调拨价、金额随红字单据反向，调拨费用生成红字的费用支出单 / 承运商应付单（见下文[调拨费用](#调拨费用)） | `StockDocReverser` |
 | 生产领料 / 补料、其他出库、各类领用 | 当前均价 | — |
 | 生产退料 | 该工单该物料的领料（含补料）平均成本 | `MesStockCosts.returnUnitCosts` |
 | 完工入库 | 见下节 | `MesStockCosts.finishCost` |
@@ -99,6 +102,43 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 供应商寄售仓的库存不计价。为保证计价数量始终等于自有库存，`StockDocRules.checkConsignTransfer` 禁止寄售仓与自有仓互相调拨（`wms.error.supplierConsignmentTransferNotAllowed`），只允许同一供应商的寄售仓之间调拨。寄售货物转为自有走寄售结算（采购入库到自有仓 + 寄售消耗出库），退回供应商用其他出库。
 
 在途调拨收货（`POST /wms/transfer/{id}/receive`，请求体 `TransferReceiveRequest` 的 `receiveDate`，可省略）可指定收货日期：为空取当天，不能早于调拨单的 `biz_date`（`wms.error.receiveDateBeforeTransferDate`），按收货日期做结账校验并保存到 `wms_stock_doc.receive_date`。按仓库统计的收发存（`WmsInOutMapper`）、经营历史（`WmsStockFlowMapper.historyDate`）、库龄（`FinStockAgeMapper`）和 BI 库存金额（`BiJxcMapper`）中，调入流水（数量为正）的日期取 `COALESCE(receive_date, biz_date)`。
+
+## 调拨价格与调拨费用
+
+issue #104。代码在 `TransferTermsService`（wms），财务部分在 `FinTransferFeeService`（fin），前端 `components/wms/TransferTerms.vue`（表头）、`TransferPriceCell.vue`（明细价格列）、`TransferSummaryModal.vue`（调拨汇总）。
+
+### 同价 / 差价调拨
+
+**会计处理**：存货成本按物料全公司移动加权平均（不分仓库），同一公司内部的调拨只是存放地点变化，不改变存货价值，所以调拨价（调入成本价）是单据上的**内部结算价**，用于仓库 / 分店之间的考核，不改变均价、库存金额、收发存、库龄、成本核算和凭证（调出、调入流水仍按调出成本计价、金额相抵）。
+
+调拨单表头「调拨价格」（`wms_stock_doc.transfer_pricing`，`TransferPricing`）：
+
+| 取值 | 调拨价 |
+| --- | --- |
+| `SAME` 同价调拨（默认） | 调拨价 = 调出成本价，不能修改 |
+| `REF_COST` 参考成本价 | 依据价 × 系数（`price_factor`，默认 1，可大于 1） |
+| `AVG_COST` 库存均价 | 同上 |
+| `MIN_SALE` 最低售价 | 供应链「价格控制」的最低销售价，经 wms 的 `MinSalePriceProvider` 由 scm 实现（`ScmPriceControlService`），× 系数 |
+| `PRICE_LEVEL` 零售价 / 批发价 1–8 | `price_level` 指定价格列，只列启用的价格列（未启用时 `wms.error.transferPriceLevelInvalid`）；售价为含税价，按原值计算，× 系数 |
+
+- 修改依据或系数时批量更新明细的调拨价（`GET /wms/transfer/prices`，`TransferTermsService.quickPrices`，需要新增 / 修改权限和 `wms:stock:cost`），明细可逐行修改，不填的行按调出成本价；没有依据价的物料不在结果中，前端提示「N 行没有依据价，按调出成本价」；
+- 确认时（`TransferTermsService.settle`，`Propagation.MANDATORY`，在库存变动之后）按调出流水（`StockCostService.transferOutCosts`）生成明细的调出成本价（`cost_price`）、调拨价、调拨金额（`transfer_price`、`transfer_amount`）和表头的调出成本金额、调拨金额（`cost_amount`、`transfer_amount`），调拨流水的业务单价记为调拨价（`WmsStockFlowMapper.fillTransferBizPrice`）；调拨差价 = 调拨金额 − 调出成本金额；
+- **调出成本价、调拨价、金额只对有「查看成本金额」`wms:stock:cost` 的人返回**（同价调拨的调拨价就是成本），没有该权限的人保存差价调拨草稿时由后端按依据 × 系数计算调拨价（`applyLinePrices`）；
+- 调拨单列表显示调拨金额（下方为调出成本），工具栏「调拨汇总」（`GET /wms/transfer/summary`，需要 `wms:transfer:list` 和 `wms:stock:cost`，按数据权限）按 调出仓库 → 调入仓库 汇总已调出的调拨单（含在途、红字）的单数、数量、调出成本金额、调拨金额、调拨差价、调拨费用。
+
+### 调拨费用
+
+调拨单表头「调拨费用」（配送费，`fee`）、「结算方式」（`fee_settle`，`TransferFeeSettle`，取值同字典 `scm_freight_settle`）、「结算账户」（`fee_account_id`）、承运商（`fee_carrier_id`，只列物流公司），管理方式与销售出库本公司承担的运费一致（见 [业务联动 - 运费](../architecture/integration#运费)）：
+
+| 结算方式 | 校验 | 生成的单据 |
+| --- | --- | --- |
+| 现付（默认） | 必须选结算账户（`wms.error.transferFeeAccountRequired`），承运商可选 | 待确认的费用支出单（内置收支类别「调拨费用」`TRANSFER_FEE`，来源类型 `TRANSFER_FEE`、来源为该调拨单，可互相联查），出纳确认后 借 调拨费用 / 贷 结算账户 |
+| 月结 | 必须选承运商（`wms.error.transferFeeCarrierRequired`） | 承运商应付单（来源「调拨费用」`TRANSFER_FEE`），借 凭证科目设置的「调拨费用」`AccountRole.TRANSFER_FEE`（默认销售费用 6601）/ 贷 应付账款-承运商 |
+
+- 确认时 `TransferTermsService.publishFee` 发布 wms 的 `TransferFeeEvent`，财务 `FinTransferFeeService` 处理，与确认同一事务（任一失败整单回滚），生成的单据回写到调拨单（`fee_io_id`、`fee_bill_id`）；
+- **费用计入当期费用、不计入存货成本**，不复用采购运费的「计入存货成本 / 当期费用」参数：内部调拨不增加存货价值，且成本不分仓库，计入成本只会抬高全公司均价；
+- 冲销调拨单时红字单据带负数费用，按原结算方式生成红字费用支出单 / 红字承运商应付单（业务日期为冲销当天），原单据不变；
+- 权限：调拨价格快速计算需要 `wms:transfer:add` / `edit` 且 `wms:stock:cost`；调拨汇总需要 `wms:transfer:list` 且 `wms:stock:cost`（不单独设按钮）。
 
 ## 查询与权限
 
