@@ -4,24 +4,24 @@ order: 19
 
 # 进销存报表开发
 
-「供应链 → 进销存报表」包括销售报表、进货报表、经营状况、资产状况、商品分析、客户分析（RFM）、积压分析。页面挂在供应链菜单下，代码在 bi 模块；与商务智能的多维分析不同，进销存报表**实时查询业务表**，不依赖数据仓库同步。本页说明它的代码结构、口径、汇总维度的扩展方式和穿透查询。
+「供应链 → 进销存报表」包括销售报表、进货报表、经营状况、资产状况、商品分析、客户分析（RFM）、积压分析，以及库存分析的周转分析、滞销畅销、库存预警。页面挂在供应链菜单下，代码在 bi 模块；与商务智能的多维分析不同，进销存报表**实时查询业务表**，不依赖数据仓库同步。本页说明它的代码结构、口径、汇总维度的扩展方式和穿透查询。
 
 ## 代码位置
 
 | 层 | 位置 | 说明 |
 | --- | --- | --- |
-| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、单据列表（`docs`）、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM、积压分析（`/bi/jxc/overstock`，与商品分析的 `goods/overstock` 不同） |
+| 接口 | `bi/controller/BiJxcController`（`/bi/jxc/*`） | 销售 / 进货的汇总、单据列表（`docs`）、明细、导出，经营状况、资产状况、商品分析（`goods/top`、`slow`、`overstock`、`shortage`、`turnover`）、RFM、积压分析（`/bi/jxc/overstock`，与商品分析的 `goods/overstock` 不同）、库存分析（`/bi/jxc/turnover`、`/bi/jxc/sales-rate`、`/bi/jxc/stock-alert`，周转分析与商品分析的 `goods/turnover` 不同） |
 | 查询条件 | `bi/dto/JxcQuery` | 日期范围（必填）、往来单位、业务员、物料、分类、品牌、区域、仓库、关键字，穿透的 `dim` + `key`、单据 `docId`（单据列表 → 该单的明细），明细的调整项显示方式 `adjustMode`，商品分析的阈值 |
 | 返回结构 | `bi/dto/JxcViews` | `Summary`（行、合计、是否截断）、`SummaryRow`、`DetailRow` / `DetailPage` / `DetailExport`（明细，带调整行 `adjustments` 和合计 `summary`）、`DocRow` / `DocPage` / `DocExport`（单据列表）、`Business`、`Assets`、`GoodsRow`、`Rfm` 等 |
 | 汇总维度 | `bi/model/JxcDimension` | 销售、进货各自可用的维度 |
-| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService`；积压分析 `BiOverstockService`（条件 `OverstockQuery`，积压基数 `OverstockBase`） | |
+| Service | `BiJxcService`（销售、进货、经营状况）、`BiJxcAnalysisService`（资产状况、商品分析、RFM）、RFM 的打分分群在 scm 模块的 `RfmCalculator`（纯计算，与客户关系共用），参数读取 `ScmRfmService`；积压分析 `BiOverstockService`（条件 `OverstockQuery`，积压基数 `OverstockBase`）；库存分析 `BiStockAnalysisService`（条件 `StockAnalysisQuery`） | |
 | SQL | `resources/mapper/bi/BiJxcMapper.xml` | 只读 JOIN scm、wms、fin 的表 |
-| 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm,overstock}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
-| 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDocs.vue`（单据列表子页）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称、穿透操作 `drillActions` / `drillColumn` / `drillsToLines`） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
-| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcDocs`、`jxcDocsExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm`、`jxcOverstock` |
+| 前端页面 | `views/jxc/{sales,purchase,business,assets,goods,rfm,overstock,turnover,salesRate,stockAlert}/index.vue` | 菜单组件路径 `jxc/sales/index` 等 |
+| 前端组件 | `components/bi/jxc/JxcTradeReport.vue`（销售 / 进货汇总，`report="sales"` / `"purchase"`）、`JxcDocs.vue`（单据列表子页）、`JxcDetail.vue`（明细子页）、`jxc.js`（日期快捷选项、维度列表、汇总行名称、穿透操作 `drillActions` / `drillColumn` / `drillsToLines`）；积压分析与库存分析共用 `StockGoodsFilters.vue`（商品条件）和 `useStockReport.js`（分页、合计、导出） | 销售报表、进货报表两个页面只是 `<JxcTradeReport report="..." />` |
+| 接口封装 | `api/bi/jxc.js` | `jxcSummary`、`jxcDetail`、`jxcExport`、`jxcDocs`、`jxcDocsExport`、`jxcBusiness`、`jxcAssets`、`jxcGoods`、`jxcRfm`、`jxcOverstock`、`jxcTurnover`、`jxcSalesRate`、`jxcStockAlert` |
 | 语言包 | `locales/<语言>/jxc.js` | 维度名称在 `jxc.dim.<维度>` |
 
-菜单：分组「进销存报表」（ID 966，供应链下）及 7 个页面（370–376），权限 `bi:jxc:sales`、`bi:jxc:purchase`、`bi:jxc:business`、`bi:jxc:asset`、`bi:jxc:goods`、`bi:jxc:rfm`、`bi:jxc:overstock`（积压分析，内置角色与商品分析相同：普通用户、总经理、会计、采购员、仓库管理员）；SaaS 功能模块为 `JXC_REPORT`（依赖销售、采购），见 [新增菜单与授权](./menu#功能模块与行业模板)。
+菜单：分组「进销存报表」（ID 966，供应链下）及 10 个页面（370–376、385–387），权限 `bi:jxc:sales`、`bi:jxc:purchase`、`bi:jxc:business`、`bi:jxc:asset`、`bi:jxc:goods`、`bi:jxc:rfm`、`bi:jxc:overstock`（积压分析，内置角色与商品分析相同：普通用户、总经理、会计、采购员、仓库管理员）、`bi:jxc:turnover` / `bi:jxc:salesRate` / `bi:jxc:stockAlert`（周转分析、滞销畅销、库存预警，菜单 385–387，内置角色与积压分析相同）；SaaS 功能模块为 `JXC_REPORT`（依赖销售、采购），见 [新增菜单与授权](./menu#功能模块与行业模板)。
 
 ## 数据口径
 
@@ -231,6 +231,47 @@ docsRef.value.open({ params: params() })
 有成本权限时按资金占用、否则按积压数量排序；统计在 SQL 中完成（`selectOverstock` 分页 + `selectOverstockTotal` 合计）。方法加 `@DataPermission(table = "scm_trade_doc", ...)`，按出入库单的制单人部门 + 制单人做数据权限（与商品分析一致）。
 
 **前端**（`views/jxc/overstock/index.vue`）：列头问号说明口径，合计行，导出（分页取数，每次 500 行、最多 5000 行，带合计行）；有 `wms:stock:list` 时操作列可联查经营历史（`StockHistory`）和库存分布（`components/wms/StockDistributionModal.vue`，与商品速查共用，`loader` 传入取数函数，这里用库存查询的接口）。小程序工作台「积压分析」（`pkg-wms/overstock`）用同一接口。
+
+## 库存分析
+
+周转分析、滞销 / 畅销、库存预警三张报表（issue #116），`BiStockAnalysisService`，条件都是 `StockAnalysisQuery`，前端 `views/jxc/turnover`、`salesRate`、`stockAlert`。三个接口都在 SQL 中分页 + 合计（`select<报表>` + `select<报表>Total`），返回全部行的合计 `summary` 和权限标记；方法加 `@DataPermission(table = "scm_trade_doc", ...)`，销量、进货量、最近出入库日期按出入库单的制单人部门 + 制单人过滤（与商品分析、积压分析一致），库存、上下限、订单数量不受限制。
+
+| 接口 | 权限 | 返回 |
+| --- | --- | --- |
+| `GET /bi/jxc/turnover` | `bi:jxc:turnover` | `JxcViews.TurnoverPage`（`records`、`total`、`summary`、期间天数 `days`、实际的计算维度 `basis`、`amountVisible`） |
+| `GET /bi/jxc/sales-rate` | `bi:jxc:salesRate` | `JxcViews.SalesRatePage`（`records`、`total`、`summary`、`mode`、`base`、实际使用的阈值 `ratio`） |
+| `GET /bi/jxc/stock-alert` | `bi:jxc:stockAlert` | `JxcViews.StockAlertPage`（`records`、`total`、`summary`、`tab`、截至日 `date`、月销量起始日 `monthBegin`、`costVisible` / `purchaseVisible` / `salesVisible`） |
+
+**条件**（`StockAnalysisQuery`）：公共的商品条件为仓库 `warehouseId`、类别 `category`（含下级）、品牌 `brand`、商品描述 `keyword`（编码 / 名称 / 规格包含，或检索列包含规范化的关键字），与积压分析相同；周转、滞销 / 畅销另有日期范围 `begin` / `end`（必填，不超过 366 天，`BiJxcService.checkRange`）；其余参数见各报表。
+
+**公共 SQL 片段**（`BiJxcMapper.xml`，与积压分析共用）：
+
+| 片段 | 内容 |
+| --- | --- |
+| `goodsFilters` | 商品条件（类别含下级、品牌、商品描述） |
+| `flowDocs` / `flowDate` | 库存流水的业务日期（单据业务日期，在途调拨的调入按收货日期），推算截至某日的库存时使用 |
+| `netTradeQty` / `netTradeQtyByMaterial` | 期间净数量：销售 = 销售出库 − 销售退货，进货 = 采购入库 − 采购退货，按明细行仓库（为空取表头仓库）；`ByMaterial` 按物料合计并按所选仓库过滤 |
+| `periodStock` | 期初（开始日期之前）、期末（截至结束日期）的库存 = 当前库存 − 业务日期在其后的流水，不含供应商寄售仓，按所选仓库；周转分析、滞销 / 畅销共用 |
+
+**周转分析**：
+
+- 计算维度 `basis`（`TurnoverBasis`）：`QTY` 销售数量（默认，金额列按库存均价，需要 `wms:stock:cost`，没有时不返回金额）、`COST` 成本价（库存均价，同积压分析的 `latestCost`，需要 `wms:stock:cost`）、`RETAIL` 零售价、`WHOLESALE` 批发价（`priceLevel` 1–8，必须是启用的价格列）；零售价 / 批发价需要售价查看权限（报价 / 销售订单 / 销售出库的查看权限，或 `scm:goodsPrice:list`，同商品速查）。权限和价格列在后端校验（`bi.error.turnoverCostDenied`、`turnoverPriceDenied`、`turnoverPriceLevel`）；
+- 本期出库 = 净销量；周转天数 = 期间天数 × (期初 + 期末) ÷ 2 ÷ 本期出库（出库不大于 0 时为空），周转率 = 本期出库 ÷ 平均库存 × 100%（平均库存不大于 0 时都为空，出库为负按 0），`BiStockAnalysisService.turnover(open, close, out, days)`；
+- 按金额维度时金额 = 数量 × 单价，周转用金额计算：单个商品与按数量相同，合计行按合计金额（即按金额加权），单价为空的商品不计算，合计金额只含有价格的商品；
+- `excludeIdle`（不传为剔除期初 = 0 且本期出库 = 0 的商品）、`outFilter`（`TurnoverOutFilter`：`HAS_OUT` / `NO_OUT`，不传为全部）；期初、期末、出库都为 0 的始终不列出；按 出库 ÷ (期初 + 期末) 升序，周转最慢的在前。
+
+**滞销 / 畅销**（一个页面分段切换）：`mode`（`SalesRateMode`：`SLOW` / `HOT`，不传为滞销）、销售基数 `base`（`SalesRateBase`：`PURCHASE` 本期进货量，`OPENING_PURCHASE` 期初库存 + 本期进货量）、阈值 `ratio`（%，不能小于 0，不传时滞销 80、畅销 10，页面切换时恢复各自的默认值）。销售比例 = 净销量 ÷ 基数 × 100%，基数不大于 0 的不参与；滞销列出 ≤ 阈值的（比例升序），畅销列出 ≥ 阈值的（比例降序）。
+
+**库存预警**：截至日期 `date`（默认今天，不能晚于今天），标签页 `tab`（`StockAlertTab`：`WAREHOUSE` / `HIGH` / `LOW`），库存筛选 `stockFilter`（`StockQtyFilter`），仓库页的预警筛选 `alertFilter`（`StockAlertFilter`：`LOW` / `HIGH` / `ANY`）。
+
+- 截至日库存（`alertStock`）= 当前库存 − 业务日期晚于截至日的流水，包含所有仓库（与预警口径一致），金额只按非寄售仓的数量（`own_qty`）计算；分仓库预警设置了上下限的仓库、按总库存预警设置了上下限的物料的默认仓库，没有库存也列出；
+- 预警口径同 wms 的 `materialAlerts`：按总库存的物料比较所有仓库的合计（选了仓库也按合计），分仓库的按该仓库；
+- 「仓库」页每个仓库 + 商品一行：登记日期、该仓库最近一次采购入库 / 销售出库（`alertLastDates`）、月销量（`monthSales`：截至日 − 1 个月 + 1 天 ~ 截至日的净销量）、订单数量（`alertOrders`，当前：已审核 / 部分出库的销售订单未完成数量 `qty − done_qty + replenish_qty`，仓库取订单的发货仓库、没有时取物料默认仓库，加上没有引用订单的销售出库草稿）、库存数量、库存金额 / 均价（`wms:stock:cost`）、参考进价（采购查看权限）、零售价与启用的批发价（售价查看权限或 `scm:goodsPrice:list`，停用的列不返回）、上下限（分仓库取该仓库，按总库存取物料上的）、默认货位（只在默认仓库的行）；
+- 「高于上限」「低于下限」按预警单元（`alertUnits`）：分仓库的物料每个设置了上下限的仓库一行，按总库存的物料一行（仓库为空，库存和月销量为所有仓库合计；选了仓库时只取在该仓库有库存、流水或默认仓库为该仓库的）；积压 / 补货基数 = 上限 / 下限，数量 = 库存 − 上限 / 下限 − 库存，系数 = 数量 ÷ 基数（基数不大于 0 为空），资金 = 库存均价 × 数量（`wms:stock:cost`）；有成本权限时按资金、否则按数量降序。
+
+**前端**：三个页面与积压分析共用商品条件组件 `components/bi/jxc/StockGoodsFilters.vue`（仓库、类别、品牌、商品描述，直接修改页面的 `query`，回车触发 `search`）和 `components/bi/jxc/useStockReport.js`（`useStockReport(fetcher, params)` 提供分页、合计、`exportRows` 导出：每次 500 行、最多 5000 行、带合计行；另有 `cleanParams`、联查库存分布的 `loadStock`）。库存预警的列定义拆在 `views/jxc/stockAlert/columns.js`（按标签页和返回的权限标记生成）。列头问号说明口径，有 `wms:stock:list` 时操作列联查经营历史和库存分布。
+
+**分工**：商品分析是按当前库存的快速排行（畅销、滞销按销量阈值，积压按可销天数，缺货按可用库存与待发，周转按数量）；积压分析按截至日和积压基数看资金占用；周转分析、滞销 / 畅销按 issue 的公式做专项分析；库存预警按预警口径逐仓库看上下限。与积压分析「库存上限」基数的区别：积压分析不选仓库时分仓库物料按各仓库上限之和比较，库存预警按仓库逐个比较。
 
 ## 新增一张进销存报表
 
