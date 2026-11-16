@@ -4,7 +4,7 @@ order: 18.6
 
 # 物料资料与批次管理
 
-仓库模块（`lemon-wms`）中物料资料的扩展：复制物料、商品图片、发生库存业务后切换批次 / 序列号管理、出库侧显示批次的生产日期（issue #94），以及库存上下限（按总库存或分仓库预警，issue #111）。用户视角的说明见用户手册 [物料管理](../../manual/wms/material)。
+仓库模块（`lemon-wms`）中物料资料的扩展：复制物料、商品图片、发生库存业务后切换批次 / 序列号管理、出库侧显示批次的生产日期（issue #94），库存上下限（按总库存或分仓库预警，issue #111），以及盘点单从物料资料中选择商品的动态盘点（issue #115）。用户视角的说明见用户手册 [物料管理](../../manual/wms/material)。
 
 ## 相关概念
 
@@ -161,6 +161,33 @@ scm 的实现 `ScmMaterialTrackingGuard`：尚未出库的发货通知（拣货�
 
 没有另加 DOT 字段：DOT 本质上就是生产日期（周 / 年），按批次登记即可。
 
+## 动态盘点
+
+动态盘点只盘点一段时间内有过库存变动的物料（每天日终、次日早上、每周、每月）。盘点单明细除「按库存生成」（数据来源是库存）外，增加两种来源是**物料资料**的方式，用户视角见用户手册 [盘点单 · 动态盘点](../../manual/wms/check#动态盘点)。
+
+### 选择商品
+
+`components/wms/CheckMaterialPicker.vue`，接口 `GET /wms/check/materials`（`WmsCheckService.pageMaterials` → `WmsCheckMapper.selectMaterialPage`，查询参数 `CheckMaterialQuery`，返回 `CheckMaterialView`）：
+
+- 显示盘点仓库的当前库存（为 0 也列出）、最近变动时间、最新进货 / 销售日期（全公司最近一次已完成的采购入库 / 销售出库的业务日期）；
+- 条件：变动日期（`changed` 勾选后只列出 `changeBegin` ~ `changeEnd` 内在盘点仓库有过库存流水的物料，范围可空，快捷选项今天、昨天、本周（周一起）、本月，见 `components/wms/checkMaterials.js` 的 `changeRanges`）、名称 / 规格 / 编码（含检索列 `search_key`）、分类（含下级）、品牌、货位（物料的默认库位是它，或在该库位有库存）、最新进货 / 销售日期范围、状态、库存 &gt; 0；不列多规格款式；
+- 变动按库存流水的发生时间 `create_time`（确认时间，不是单据业务日期：账面在确认时变化），含出入库、调拨（含在途收货）、组装拆卸、冲销等全部库存变动，**不含盘点本身的盘盈盘亏**（否则刚盘过、调整过的物料会在下一次动态盘点中再次出现）；
+- 走库存流水索引 `idx_flow_material_wh`（`material_id, warehouse_id, create_time, biz_type`）。
+
+前端可跨页勾选，或「添加全部符合条件的」：每次 500 条（分页上限）分批取 ID（`fetchAllMaterialIds`），超过盘点明细上限 2000 行（`MAX_CHECK_LINES`，与后端 `CheckRequest.items` 一致）时提示缩小范围。
+
+### 转为明细
+
+`POST /wms/check/materials/items`（`CheckMaterialItemsRequest`：盘点仓库 + 物料 ID，每次最多 500 个，前端 `materialItems` 分批请求），只返回明细、不保存：
+
+- 有库存的按库存位置各一行，带出账面数量和在库序列号；
+- 盘点仓库没有库存的一行账面 0，库位取物料在该仓库的默认库位，前端作为手工行，可修改库位、批次；
+- 已在明细中的库存位置 / 物料由前端去重（`CheckForm.vue` 的 `addMaterials`），已在明细中的物料也会请求，以补上明细中还没有的库存位置。
+
+「按变动商品生成」是快捷方式（`CheckForm.vue` 的 `generateChanged`）：按今天 / 昨天 / 本周 / 本月取盘点仓库有过变动的全部物料 ID，再走同一个转为明细的接口。
+
+手机端（Web `/m`、小程序）只对已有的草稿盘点单录入实盘数量，不新建盘点单，没有选择商品。
+
 ## 权限
 
 | 功能 | 权限 |
@@ -170,7 +197,8 @@ scm 的实现 `ScmMaterialTrackingGuard`：尚未出库的发货通知（拣货�
 | 批次 / 序列号管理切换 | `wms:material:edit` |
 | 批量设置库存上下限 | `wms:material:edit` |
 | 分仓库预警明细 | `wms:stock:list` |
+| 盘点单选择商品、转为明细（`/wms/check/materials`、`/wms/check/materials/items`） | `wms:check:add` 或 `wms:check:edit`（沿用盘点单新增 / 修改权限） |
 
 ## 数据库
 
-`sql/init.sql` 已包含新表 `wms_material_image` 和 `wms_material.image_url`；已有库执行 `sql/upgrade/20261111_wms_material_image.sql`（可重复执行），见 [升级与数据备份](../deploy/upgrade#数据库变更)。复制物料、批次管理的切换不需要改库。库存上下限：`wms_material.max_stock`、`alert_mode` 和新表 `wms_material_warehouse_limit`，系统字典 `wms_stock_alert_mode`，已有库执行 `sql/upgrade/20261112_stock_limit.sql`，原有的安全库存即库存下限、数据不变。
+`sql/init.sql` 已包含新表 `wms_material_image` 和 `wms_material.image_url`；已有库执行 `sql/upgrade/20261111_wms_material_image.sql`（可重复执行），见 [升级与数据备份](../deploy/upgrade#数据库变更)。复制物料、批次管理的切换不需要改库。库存上下限：`wms_material.max_stock`、`alert_mode` 和新表 `wms_material_warehouse_limit`，系统字典 `wms_stock_alert_mode`，已有库执行 `sql/upgrade/20261112_stock_limit.sql`，原有的安全库存即库存下限、数据不变。动态盘点：库存流水索引 `wms_stock_flow.idx_flow_material_wh`，已有库执行 `sql/upgrade/20261115_check_dynamic.sql`（只加索引，没有数据变更）。
