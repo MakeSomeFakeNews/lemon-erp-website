@@ -280,3 +280,4 @@ docsRef.value.open({ params: params() })
 3. 在 `BiJxcController` 中加接口和权限 `bi:jxc:<功能>`，返回结构放在 `JxcViews` 中（不返回 `Map`）。
 4. 前端在 `views/jxc/<页面>/index.vue` 建页面，接口加到 `api/bi/jxc.js`，文字加到 `locales/<语言>/jxc.js`；日期范围用 `jxc.js` 的 `thisMonth()`、`rangePresets()`。
 5. 在 `init.sql` 中把页面登记到分组 966 下，给内置角色授权，在 `locales/en-US/menu.js` 中加英文名称；页面在分组 966 下会自动归入功能模块 `JXC_REPORT`，不需要改 `SysFeatureCatalog`。
+6. 列头排序：进销存报表的全部表格都支持点击列头排序。分页的报表在 Service 中声明白名单（`Sorts.fields(...).addIf(有成本 / 价格权限, 金额列)`）、在 XML 中用 `<choose>` 映射字段，并在 `ReportSortTests` 中登记；一次取全部数据的表格用 `useTableSort()` 在前端排序；库存类报表用 `useStockReport` 的 `sortColumns` 和 `goodsColumns()`。见 [后端 · 列头排序](./backend#列头排序) 与 [前端 · 列头排序](./frontend#列头排序)。

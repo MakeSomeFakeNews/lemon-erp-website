@@ -76,7 +76,7 @@ com.lemon.erp.framework
 ├── cache         CacheService 及 Redis / 内存两种实现
 ├── code          DocNoCatalog：模块声明的单据编号类型
 ├── config        MyBatis-Plus（含自动填充制单人的 CreateByInnerInterceptor）、Security、JWT、Jackson、异步 / 定时 / 重试、上传目录、静态资源映射；I18nConfig（messageSource、按 Accept-Language 解析语言）
-├── data          单据开发公共组件：StatusTransitions（按原状态条件流转）、DetailLines（明细行整体替换）、Queries（只取前几条）
+├── data          单据开发公共组件：StatusTransitions（按原状态条件流转）、DetailLines（明细行整体替换）、Queries（只取前几条）、SortParam / Sorts / Sort（列头排序的白名单校验）
 ├── demo          演示模式：DemoProperties、DemoModeInterceptor（只读拦截）
 ├── dict          DictLookup：按当前租户校验业务字典的取值（由系统模块实现）
 ├── excel         Excel 导入：ImportExecutor、ImportRequest、ImportResult
@@ -180,7 +180,7 @@ lemon-web
     │                           ai/ 智能录入的输入与预览、「AI 识别」按钮、预填提示、导入字段对应、Markdown 渲染，
     │                           bi/jxc/ 进销存报表的汇总（JxcTradeReport）与明细子页（JxcDetail），
     │                           scm/ 中的 TradeDocItems（出入库明细）、PriceReference（价格参考）等供应链单据组件
-    ├── composables             useTable、useColumns、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useRemoteOptions（远程搜索下拉）、useCustomFields、
+    ├── composables             useTable、useColumns、useTableSort（列头排序）、useFormDrawer、useDict、useAction（单条操作）、useLineItems（明细行）、useRemoteOptions（远程搜索下拉）、useCustomFields、
     │                           useAiPrefill（智能录入预填到新增表单）、useBizRules（读取前端可读的业务参数）
     ├── constants/enums.js      由后端枚举生成的状态、类型常量（不要手工修改）
     ├── directives/perm.js      按钮权限指令 v-perm

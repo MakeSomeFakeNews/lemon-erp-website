@@ -16,7 +16,7 @@ order: 2
 | `src/components/` | 通用组件：`TableToolbar`、`SearchForm`、`FormDrawer`、`SubPage`、`DictTag`、`StatusSwitch`、`AttachmentPanel`、`ChangeLogPanel`、`ImportModal` |
 | `src/components/common/` | `RemoteSelect`（远程分页搜索下拉）、`LineItemsTable`（单据明细行表格）、`CustomFieldsForm`、`CustomFieldsView`（自定义字段的输入与只读显示） |
 | `src/components/print/` | `PrintPreview`（全局打印预览窗口）、`OverlayDesigner`（套打设计器） |
-| `src/composables/` | `useTable`、`useColumns`、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useRemoteOptions`（远程搜索下拉）、`useCustomFields`、`useBizRules`（读取前端可读的业务参数） |
+| `src/composables/` | `useTable`、`useColumns`、`useTableSort`（列头排序）、`useFormDrawer`、`useDict`、`useAction`（单条操作）、`useLineItems`（明细行）、`useRemoteOptions`（远程搜索下拉）、`useCustomFields`、`useBizRules`（读取前端可读的业务参数） |
 | `src/constants/enums.js` | 由后端枚举生成的状态、类型常量（`npm run gen:enums`），见 [状态与类型常量](#状态与类型常量) |
 | `src/utils/number.js` | 金额、数量的格式化与舍入（`money`、`qty`、`round2` 等），见 [数字的显示与舍入](#数字的显示与舍入) |
 | `src/locales/<语言>/<模块>.js` | 界面文字的语言包（`zh-CN`、`en-US`，键一致），`en-US/menu.js`、`dict.js` 是菜单和字典的英文译文，见 [国际化](./i18n) |
@@ -176,7 +176,7 @@ onMounted(load)
 ### useTable
 
 ```js
-const { list, loading, size, pagination, selectedKeys, rowSelection, load, search, onTableChange, exportAll } =
+const { list, loading, size, pagination, selectedKeys, rowSelection, load, search, onTableChange, exportAll, sorter } =
   useTable(fetcher, query, { params: (q) => ({ ...q, beginTime: q.range?.[0], endTime: q.range?.[1], range: undefined }) })
 ```
 
@@ -185,9 +185,10 @@ const { list, loading, size, pagination, selectedKeys, rowSelection, load, searc
 | `list` / `loading` / `pagination` | 绑定到 `a-table` |
 | `load()` | 按当前页重新加载；快速切换条件时只采用最后一次请求的结果；删除最后一页的全部数据后自动回到上一页 |
 | `search()` | 回到第 1 页并加载 |
-| `onTableChange` | 绑定 `@change`，处理翻页、改每页条数 |
+| `onTableChange` | 绑定 `@change`，处理翻页、改每页条数、列头排序（排序变化时回到第 1 页） |
 | `selectedKeys` / `rowSelection` | 多选 |
-| `exportAll(columns, filename?)` | 按当前条件导出 Excel，传给 `TableToolbar` 的 `exporter` |
+| `exportAll(columns, filename?)` | 按当前条件（含列头排序）导出 Excel，传给 `TableToolbar` 的 `exporter` |
+| `sorter` | 服务端列头排序的状态（`useTableSort({ remote: true })`），见下文「[列头排序](#列头排序)」 |
 
 `fetcher` 接收 `{ current, size, ...query }`，返回 `{ records, total }`。`options.params` 用于把查询条件转换为接口参数（如把时间范围拆成两个参数）。
 
@@ -250,6 +251,37 @@ const rowActions = (record) => [
 - 每行直接显示的图标（含「更多」）最多 4 个（`MAX_INLINE`），超过时从后往前把操作移进「更多」；「更多」中只有一个操作且放得下时直接显示，不为一个操作弹下拉。
 
 `actionColumn(count, labels = [], extra = {})` 返回 `{ title: 操作, key: 'action', width, fixed: 'right', align: 'right' }`：`count` 是一行中最多同时出现的图标数（按状态互斥的操作只算一个，含「更多」，不超过 4）；某些行可能只剩一个操作时把它的文字（已翻译）放进 `labels`，保证「图标 + 文字」放得下；宽度按图标数和当前语言测量，不写死。`extra` 合并进列定义（如 `{ fixed: false }`）。
+
+## 列头排序
+
+查询报表的数值、金额、日期列和编码、名称列可以点击列头排序：升序 → 降序 → 取消（Ant Design Vue 的受控 `sortOrder`，列头提示随界面语言），合计行（`#summary`）不参与排序。公共逻辑在 `composables/useTableSort.js`，列定义写 `sortable: true` 即可，可排序的列会自动加宽 16px 放排序图标。
+
+按数据的取法选择排序位置：
+
+| 报表 | 排序位置 | 写法 |
+| --- | --- | --- |
+| 分页的报表（`useTable`） | 服务端，作用于全部数据 | `useTable` 返回的 `sorter` 传给 `useColumns(columns, key, { sorter })`（或直接 `sorter.columns(columns)`）；`onTableChange` 已处理排序变化 |
+| 进销存的库存类报表（`useStockReport`） | 服务端 | 表格的列用返回的 `sortColumns(columns)`，`@change` 绑 `onChange`；`goodsColumns()` 提供可排序的商品列（编码、名称、类别、品牌、规格、单位） |
+| 一次取全部数据的报表 | 前端 | `const sorter = useTableSort()`，列用 `sorter.columns([...])`，`@change="(p, f, s) => sorter.change(s)"`；导出时 `sorter.sortRows(rows, columns)` 得到与页面一致的顺序 |
+
+```js
+// 分页报表：服务端排序
+const { list, pagination, onTableChange, exportAll, sorter } = useTable(pageInOut, query)
+const { checked, visibleColumns, scrollX } = useColumns(COLUMNS, 'wms-inout', { sorter })
+
+// 一次取全部数据：前端排序
+const sorter = useTableSort()
+const columns = computed(() => sorter.columns([
+  { title: t('jxc.rfm.customer'), key: 'customer', sortable: true, sortValue: (r) => r.name },
+  { title: t('jxc.rfm.score'), key: 'score', sortable: true, sortType: 'number', sortValue: (r) => r.r + r.f + r.m },
+  { title: t('jxc.rfm.monetary'), key: 'monetary', align: 'right', sortable: true }
+]))
+```
+
+- **服务端排序**的查询参数为 `sortField`（列的 `sortField`，默认取 `key`，再取 `dataIndex`，必须与后端白名单中的字段名一致）和 `sortOrder`（`asc` / `desc`），由 `sorter.params()` 合并到查询参数中，导出也带上同样的参数。后端写法见 [后端开发规范 · 列头排序](./backend#列头排序)，没有声明白名单的接口不要给列加 `sortable`。
+- **前端排序**：右对齐的列（数量、金额）按数值比较，其他列按文本（`Intl.Collator`，按界面语言，数字部分按数值，ISO 日期即时间顺序）；`sortValue(record)` 指定排序值（如单元格显示的是名称或翻译后的文字），`sortType: 'number' | 'text'` 指定比较方式；空值无论升序降序都排在最后。
+- 切换标签页、显示方式等导致列不同时调用 `sorter.reset()` 取消排序。
+- 按固定顺序阅读的报表（资产负债表、利润表等财务报表，带期初 / 累计余额的账簿、对账单）和业务单据列表不加列头排序。
 
 ## 表单：useFormDrawer + FormDrawer
 

@@ -271,6 +271,60 @@ List<ScmOrder> recent = Queries.limit(orderMapper, Wrappers.<ScmOrder>lambdaQuer
 
 需要 `SELECT ... FOR UPDATE` 行锁时写在 mapper XML 中（示例 `WmsMaterialMapper.xml`）。
 
+## 列头排序
+
+查询报表的列头排序（前端见 [前端开发规范 · 列头排序](./frontend#列头排序)）在分页报表上由服务端完成，排序作用于全部数据，导出与页面一致。请求中的字段名不能直接拼进 SQL，统一经 `framework/data` 的白名单校验：
+
+| 类 | 作用 |
+| --- | --- |
+| `SortParam` | 请求参数 `sortField`（前端的列字段名）、`sortOrder`（`asc` / `desc`，为空时升序），与查询条件一起绑定 |
+| `Sorts` | 白名单：`Sorts.fields(...)` 声明可排序的字段，`addIf(条件, 字段...)` 追加受权限控制的列，`resolve(sortParam)` 校验 |
+| `Sort` | 校验后的结果（`field` 一定在白名单中，`desc`），传给 mapper；没有指定排序字段时 `resolve` 返回 `null`，按默认顺序 |
+
+```java
+// Controller：多接收一个 SortParam
+@GetMapping("/stock/in-out")
+public R<PageResult<InOutRow>> inOutPage(@RequestParam(defaultValue = "1") long current,
+                                         @RequestParam(defaultValue = "10") long size,
+                                         InOutQuery query, SortParam sort) {
+    return R.ok(queryService.inOutPage(current, size, query, sort));
+}
+
+// Service：白名单声明为 public static，便于测试逐个字段执行
+public static Sorts.Fields stockSorts(boolean costVisible) {
+    return Sorts.fields("material", "spec", "warehouseName", "location", "batchNo", "qty", "frozenQty", "unit")
+            .addIf(costVisible, "unitCost", "amount");
+}
+
+public PageResult<StockView> stockPage(long current, long size, StockQuery query, SortParam sort) {
+    Sort order = stockSorts(costVisible()).resolve(sort);
+    Page<StockView> page = Page.of(current, size);
+    stockMapper.selectPageList(page, query, order);
+    ...
+}
+```
+
+mapper XML 在默认排序**之前**用 `<choose>` 把字段映射为 SQL 表达式，方向写 `<if test="sort.desc"> DESC</if>`，默认排序保留在后面作为次序和分页的稳定依据：
+
+```xml
+ORDER BY
+<if test="sort != null">
+    <choose>
+        <when test="sort.field == 'material'">m.code</when>
+        <when test="sort.field == 'category'">m.category</when>
+        <when test="sort.field == 'openQty'">t.open_qty</when>
+        <when test="sort.field == 'closeQty'">t.open_qty + t.purchase_in - t.sales_out</when>
+    </choose><if test="sort.desc"> DESC</if>,
+</if>
+m.code
+```
+
+- **不用 `${}` 拼接请求中的值**，字段名和方向都由 `<choose>` / `<if>` 写死在 XML 中。
+- 不在白名单中的字段报错 `framework.error.sortFieldInvalid`，方向不是 asc / desc 报错 `framework.error.sortOrderInvalid`。
+- **白名单只放当前显示的列**：标签页、显示方式、权限不同时分别声明（如 `stockAlertSorts(tab, ...)`）；没有权限、不返回的金额、价格列用 `addIf` 排除，否则用户可以通过排序推测出数值。
+- 文字列按编码或名称排序，类别、品牌按编码排序（与显示的名称无关，不受字典翻译影响）；合计行不参与排序。
+- 新增可排序的列时**前端列定义（`sortable`）、白名单、XML 的 `<when>` 三处同步修改**；`lemon-admin` 的 `ReportSortTests` 会对每个报表白名单中的字段逐个执行升序、降序（新增报表时在其中登记），并检查非法字段、没有权限的列被拒绝、排序发生在分页之前。
+
 ## 分页上限与防全表操作
 
 - 分页单页最多 500 条（`MybatisPlusConfig.MAX_PAGE_SIZE`），`size` 传更大的值也只返回 500 条。前端导出按每页 500 条循环读取。
