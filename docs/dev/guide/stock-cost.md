@@ -151,7 +151,7 @@ issue #104。代码在 `TransferTermsService`（wms），财务部分在 `FinTra
 
 单价和金额由按钮权限 `wms:stock:cost`（「查看成本金额」）控制，**后端不返回**（置空），不是只在前端隐藏；前端用 `hasPerm('wms:stock:cost')` 决定是否显示列。系统计算的成本（当前均价、出库成本、确认后的实际入库成本、盘点差异金额）只给有该权限的人；没有该权限、但要录入成本价的人只能看到自己填写的值：
 
-- **盘点单详情**（`WmsCheckService.detail`）：`costVisible` = 有 `wms:stock:cost`，或盘点单**未完成**且有 `wms:check:add` / `wms:check:edit`；为假时置空 `costPrice`。当前均价 `avgCost`（`fillAvgCost`）和已完成单据的差异金额 `diffAmount`（按流水 `selectSlotCosts` 汇总）只在有 `wms:stock:cost` 时填充；按库存生成明细时同样只对有该权限的人带出均价。前端差异金额列按 `hasPerm('wms:stock:cost')` 显示；已完成单据没填成本价的盘盈行，成本价列显示 `diffAmount ÷ 盘盈数量`（实际计价单价），不再显示「默认当前均价」。
+- **盘点单详情**（`WmsCheckService.detail`）：`costVisible` = 有 `wms:stock:cost`，或盘点单**未完成**且有 `wms:check:add` / `wms:check:edit`；为假时置空 `costPrice`。当前均价 `avgCost`（`fillAvgCost`）和已完成单据的差异金额 `diffAmount`（按流水 `selectSlotCosts` 汇总）只在有 `wms:stock:cost` 时填充；选择商品转为明细（`materials/items`，以及保留的 `snapshot`）时同样只对有该权限的人带出均价。前端差异金额列按 `hasPerm('wms:stock:cost')` 显示；已完成单据没填成本价的盘盈行，成本价列显示 `diffAmount ÷ 盘盈数量`（实际计价单价），不再显示「默认当前均价」。
 - **出入库单详情**（`WmsStockDocService.detail`）：没有 `wms:stock:cost` 时总是置空 `bizPrice`；`costPrice` 只在入库单为**草稿**且有 `wms:in:add` / `wms:in:edit` 时保留（填写其他入库的成本价），确认后的入库单、出库单都置空。
 
 进销存报表（bi 模块 `BiJxcMapper.xml`）：`flowCost` 片段按 `wms_doc_id` 关联库存流水，汇总单据各物料的成本金额与数量；`saleUnitCost` = `COALESCE(实时出库成本单价, 当月核算单价, 参考成本价)`。资产状况、商品分析的库存金额用 `latestCost`（实时均价 → 最近一期核算单价 → 参考成本价）。详见 [进销存报表开发](./jxc-report)。
