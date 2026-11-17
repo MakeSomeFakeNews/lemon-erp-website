@@ -130,7 +130,7 @@ order: 18.6
 
 | 单据 | 来源 |
 | --- | --- |
-| 在途调拨（收货时按调出的批次入库）、审批中的仓库单据 | `WmsTrackingMapper.selectOpenStockDocs` |
+| 未完结的在途调拨（在途、部分到货、验收异常：验收、退回按调出的批次 / 序列号执行）、审批中的仓库单据 | `WmsTrackingMapper.selectOpenStockDocs` |
 | 草稿或审批中的盘点单（盘点按「库位 + 物料 + 批次」记录账面数） | `WmsTrackingMapper.selectOpenChecks` |
 | 仍冻结的待检 / 不合格库存（放行按冻结记录的批次解冻） | `wms_stock_hold` |
 | 其他模块登记的单据 | 实现 `MaterialTrackingGuard` 的 Bean |
@@ -180,7 +180,7 @@ scm 的实现 `ScmMaterialTrackingGuard`：尚未出库的发货通知（拣货�
   - 分类（含下级）、品牌、货位（物料的默认库位是它，或在该库位有库存）；
   - 库存 `stock`（枚举 `StockSign`：`POSITIVE` &gt; 0、`ZERO` = 0、`NEGATIVE` &lt; 0，不传为全部），按盘点仓库的库存合计判断，与列表中的当前库存一致，`ZERO` 含没有库存记录的；旧参数 `inStock = true` 仍兼容，等同于 `POSITIVE`（`stockSign()`）；
   - 状态、最新进货 / 销售日期范围；
-- 变动按库存流水的发生时间 `create_time`（确认时间，不是单据业务日期：账面在确认时变化），含出入库、调拨（含在途收货）、组装拆卸、冲销等全部库存变动，**不含盘点本身的盘盈盘亏**（否则刚盘过、调整过的物料会在下一次动态盘点中再次出现）；
+- 变动按库存流水的发生时间 `create_time`（确认时间，不是单据业务日期：账面在确认时变化），含出入库、调拨（含在途调拨的验收、退回）、组装拆卸、冲销等全部库存变动，**不含盘点本身的盘盈盘亏**（否则刚盘过、调整过的物料会在下一次动态盘点中再次出现）；
 - 走库存流水索引 `idx_flow_material_wh`（`material_id, warehouse_id, create_time, biz_type`）。
 
 原来「按库存生成」的效果：仓库范围「本仓库货品」+ 库存「&gt; 0」（可再加货位、分类）后加入全部；原来「按变动商品生成」：勾选变动日期并选快捷选项后加入全部。

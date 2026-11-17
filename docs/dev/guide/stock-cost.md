@@ -44,7 +44,7 @@ MovingAverage.Result r = MovingAverage.apply(state, qty, specifiedUnitCost, refC
 
 1. 过滤供应商寄售仓（`unvaluedWarehouses`，`WarehouseType.CONSIGN_IN`）的变动，返回 `Priced.NONE`；
 2. 按物料 ID 升序（`TreeSet`）对 `wms_material_cost` 加行锁（`WmsMaterialCostMapper.selectForUpdate`，`SELECT ... FOR UPDATE` 写在 XML 中）。还没有成本记录的物料先初始化：数量 = 当前计价库存合计（`selectValuedQty`，所以必须在库存变动之前），单价 = 参考成本价；并发初始化遇到 `DuplicateKeyException` 后重新加锁读取；
-3. 逐条计价：`TRANSFER`（含在途调拨的调出和收货）不改变状态，按均价记金额；在途调拨收货的调入行由调用方传入调出时的成本单价（`StockChange.unitCost`），调出、调入金额相抵；`IN` / `OUT` 用 `StockChange.unitCost()`；`CHECK` 盘盈用填写的成本价、盘亏按均价；
+3. 逐条计价：`TRANSFER`（含在途调拨的调出、验收、退回）不改变状态，按均价记金额；在途调拨验收、退回、让步接收的行由调用方传入调出时的成本单价（`StockChange.unitCost`），调出、调入金额相抵；`IN` / `OUT` 用 `StockChange.unitCost()`；`CHECK` 盘盈用填写的成本价、盘亏按均价；
 4. 写回有变化的物料（`updateCost`），并把成本单价、金额连同业务单价、往来单位写入流水。
 
 固定的加锁顺序避免了两张单据交叉锁物料造成死锁；成本记录与库存在同一事务中更新，单据失败时一起回滚。
@@ -69,7 +69,7 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 | 期初入库 | 导入行的 `costPrice`，为空取参考成本价 | `WmsOpeningStockService` |
 | 盘点 | 盘盈 `wms_check_item.cost_price`（空则确认时的均价；前端输入 4 位小数，有 `wms:stock:cost` 时以均价作为输入提示），盘亏均价 | `WmsCheckService` |
 | 组装 / 拆卸 | 组装：成套件 = 子件出库成本合计（`docAmount`）/ 数量；拆卸：成套件出库成本按 子件数量 × 均价 的权重 `allocate` 到子件 | `WmsAssemblyService` |
-| 在途调拨收货 | 调出流水的成本单价（`StockCostService.transferOutCosts(docId, materialIds)`，取该调拨单的负数流水），没有时按均价。在途期间计价数量不变，按调出时的单价收货使调出、调入金额相抵，按流水汇总的库存金额不会与物料实时成本偏离。调出成本价、调拨价和调拨费用在确认（调出）时生成，收货时调入流水的业务单价取调拨价，不再生成费用 | `WmsStockDocService.receive` |
+| 在途调拨验收 / 退回 / 让步接收 | 调出流水的成本单价（`StockCostService.transferOutCosts(docId, materialIds)`，取该调拨单的负数流水），没有时按均价。在途期间计价数量不变，按调出时的单价验收使调出、调入金额相抵，按流水汇总的库存金额不会与物料实时成本偏离。调出成本价、调拨价和调拨费用在确认（调出）时生成，验收时调入流水的业务单价取调拨价，不再生成费用；确认损耗先退回调出仓，再生成报废出库单按调出成本出库。见下文[在途调拨](#在途调拨) | `WmsTransferTransitService` |
 | 冲销 | 原单各物料的实际成本单价反向（`StockDocRules.reverseChanges(..., costs)`）；调拨冲销不按原单成本，两边统一按均价（金额相抵）；调拨单的调出成本价、调拨价、金额随红字单据反向，调拨费用生成红字的费用支出单 / 承运商应付单（见下文[调拨费用](#调拨费用)） | `StockDocReverser` |
 | 生产领料 / 补料、其他出库、各类领用 | 当前均价 | — |
 | 生产退料 | 该工单该物料的领料（含补料）平均成本 | `MesStockCosts.returnUnitCosts` |
@@ -101,7 +101,71 @@ StockChange.of(warehouseId, locationId, materialId, batchNo, qty, serials)
 
 供应商寄售仓的库存不计价。为保证计价数量始终等于自有库存，`StockDocRules.checkConsignTransfer` 禁止寄售仓与自有仓互相调拨（`wms.error.supplierConsignmentTransferNotAllowed`），只允许同一供应商的寄售仓之间调拨。寄售货物转为自有走寄售结算（采购入库到自有仓 + 寄售消耗出库），退回供应商用其他出库。
 
-在途调拨收货（`POST /wms/transfer/{id}/receive`，请求体 `TransferReceiveRequest` 的 `receiveDate`，可省略）可指定收货日期：为空取当天，不能早于调拨单的 `biz_date`（`wms.error.receiveDateBeforeTransferDate`），按收货日期做结账校验并保存到 `wms_stock_doc.receive_date`。按仓库统计的收发存（`WmsInOutMapper`）、经营历史（`WmsStockFlowMapper.historyDate`）、库龄（`FinStockAgeMapper`）和 BI 库存金额（`BiJxcMapper`）中，调入流水（数量为正）的日期取 `COALESCE(receive_date, biz_date)`。
+## 在途调拨：分批验收与差异处理 {#在途调拨}
+
+issue #124。代码在 `WmsTransferTransitService`（wms），接口在 `WmsTransferController`，前端 `components/wms/TransferReceiveModal.vue`（调拨入库）、`TransferResolveModal.vue`（差异处理、处理未到量）、`TransferTransitPanel.vue`（详情下方的验收记录、差异、补发单），小程序 `lemon-mp/src/pkg-wms/transfer/index.vue`。
+
+### 在途跟踪字段与新表
+
+| 位置 | 字段 / 表 | 说明 |
+| --- | --- | --- |
+| `wms_stock_doc` | `expected_date` | 预计到达日期（只用于在途调拨，可空，不能早于 `biz_date`，`wms.error.expectedDateBeforeBizDate`），超过仍未完结时提醒 |
+| `wms_stock_doc` | `origin_id`（索引 `idx_stock_doc_origin`） | 原调拨单：补发、多发补调的调拨单关联在途调拨原单，须是已确认的在途调拨（`wms.error.originNotTransitTransfer`） |
+| `wms_stock_doc` | `receive_date` / `receive_by` / `receive_time` | 改为**最近一次**验收；流水的业务日期见 `wms_stock_flow.biz_date` |
+| `wms_stock_doc_item` | `received_qty` / `diff_qty` / `returned_qty` / `lost_qty` | 已验收（含让步接收）、差异待处理（不含多发）、退回、损耗；未到 `remainingQty` = 实发 − 四者 |
+| `wms_stock_flow` | `biz_date` | 流水的业务日期：在途调拨的验收入库、退回、让步接收按操作日期，为空取单据的业务日期（`StockService.apply(..., bizDate)`） |
+| 新表 | `wms_transfer_receipt` / `wms_transfer_receipt_item` | 调拨验收单（单号规则 `DR`，在 `WmsDocNos` 中声明）及明细：验收日期、验收数量、差异数量、物流单号、车牌号、备注；明细为本次验收入库的数量和序列号 |
+| 新表 | `wms_transfer_diff` | 差异：类型（系统字典 `wms_transfer_diff_type`：`SHORT` 少到 / `DAMAGED` 破损 / `WRONG` 错发 / `OVER` 多发 / `LOST` 在途丢失）、数量、序列号、说明；处理方式（系统字典 `wms_transfer_resolution`：`RETURN` / `LOSS` / `ACCEPT`，为空表示待处理）、处理日期、处理人、生成的单据 `ref_doc_id` |
+
+状态（`DocStatus`）增加 `PARTIAL` 部分到货、`EXCEPTION` 验收异常，`DocStatus.RECEIVING`（在途、部分到货、验收异常）为未完结。列表查询参数 `transitState`（`TransitState`：`PENDING` 未完结、`OVERDUE` 超过预计到达日期仍未完结），列表行返回 `receivedQty`、`remainingQty`。
+
+### 接口
+
+| 接口 | 权限 | 说明 |
+| --- | --- | --- |
+| `GET /wms/transfer/{id}/transit` | `wms:transfer:list` | 验收单（含明细）、差异、补发单，以及各明细还在途的序列号 `availableSerials`（`TransferTransitView`） |
+| `POST /wms/transfer/{id}/receive` | `wms:transfer:receive` | 调拨入库（验收），请求体 `TransferReceiveRequest`：`receiveDate`、`logisticsNo`（≤ 64）、`plateNo`（≤ 32）、`remark`、`lines`（`itemId`、`qty`、`serialNos`、`diffType`、`diffQty`、`diffSerialNos`、`diffRemark`）；返回验收单 ID。**不传明细时全部未到量验收入库**（兼容原来的「收货」） |
+| `POST /wms/transfer/diff/{diffId}/resolve` | `wms:transfer:resolve` | 处理一条差异，请求体 `TransferResolveRequest`：`action`、`qty`（为空取全部）、`serialNos`、`bizDate`、`remark`；返回生成的单据（报废出库单 / 调拨单草稿）ID |
+| `POST /wms/transfer/{id}/close` | `wms:transfer:resolve` | 处理未到量：全部明细剩余的未到数量 `RETURN` 退回调出仓或 `LOSS` 确认损耗（不能 `ACCEPT`，`wms.error.remainingCannotAccept`），每行生成一条已处理的差异（退回记为少到、损耗记为在途丢失） |
+
+三个写接口都加 `@OperLog`，按调拨单的数据权限（`STOCK_DOC_RULE`，制单人部门 + 制单人）取单据，再锁单据行（`WmsStockDocMapper.selectForUpdate`），同一单据的各次操作串行执行；不是未完结的在途调拨时报 `wms.error.transferOrderNotTransit`。
+
+### 验收规则
+
+- 验收 + 差异（多发除外）不能超过未到量（`wms.error.receiveExceedsRemaining`）；多发在实发之外，不占用未到量；验收时不能选「在途丢失」（`wms.error.lostOnlyForRemaining`）；
+- **批次 / 序列号**：验收入库按调出时的批次（明细的 `batch_no`）进入调入库位；序列号从本行未到的序列号中选（调出的序列号去掉已验收的和登记差异的，多发除外，保持调出顺序），不填时按调出顺序带出，填写的须个数一致、不重复（`wms.error.serialNotInTransit`）；多发的序列号不能是本调拨单上的（`wms.error.overSerialInDoc`）；
+- 操作日期为空取当天，不能早于调拨单的 `biz_date`（`wms.error.receiveDateBeforeTransferDate`）；验收、退回、让步接收按调拨做结账校验（`periodGuard.checkOpen`，只影响总账），确认损耗影响存货成本，按出库做存货结账校验（`checkStockOpen`）。
+
+### 差异处理
+
+| 处理方式 | 普通差异 | 多发 |
+| --- | --- | --- |
+| `RETURN` | 数量回到调出库位（按调出成本），`returned_qty` 增加 | 实物退回，不变动库存 |
+| `LOSS` | 先退回调出仓，再生成报废出库单（`SCRAP`，来源单号为调拨单号）按调出成本出库，成本凭证按报废出库处理，`lost_qty` 增加 | 不允许（`wms.error.overShipmentCannotLoss`） |
+| `ACCEPT` | 按原批次、序列号入调入仓库，`received_qty` 增加 | 生成一张调出仓 → 调入仓的直接调拨单草稿（`origin_id` 关联原单），由调出方确认 |
+
+处理数量少于差异数量时，差异拆分为已处理、待处理两条。
+
+### 关单与冲销
+
+每次操作后 `refreshStatus` 重新计算状态：有待处理的差异为 `EXCEPTION`；没有未到量（实发 = 已验收 + 退回 + 损耗）为 `DONE`；已有验收 / 退回 / 损耗为 `PARTIAL`；否则 `TRANSIT`，不能手工完成。冲销：未完结的不能冲销（`wms.error.receiveTransitTransferBeforeReversing`）；完成后只有全部验收入库（每行 `received_qty` = 数量）的才能冲销（`StockDocRules.checkTransitReversible`，`wms.error.transitTransferPartlyReturnedCannotReverse`），因为退回、损耗已经把在途数量回到了调出仓库，按原单反向会不一致。
+
+### 成本、日期与报表
+
+- 在途期间仍属本公司存货（实时成本的计价数量不变）；验收、退回、让步接收的调拨流水按调出时的成本单价计价（`StockCostService.transferOutCosts`），调出、调入金额相抵，业务单价为调拨价；调出成本价、调拨价和调拨费用在确认（调出）时生成，验收不再生成费用；
+- 按仓库统计的收发存（`WmsInOutMapper`）、经营历史（`WmsStockFlowMapper.historyDate`）、库龄（`FinStockAgeMapper`）、经营分析（`FinAnalysisMapper`）、BI 库存金额与进销存报表（`BiJxcMapper`、`BiInsightMapper`）的流水日期取 `COALESCE(f.biz_date, 单据业务日期)`：分批验收按各张验收单的验收日期分别统计；
+- 调拨汇总（`TransferSummaryRow`）的调出数量、成本金额、调拨金额扣除退回和损耗，另列在途数量 `transitQty`、退回 / 损耗 `backQty`；
+- 首页待办（`WmsTodoProvider`）：在途调拨待验收（`TRANSIT`、`PARTIAL`，`wms:transfer:receive`，链接 `/wms/transfer?transitState=PENDING`）、超过预计到达日期（`wms:transfer:list`，`?transitState=OVERDUE`）、调拨差异待处理（`EXCEPTION`，`wms:transfer:resolve`，`?status=EXCEPTION`）；小程序按 `config/entries` 把 `/wms/transfer` 转到调拨验收页面；
+- 数据大屏「在途调拨」统计未完结的在途调拨（`BiScreenMapper`）。
+
+### 权限
+
+| 功能 | 权限 |
+| --- | --- |
+| 调拨验收入库（菜单 1325，原「调拨收货」） | `wms:transfer:receive` |
+| 调拨差异处理（菜单 1326，差异处理、处理未到量；内置角色仓库管理员） | `wms:transfer:resolve` |
+| 生成补发调拨单 | `wms:transfer:add`（前端带出原单的仓库、库位、批次和退回 + 损耗 + 差异待处理的数量，`origin_id` 关联原单） |
+| 查看验收记录、差异 | `wms:transfer:list` |
 
 ## 调拨价格与调拨费用
 
@@ -124,7 +188,7 @@ issue #104。代码在 `TransferTermsService`（wms），财务部分在 `FinTra
 - 修改依据或系数时批量更新明细的调拨价（`GET /wms/transfer/prices`，`TransferTermsService.quickPrices`，需要新增 / 修改权限和 `wms:stock:cost`），明细可逐行修改，不填的行按调出成本价；没有依据价的物料不在结果中，前端提示「N 行没有依据价，按调出成本价」；
 - 确认时（`TransferTermsService.settle`，`Propagation.MANDATORY`，在库存变动之后）按调出流水（`StockCostService.transferOutCosts`）生成明细的调出成本价（`cost_price`）、调拨价、调拨金额（`transfer_price`、`transfer_amount`）和表头的调出成本金额、调拨金额（`cost_amount`、`transfer_amount`），调拨流水的业务单价记为调拨价（`WmsStockFlowMapper.fillTransferBizPrice`）；调拨差价 = 调拨金额 − 调出成本金额；
 - **调出成本价、调拨价、金额只对有「查看成本金额」`wms:stock:cost` 的人返回**（同价调拨的调拨价就是成本），没有该权限的人保存差价调拨草稿时由后端按依据 × 系数计算调拨价（`applyLinePrices`）；
-- 调拨单列表显示调拨金额（下方为调出成本），工具栏「调拨汇总」（`GET /wms/transfer/summary`，需要 `wms:transfer:list` 和 `wms:stock:cost`，按数据权限）按 调出仓库 → 调入仓库 汇总已调出的调拨单（含在途、红字）的单数、数量、调出成本金额、调拨金额、调拨差价、调拨费用。
+- 调拨单列表显示调拨金额（下方为调出成本），工具栏「调拨汇总」（`GET /wms/transfer/summary`，需要 `wms:transfer:list` 和 `wms:stock:cost`，按数据权限）按 调出仓库 → 调入仓库 汇总已调出的调拨单（含在途、红字）的单数、调出数量、在途数量、退回 / 损耗、调出成本金额、调拨金额、调拨差价、调拨费用（在途调拨退回、损耗的数量和金额不算调出）。
 
 ### 调拨费用
 
@@ -146,7 +210,7 @@ issue #104。代码在 `TransferTermsService`（wms），财务部分在 `FinTra
 | --- | --- |
 | 库存查询的均价、库存金额 | `WmsStockMapper.xml` 的 `avgCost` 片段（没有成本记录或数量为 0 且无单价时取参考成本价），寄售仓为空；合计 `GET /wms/stock/total` |
 | 当前均价（表单默认值） | `GET /wms/stock/unit-cost?materialIds=`，只要求 `wms:stock:cost`（均价是系统计算的成本，只能新增 / 修改入库单、盘点单的人拿不到）；前端没有该权限时不调用 |
-| 经营历史 | `GET /wms/stock/history`（`WmsStockQueryService.history`，前端 `components/wms/StockHistory.vue`）：期初 + 日期范围内的流水（最多 5000 条），不选仓库时排除调拨和寄售仓；日期取单据业务日期，在途调拨的调入流水取收货日期（`wms_stock_doc.receive_date`） |
+| 经营历史 | `GET /wms/stock/history`（`WmsStockQueryService.history`，前端 `components/wms/StockHistory.vue`）：期初 + 日期范围内的流水（最多 5000 条），不选仓库时排除调拨和寄售仓；日期取 `COALESCE(wms_stock_flow.biz_date, 单据业务日期)`，在途调拨的验收、退回、让步接收取各次操作的日期 |
 | 库存流水 | 流水分页返回 `bizPrice`、`costPrice`、`costAmount`、`partnerName`、`costEstimated` |
 
 单价和金额由按钮权限 `wms:stock:cost`（「查看成本金额」）控制，**后端不返回**（置空），不是只在前端隐藏；前端用 `hasPerm('wms:stock:cost')` 决定是否显示列。系统计算的成本（当前均价、出库成本、确认后的实际入库成本、盘点差异金额）只给有该权限的人；没有该权限、但要录入成本价的人只能看到自己填写的值：

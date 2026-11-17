@@ -390,7 +390,7 @@ function print(r) {
 | `scm.purchaseOrder`、`scm.salesOrder` | 采购订单、销售订单 |
 | `scm.purchaseIn`、`scm.purchaseReturn`、`scm.salesOut`、`scm.salesReturn` | 采购入库、采购退货、销售出库、销售退货 |
 | `scm.pickList`、`scm.wavePick`、`scm.packingList` | 拣货单、波次拣货单、装箱单 |
-| `wms.in`、`wms.out`、`wms.transfer` | 入库单、出库单、调拨单 |
+| `wms.in`、`wms.out`、`wms.transfer`、`wms.transferReceipt` | 入库单、出库单、调拨单、调拨验收单（在途调拨每次验收一张，`TransferTransitPanel.vue`） |
 | `fin.voucher` | 记账凭证 |
 | `fin.balanceSheet`、`fin.incomeStatement`、`fin.cashFlow` | 资产负债表、利润表、现金流量表（`views/fin/report`，明细列为报表的项目、行次和金额列） |
 | `fin.partnerStatement` | 往来对账单（客户 / 供应商共用一个模板） |

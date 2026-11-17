@@ -241,7 +241,7 @@ const rowActions = (record) => [
 | `tip` | 附加的悬停提示（如禁用原因） |
 | `confirm` | 二次确认：标题文字或 `{ title, description, okType }`。直接显示的操作用气泡确认，「更多」中的用确认框 |
 | `more` | 放进「更多」（三个点）下拉 |
-| `slot` | 需要包一层自定义弹出组件（如收货日期确认）时使用：写插槽名，在插槽中用 `<TableActionButton :action :text />` 渲染按钮（插槽参数 `{ action, text }`），始终直接显示 |
+| `slot` | 需要包一层自定义弹出组件（如需要先选择日期等再确认的弹出框）时使用：写插槽名，在插槽中用 `<TableActionButton :action :text />` 渲染按钮（插槽参数 `{ action, text }`），始终直接显示 |
 
 显示规则（`layoutActions` 自动处理）：
 
