@@ -297,6 +297,41 @@ issue #95。同一单位既是客户又是供应商时用应付抵减应收。�
 
 一张凭证多个对方科目时按金额比例分摊（`FinAnalysisService.allocate`），尾差计入**最后一个基数不为 0** 的对方科目，保证各项目合计等于现金变动额、期末余额与账面一致。
 
+## 往来对账单分页与客户对账单
+
+issue #134。
+
+### 往来对账单分页
+
+「应收应付 → 往来对账单」（`FinPartnerLedgerService.statement`，`FinPartnerLedgerMapper.xml`）的明细后端分页：`GET /fin/partner-statement` 增加 `current` / `size`。
+
+- SQL 中用窗口函数 `SUM(增加 − 减少) OVER (ORDER BY 日期, 本方在前, 单据类型, ID)` 计算每行之前的累计变动（`LedgerRow.running`），每行余额 = 期初 + 累计，不依赖之前的页，跳页也正确；
+- 返回明细总行数 `total` 和本页第一行之前的余额 `pageOpening`：前端（`views/fin/partner-statement/index.vue`）第一页首行显示「期初余额」，之后的页显示「承前页余额」（前端合成的行类型 `OPENING` / `CARRIED`，定义在 `components/fin/partnerLedger.js`）；
+- 期初、本期合计（`LedgerTotals`：`count`、`increase`、`decrease`，以及 `bill`、`receipt`、`discount`、`netting` 分项）和期末另用汇总查询基于全部明细计算，与页码无关；
+- **不传 `size` 时返回全部明细**，打印（`fin.partnerStatement`）和导出 Excel（`exportLedger`）都这样取数；
+- 收款中的折让单独给出（`discount`，已含在减少金额中），页面在减少金额下方显示「其中折让」，打印用 `decreaseText` 注明，导出单列「折让」；
+- 页大小可选 20 / 50 / 100 / 200 / 500（默认 50），不超过分页上限 500。
+
+往来明细的表格列、类型和来源文字、打印数据、导出由 `components/fin/partnerLedger.js` 提供（`ledgerLabels`、`ledgerColumns`、`ledgerTypeText`、`ledgerSourceText`、`ledgerPrintDoc`、`exportLedger`），往来对账单和客户对账单详情共用。
+
+### 客户对账单
+
+「应收应付 → 客户对账」（`FinCustomerStatementService` / `FinCustomerStatementController`，前端 `views/fin/customer-statement/index.vue`、详情 `components/fin/CustomerStatementDetail.vue`，财务与经销商门户共用）：
+
+| 项目 | 说明 |
+| --- | --- |
+| 表 | `fin_customer_statement`（对账单号、客户、期间、`opening`、`bill_amount`、`receipt_amount`、`discount_amount`、`netting_amount`、`closing`、`line_count`、状态、确认人 / 时间、客户意见）、`fin_customer_statement_line`（逐笔明细快照，含每行余额） |
+| 生成 | `POST /fin/customer-statement`（客户、起止日期、备注），取 `FinPartnerLedgerService.customerLedger`（口径与往来对账单相同，不挂接应付）的全部明细写入快照，之后的单据变化不影响已生成的对账单；期间内没有往来且期初为 0 时报 `fin.error.noCustomerTransactionsInPeriod`；明细按批多值 INSERT |
+| 单号 | 规则 `KDZ`（`FinCustomerStatementService.DOC_NO`，在 `FinDocNos` 中声明） |
+| 状态 | `StatementStatus`（字典 `fin_statement_status`）：草稿 → 待确认（发送）→ 已确认 / 有异议；草稿和有异议的可删除、可（再次）发送。状态流转与供应商对账单共用 `fin/service/StatementFlow`（`check` 门户归属、`send`、`checkDeletable`、`respond`、`notifyCreator`），公共字段在 `entity/FinStatementBase` |
+| 发送 | `POST /fin/customer-statement/{id}/send`，通过 `ScmPortalNotifier`（`PortalKind.DEALER`）给客户的经销商门户账号发站内消息，链接 `/dealer/statement` |
+| 确认 | 经销商门户 `POST /dealer/statement/{id}/confirm`（客户取 `SecurityUtils.requireCustomerId()`，确认或异议后 `notifyCreator` 通知制单人）；没有门户账号的客户由财务 `POST /fin/customer-statement/{id}/confirm` 登记签回结果（不通知）。有异议必须填写说明（`fin.error.describeDispute`）。前端弹窗 `components/fin/StatementRespondModal.vue`（供应商门户、经销商门户、财务登记共用，`invoice` 属性控制是否填写发票） |
+| 明细 | `GET .../{id}/lines` 传 `size` 时分页，不传返回全部（打印、导出）；第一页首行为期初，之后的页首行为承前页余额（= 本页第一行余额 − 增加 + 减少） |
+| 打印 | 模板标识 `fin.customerStatement`（`printTemplates.js` 已登记：客户、对账期间、期初、本期应收、本期收款、本期折让、本期对冲、期末，签字栏 制表 / 财务审核 / 客户确认（盖章）），经销商门户不打印、只导出 |
+| 附件 | 类型 `fin_customer_statement`（`FinRecordTypes`，财务与经销商门户共用：查看 `fin:customerStatement:list` 或 `dealer:statement:list`，上传 `fin:customerStatement:edit` 或 `dealer:statement:confirm`） |
+| 权限 | `fin:customerStatement:list/add/edit/remove`（`edit` 为发送和登记结果），内置给会计，普通用户、总经理、出纳只读；经销商门户 `dealer:statement:list` / `confirm`，授权给内置的经销商角色。门户只能看到本客户已发送的对账单（`page(..., portal = true)` 排除草稿） |
+| 合并 | 客户合并时一并迁移（`FinPartnerMergeHandler`、`FinMergeMapper.xml`） |
+
 ## 关键类与文件
 
 | 位置 | 内容 |
@@ -304,7 +339,8 @@ issue #95。同一单位既是客户又是供应商时用应付抵减应收。�
 | `service/FinSettlementService` | 收付款新增、修改、确认（草稿）、核销、折让、多收转预收、冲抵预收预付、审批回调、删除、凭证、折让记录 |
 | `service/ForeignAmounts` | 外币核销、折让、冲抵的本位币折算 |
 | `service/FinAdvanceService` | 预收预付登记（含外币）、冲抵（`apply`、收付款中的 `applyForSettlement` / `revokeForSettlement`）、删除 |
-| `service/FinPartnerLedgerService`、`mapper/fin/FinPartnerLedgerMapper.xml` | 往来对账单、往来汇总（`summary` / `summaryTotal`） |
+| `service/FinPartnerLedgerService`、`mapper/fin/FinPartnerLedgerMapper.xml` | 往来对账单（分页、窗口函数累计余额）、往来汇总（`summary` / `summaryTotal`） |
+| `service/FinCustomerStatementService`、`StatementFlow`、`entity/FinStatementBase`、`mapper/fin/FinCustomerStatementMapper.xml` | 客户对账单；与供应商对账单共用的状态流转 |
 | `entity/FinSettlementAdvance`、`mapper/fin/FinSettlementAdvanceMapper.xml` | 收付款选用的预收预付 |
 | `service/FinOffsetService`、`controller/FinOffsetController` | 冲账单 |
 | `service/FinNettingService`、`controller/FinNettingController` | 应收应付对冲 |

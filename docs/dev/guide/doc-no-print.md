@@ -394,6 +394,7 @@ function print(r) {
 | `fin.voucher` | 记账凭证 |
 | `fin.balanceSheet`、`fin.incomeStatement`、`fin.cashFlow` | 资产负债表、利润表、现金流量表（`views/fin/report`，明细列为报表的项目、行次和金额列） |
 | `fin.partnerStatement` | 往来对账单（客户 / 供应商共用一个模板） |
+| `fin.customerStatement` | 客户对账单（客户对账生成的快照） |
 | `mes.workOrder` | 生产任务单 |
 | `hr.payslip` | 工资条（条状） |
 

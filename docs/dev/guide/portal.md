@@ -123,4 +123,6 @@ INSERT INTO sys_role_menu (role_id, menu_id) VALUES (15, 5100);
 | 取关联方 | `SecurityUtils.requireSupplierId()` | `SecurityUtils.requireCustomerId()` |
 | 开通账号 | 供应商资料（`scm:supplier:portal`） | 客户资料（`/scm/customer/{customerId}/portal-accounts`） |
 
+经销商门户的「对账单」（`/dealer/statement`，`dealer:statement:list` / `confirm`）读取财务生成的客户对账单（`FinCustomerStatementController` 中的 `/dealer/statement/**` 接口，客户取 `SecurityUtils.requireCustomerId()`），详情组件 `CustomerStatementDetail` 以 `portal` 属性复用（不显示客户和制单人、不能打印），见 [应收应付核销开发 - 客户对账单](./settlement#客户对账单)。
+
 两者都由 `PortalKind` 枚举描述，新增第三种门户时在 `PortalKind` 中加枚举值即可复用路径隔离和权限过滤。

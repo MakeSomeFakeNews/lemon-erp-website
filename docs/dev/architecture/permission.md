@@ -127,7 +127,7 @@ public R<List<ScmPurchaseContract>> active(...) { ... }
 | 项目经理 | pm | 仅本人 | 项目管理全部功能（只看自己负责的项目），审批本人负责项目的工时 |
 | 普通员工 | staff | 仅本人 | 员工自助、流程中心、费用报销和借款申请；「项目 → 我的工时」（`pm:timesheet:mine`，作为项目成员填报，不含审批） |
 | 供应商 | supplier | 仅本人 | 供应商门户账号专用 |
-| 经销商 | dealer | 仅本人 | 经销商门户账号专用 |
+| 经销商 | dealer | 仅本人 | 经销商门户账号专用（订货、库存销量上报、对账单 `dealer:statement:list` / `confirm`） |
 
 超级管理员 = 平台租户中拥有 `admin` 角色的用户（`LoginUser.isAdmin()`）。其他租户的 `admin` 角色是租户管理员，权限以套餐为上限，按普通角色处理。
 
