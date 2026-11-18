@@ -362,7 +362,9 @@ Long expense = accountRules.accountId(AccountRole.SALARY_EXPENSE, positionCatego
 - 其他模块（hr 工资、pm 项目月结等）同样注入 `FinAccountRuleService` 取科目；新增自动凭证的用途时在 `AccountRole` 中登记，「凭证科目设置」页面自动列出；
 - 科目范围用途（`AccountRole.scope()`：库存现金 `CASH` 1001、银行存款 `BANK` 1002）设置的是一个科目及其全部下级，可以是上级科目：结算账户校验、银行对账、出纳日记账、现金流量表、资金计划按 `FinAccountService.cashCodes()` / `roleCode(用途)` 识别，前端 `AccountSelect` 用 `:roles="['CASH', 'BANK']"` 限定可选科目；Java 代码中不写科目编码，只有报表格式（资产负债表、利润表模板，现金流量表按一级科目归类）按企业会计准则的编码前缀定义。
 
-凭证分录的辅助核算（部门、客户、供应商、项目、存货）在「会计科目」上设置（`fin_account.aux_items`，可多选，下级默认沿用上级），分录上各占一列（`dept_id`、`customer_id`、`supplier_id`、`project_id`、`material_id`），可同时填写。手工凭证使用设置了辅助核算的科目时对应项目必填；业务生成的凭证按单据自动带出客户、供应商等，不受科目设置约束。
+凭证分录的辅助核算（部门、客户、供应商、项目、存货）在「会计科目」上设置（`fin_account.aux_items`，可多选，下级默认沿用上级），分录上各占一列（`dept_id`、`customer_id`、`supplier_id`、`project_id`、`material_id`），可同时填写。手工凭证使用设置了辅助核算的科目时对应项目必填；业务生成的凭证按单据自动带出客户、供应商等，不受科目设置约束。「账簿查询 → 辅助核算」（`GET /fin/report/aux`）按维度 + 科目统计本期发生额和期末余额，可传 `keyword` 按辅助核算项目的名称或编码模糊匹配（部门没有编码，只按名称；`FinVoucherEntryMapper.xml` 的 `selectAuxBalance`）。
+
+科目余额表（`GET /fin/report/trial-balance`）后端仍返回平铺的科目行（上级汇总下级），前端 `views/fin/book/index.vue` 按科目编码组成树形表格（上级编码为去掉末两位，一级科目 4 位；未显示的中间科目跳过，挂到最近的上级），查询后折叠到一级科目，`expandedKeys` 控制展开，双击行切换，「全部展开」「全部折叠」；底部合计行由后端按一级科目计算，与展开状态无关。
 
 ## 存货计价
 
