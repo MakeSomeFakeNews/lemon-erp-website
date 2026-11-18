@@ -122,7 +122,7 @@ public R<List<ScmPurchaseContract>> active(...) { ... }
 | 车间主管 | workshop | 本部门 | 领料、报工、完工入库、补料申请、质量检验、设备与维护；生产统计 `mes:stat:*`（5 个菜单） |
 | 质量工程师 | quality | 全部 | 质量管理全部功能；物料、供应商、工单只读；生产统计 `mes:stat:output` / `wo`；员工通用权限 |
 | 会计 | accountant | 全部 | 财务全部功能（含 `fin:receipt:confirm` / `fin:payment:confirm`、应收应付对冲 `fin:netting:add` / `fin:netting:remove`）；采购销售单据、工资表、项目核算只读；生产统计 `mes:stat:piece` / `product` / `usage` |
-| 出纳 | cashier | 全部 | 收付款（含 `fin:receipt:confirm` / `fin:payment:confirm`）、预收预付、银行对账、报销借款付款、其他收支（`fin:io:list/add/edit/remove/confirm/category`） |
+| 出纳 | cashier | 全部 | 资金账户（`fin:cashAccount:list/add/edit/remove`）、收付款（含 `fin:receipt:confirm` / `fin:payment:confirm`）、预收预付、银行对账、报销借款付款、其他收支（`fin:io:list/add/edit/remove/confirm/category`） |
 | 人事专员 | hr | 全部 | 人力资源全部功能；通知公告（`sys:notice:list` / `add` / `edit` / `remove` / `publish`）；生产统计 `mes:stat:piece` |
 | 项目经理 | pm | 仅本人 | 项目管理全部功能（只看自己负责的项目），审批本人负责项目的工时 |
 | 普通员工 | staff | 仅本人 | 员工自助、流程中心、费用报销和借款申请；「项目 → 我的工时」（`pm:timesheet:mine`，作为项目成员填报，不含审批） |

@@ -287,7 +287,7 @@ issue #95。同一单位既是客户又是供应商时用应付抵减应收。�
 新增固定资产（`FinAssetService`，请求 `AssetRequest`）有三种入账方式，只对新增的非期初资产生效：
 
 - 填 `supplierId`：生成来源 `ASSET` 的应付单（借 固定资产、进项税额 / 贷 应付账款），之后照常收付款核销；
-- 不填供应商、填 `payAccountId`（库存现金 / 银行存款范围内的末级科目，`FinAccountService.requireCashAccount` 校验）：直接生成未审核的购置凭证（`VoucherSource.ASSET`，日期为开始使用日期，借 固定资产（带使用部门）、进项税额 / 贷 付款账户）；与供应商同填或用于期初资产时报 `fin.error.assetPayAccountOnlyWithoutSupplier`；
+- 不填供应商、填 `payAccountId`（资金账户的入账科目，`FinAccountService.requireCashAccount(科目, 开始使用日期)` 校验）：直接生成未审核的购置凭证（`VoucherSource.ASSET`，日期为开始使用日期，借 固定资产（带使用部门）、进项税额 / 贷 付款账户）；与供应商同填或用于期初资产时报 `fin.error.assetPayAccountOnlyWithoutSupplier`；
 - 都不填（捐赠、投资投入、自建转入）：不生成单据，由财务手工做凭证。
 
 现金流量表（`FinAnalysisService.cashFlow`）按对方科目归类，以下两处与资产购置有关：

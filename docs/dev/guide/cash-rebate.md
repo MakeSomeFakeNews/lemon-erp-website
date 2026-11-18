@@ -4,7 +4,50 @@ order: 20.5
 
 # 其他收支、调拨与返利开发
 
-本页说明现金银行（其他收入单 / 费用支出单、业务单据生成的费用支出单、收支类别、账户调拨（手续费支付账户、经办人、票据号码）、出纳日记账来源单据）和返利协议（销售返利 / 采购返利、两种计算方式）的实现。收付款核销、冲账单见[应收应付核销开发](./settlement)。
+本页说明现金银行（资金账户与指定科目、出纳核对总账、银行对账的期初未达账、其他收入单 / 费用支出单、业务单据生成的费用支出单、收支类别、账户调拨（手续费支付账户、经办人、票据号码）、出纳日记账来源单据）和返利协议（销售返利 / 采购返利、两种计算方式）的实现。收付款核销、冲账单见[应收应付核销开发](./settlement)。
+
+## 资金账户
+
+issue #136。「财务 → 资金与费用 → 资金账户」（`FinCashAccountService` / `FinCashAccountController`，前端 `views/fin/cash-account`：`index.vue` 列表、`CashAccountForm.vue` 表单、`OpeningDrawer.vue` 期初），用户手册见 [资金账户](/manual/fin/cash-account)。
+
+### 指定科目
+
+科目范围用途 库存现金 `CASH`（1001）、银行存款 `BANK`（1002）、其他货币资金 `OTHER_FUNDS`（1012，本次新增，`init.sql` 预置 1012 及下级 101201 微信、101202 支付宝）即「指定科目」，在「凭证科目设置」或「会计科目」页面的「指定科目」（`views/fin/account/DesignateModal.vue`，保存到同一份 `fin_account_rule`）中设置。三者须是资产类科目且不能互相包含（`FinAccountRuleService.checkFundScope`，`fin.error.fundScopeMustAsset` / `fundScopeOverlap`），会计科目列表按 `GET /fin/account/scopes` 给对应科目加标签。`FinAccountService.cashCodes()` 返回三者，现金流量表（`FinAnalysisService`）、资金计划（`FinFundService`）因此也包含其他货币资金。
+
+### 表与字段
+
+| 表 | 说明 |
+| --- | --- |
+| `fin_cash_account` | 名称（单据下拉显示）、类型 `type`（`CashAccountType`：`CASH` / `BANK` / `WECHAT` / `ALIPAY` / `OTHER`，系统字典 `fin_cash_account_type`）、入账科目 `account_id`（唯一键 `uk_cash_account_subject`，一个科目一个账户）、开户行、账号、启用日期 `enable_date`、日记账期初 `journal_opening`、对账单期初 `statement_opening`、排序、状态（`EnableStatus`） |
+| `fin_bank_opening_item` | 银行类账户的期初未达账：`cash_account_id`、`side`（`BankOpeningSide`：`BOOK` 企业已记银行未记 / `BANK` 银行已记企业未记，系统字典 `fin_bank_opening_side`）、`txn_date`（早于启用日期）、`amount`（收入正、支出负）、摘要、流水号，勾对后记录 `entry_id`（与凭证分录）或 `statement_id`（与银行流水） |
+
+银行流水本身不加列：与期初未达账的勾对记在 `fin_bank_opening_item.statement_id` / `entry_id` 上，`FinBankStatement` 只增加非持久化字段 `openingItemId`、`opening` 供页面显示。
+
+### 账户规则
+
+- **入账科目**（`validateSubject`）：指定科目下的启用末级科目（现金账户在 `CASH` 下，其他类型在 `BANK` 或 `OTHER_FUNDS` 下）、不能启用辅助核算、不能已被其他账户绑定。被绑定的科目视为已使用（不能删除、不能增加下级），不能再启用辅助核算（`fin.error.accountBoundCashAccountAux`），账户启用时科目不能停用（`accountBoundCashAccountDisable`）。
+- **修改**：启用中的账户只能改名称、开户行、账号、排序、备注（`cashAccountEnabledLocked`）；入账科目被凭证、单据、对账单、期初未达账使用后（`FinCashAccountMapper.subjectUsed`，涵盖 `fin_voucher_entry`、`fin_settlement`、`fin_advance`、`fin_io_doc`、`fin_fund_transfer`、`fin_expense_claim`、`fin_loan`、`fin_loan_repay`、`fin_note_log`、`fin_bank_statement`、`scm_trade_doc`、`wms_stock_doc` 等）不能更换、账户不能删除（可停用）。
+- **启用**（`enable`）：再次校验入账科目；有启用日期时期初未达账日期须早于启用日期，且期初平衡（`GET /fin/cash-account/{id}/opening-check`，`CashAccountRequests.OpeningCheck`：日记账期初 + 银行已收企业未收 − 银行已付企业未付 = 对账单期初 + 企业已收银行未收 − 企业已付银行未付，同时返回入账科目在启用日期之前的账面余额 `ledgerBalance` 供参考）。新增时 `enable = true` 直接启用。
+- **期初未达账**：只有未启用、有启用日期的非现金账户可以增删（`/fin/cash-account/{id}/opening-items`）。
+- **新租户**：`FinTenantInitializer` 复制平台的账户（预置库存现金、工商银行、招商银行、微信、支付宝），不复制期初。
+
+### 单据中的结算账户
+
+**单据中保存的仍是入账科目 ID**（`fin_settlement.account_id`、`fin_io_doc.account_id`、调拨、报销 / 借款付款、票据、工资发放、运费现付 `freight_account_id`、调拨费用 `fee_account_id` 等字段不变），账户与科目一一对应，因此原有单据、凭证不需要迁移：
+
+- 后端 `FinAccountService.requireCashAccount(科目, 业务日期)`：科目在指定科目下（`settlementAccountMustCashBankDeposit`）、建立了资金账户（`cashAccountNotSetUp`）、账户已启用（`cashAccountDisabled`）、业务日期不早于启用日期（`cashAccountBeforeEnableDate`）。收付款、预收预付、其他收支、报销 / 借款付款与还款、账户调拨、票据、固定资产购置与处置、工资发放（hr `HrPayrollService`）、运费现付和调拨费用生成费用支出单时都经过它；
+- 前端结算账户一律用 `components/fin/CashAccountSelect.vue`（`GET /fin/cash-account/options`，登录即可访问，带 `cached`）：`usable` 为 true 的可选，停用的只用于显示已有单据的值（「名称（已停用）」）；`all` 属性可选停用的（出纳管理、银行对账的查询条件），`bank` 只列非现金账户；小程序 `api/wms.js` 的 `cashAccounts` 同样取此接口；
+- 进销存报表资产状况的「现金」按类型为 `CASH` 的资金账户汇总（`BiJxcAnalysisService`，不再写死 1001）。
+
+### 出纳管理与核对总账
+
+`FinCashierService` 按资金账户取数（查询范围 `CashierViews.Scope`：入账科目 + 启用日期）：账户有启用日期时日记账、资金日报只取启用日期当天及以后的凭证，期初为日记账期初；没有启用日期时取科目期初 + 全部凭证（升级时回填的账户都是这种）。
+
+**核对总账**（`GET /fin/cashier/check`，`CashierViews.CheckRow`）：每个资金账户一行，日记账（启用日期起，日记账期初 + 全部凭证，含未记账）与总账（入账科目的科目期初 + 已记账凭证，不受启用日期限制）比对期初、借贷发生额、期末；`difference` = 日记账期末 − 总账期末，其中 `unposted`（日记账期末 − 只算已记账凭证的日记账期末）和 `openingDifference`（日记账期初 − 总账在启用日期之前的已记账余额），两者之和即差额；另列截至结束日期未生成凭证的收付款（`unvoucheredCount` / `unvoucheredAmount`，两边都不包含）；`matched` 为差额是否为 0。
+
+### 银行对账的期初未达账
+
+`FinBankService`：选择银行类资金账户（非现金）。账户有启用日期时余额调节表的账面余额 = 日记账期初 + 启用日期起的凭证，银行余额 = 对账单期初 + 启用日期起的流水（未填写银行余额时）。期初未达账标「期初」列入两边：银行已记企业未记的与启用日期及以后的凭证分录勾对（`entry_id`），企业已记银行未记的与之后的流水勾对（`statement_id`），两条期初未达账之间不能勾对；自动勾对同样处理（`GET /fin/bank/opening-items`、`POST /fin/bank/opening-item/{id}/match/{targetId}`），未勾对的计入余额调节表。前端勾对页 `views/fin/bank/index.vue`、余额调节表拆为 `ReconcileModal.vue`。
 
 ## 其他收支
 
@@ -37,7 +80,7 @@ order: 20.5
 
 ### 规则
 
-- **保存校验**（`validate`）：结算账户经 `FinAccountService.requireCashAccount` 校验；业务期间未结账（`FinBizPeriodGuard.checkOpen`）；结算方式用 `DictLookup.check` 校验，且不能是 `SettleMethods.NOTE`（票据由票据管理生成，前端用 `SETTLE_METHOD_NOTE` 过滤）；关联单位为客户 / 供应商时 `partnerId` 必填并校验存在；明细的类别须存在、启用、方向与单据一致；明细 1～200 行。
+- **保存校验**（`validate`）：结算账户经 `FinAccountService.requireCashAccount(科目, 单据日期)` 校验（建立了启用的资金账户、日期不早于启用日期，见[资金账户](#单据中的结算账户)）；业务期间未结账（`FinBizPeriodGuard.checkOpen`）；结算方式用 `DictLookup.check` 校验，且不能是 `SettleMethods.NOTE`（票据由票据管理生成，前端用 `SETTLE_METHOD_NOTE` 过滤）；关联单位为客户 / 供应商时 `partnerId` 必填并校验存在；明细的类别须存在、启用、方向与单据一致；明细 1～200 行。
 - **修改、删除**：只能处理待确认的单据（条件更新 `status = DRAFT`），方向不能修改；明细用 `DetailLines.replace` 整体替换。有来源单据的（业务单据生成）不能修改、删除（`fin.error.ioDocGenerated`）。
 - **确认**（`@Transactional`）：`FinVoucherService.createGenerated` 生成未审核凭证，`StatusTransitions.change` 改为已确认并记录凭证、确认人。分录：
 
@@ -149,6 +192,8 @@ order: 20.5
 
 | 位置 | 内容 |
 | --- | --- |
+| fin `service/FinCashAccountService`、`FinAccountService.requireCashAccount`、`FinAccountRuleService.checkFundScope`、`mapper/fin/FinCashAccountMapper.xml`、`FinBankOpeningItemMapper.xml`；前端 `views/fin/cash-account/*`、`views/fin/account/DesignateModal.vue`、`components/fin/CashAccountSelect.vue` | 资金账户、指定科目、单据结算账户校验与下拉 |
+| fin `service/FinCashierService`、`FinBankService`；前端 `views/fin/cashier/index.vue`、`views/fin/bank/index.vue`、`ReconcileModal.vue` | 日记账 / 资金日报按资金账户、核对总账、银行对账的期初未达账 |
 | fin `service/FinIoService`、`FinIoCategoryService`、`controller/FinIoController`、`dto/IoRequests` | 其他收支、收支类别 |
 | fin `entity/FinIoDoc`、`FinIoDocItem`、`FinIoCategory`，`mapper/fin/FinIoDocMapper.xml`、`FinIoCategoryMapper.xml`、`FinIoDocItemMapper.xml` | 表映射、列表 / 汇总 / 明细查询 |
 | fin `model/FundDirection`、`IoStatus`、`IoPartnerType`、`FeeBearer`、`VoucherSource.INCOME_EXPENSE`、`AccountRole.PURCHASE_REBATE` | 枚举 |
