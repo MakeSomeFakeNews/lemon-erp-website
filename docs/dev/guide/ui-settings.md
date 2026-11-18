@@ -15,6 +15,7 @@ order: 2.5
 | 主题模式 | `themeMode` | `ThemeMode`：`light` / `dark` / `system` | `system`（随系统切换） |
 | 主题色 | `primaryColor` | `#rrggbb`，10 个预设或自定义取色 | `#1677ff`（拂晓蓝，品牌色） |
 | 布局 | `layout` | `LayoutMode`：`mix` / `side` / `top` / `column` | `mix` |
+| 侧边栏分组 | `sideGroups` | `SideGroups`：`collapse` / `accordion` / `expand` | `collapse` |
 | 显示多标签页 | `tabs` | 布尔 | `true` |
 | 紧凑模式 | `compact` | 布尔，`theme.compactAlgorithm` | `false` |
 | 侧边栏折叠 | `collapsed` | 布尔 | `false` |
@@ -59,13 +60,27 @@ Ant Design Vue 4 本身不输出 CSS 变量，原来页面里写的 `var(--ant-c
 | 布局 | 组成 |
 | --- | --- |
 | `mix` 顶部模块 + 侧边菜单（默认） | 顶栏切换模块，侧边栏显示当前模块的分组和页面（`SideMenu` 的 `module` 模式） |
-| `side` 侧边菜单 | 全部模块、分组、页面的多级树（`SideMenu` 的 `tree` 模式，分组也是可折叠的子菜单，展开一个模块时收起其他模块），顶栏显示完整面包屑 |
+| `side` 侧边菜单 | 全部模块、分组、页面的多级树（`SideMenu` 的 `tree` 模式，分组按[侧边栏分组](#侧边栏分组)显示，展开一个模块时收起其他模块），顶栏显示完整面包屑 |
 | `top` 顶部菜单 | 没有侧边栏，`TopMenu` 把全部菜单显示为水平菜单，模块的下拉面板按分组排成多列（`style.css` 的 `.top-menu-popup` / `.top-menu-cols-N`，列数按行数估算，分组不跨列），放不下的模块收进「…」；Logo 移到顶栏，不显示折叠按钮 |
 | `column` 双栏 | 最左一列 `ModuleRail` 显示模块图标和名称，第二栏显示当前模块的分组和页面，收起时第二栏隐藏；首页等不属于模块的页面只显示模块栏 |
 
 - 菜单项统一由 `layout/menuItems.js` 的 `toMenuItems` 从 `/auth/menus` 生成（已按权限过滤），各布局的高亮都按当前路由；多标签页、菜单搜索、面包屑与布局无关。新增页面只需按 [新增菜单与授权](./menu) 登记，四种布局自动出现。
 - 小于 768px 时不区分布局，统一使用抽屉菜单；768 ~ 1199px 侧边栏默认收起。
 - 移动作业（`MobileLayout`）、数据大屏、打印等独立页面不使用后台布局，不受影响。
+
+### 侧边栏分组
+
+`sideGroups`（issue #133，`utils/uiSettings.js` 的 `SideGroups`，抽屉中用 `a-segmented` 选择）决定模块下的二级目录（分组）在侧边栏中的显示方式，作用于 `mix` / `column`（`SideMenu` 的 `module` 模式）、`side`（`tree` 模式）布局和手机抽屉（`full` 模式）；`top` 布局的下拉面板、菜单搜索不受影响。
+
+| 取值 | 效果 | 实现 |
+| --- | --- | --- |
+| `collapse` 可折叠（默认） | 分组是子菜单，当前页面所在的模块和分组总是展开，用户展开 / 收起的状态记在本浏览器 | `toMenuItems(..., { groups: 'submenu' })`；子菜单与分组标题一样不显示图标（各分组有的配了图标、有的没有，文字对不齐） |
+| `accordion` 手风琴 | 同上，展开一项时收起同一层的其他项 | `menuItems.js` 的 `siblingKeys(items, key)` 返回同一父项下可展开项的 key，`SideMenu` 的 `openWith` 展开时过滤掉同层项 |
+| `expand` 始终展开 | 分组为不可折叠的标题（旧版本样式） | `groups: 'group'` |
+
+- **展开状态**：`SideMenu` 的 `openKeys` 保存在 `localStorage` 的 `lemon_erp_menu_open`（`utils/storage` 的 `load` / `save`，各布局共用；分组 key 为 `group-<菜单ID>`，模块为路由路径）。路由变化时用 `parentKeys` 把当前页面的上级并入展开项；`tree` 模式下模块（顶层）始终互斥，同时只展开一个模块。展开状态是浏览器本地的使用习惯，不随界面设置保存到服务端。
+- **收起成图标**：`module` 模式且侧边栏收起时，分组按 `group` 生成后改为分隔线，不受此项影响；收起时子菜单是悬停弹出，`openChange` 不改变展开状态。
+- **缩进**：侧边栏只有 220px，有可折叠的子菜单分组时 `inline-indent` 由 24px 改为 16px（`module` 模式下有子菜单即改；`tree` / `full` 模式下有两级子菜单时改），始终展开时与旧版相同。
 
 ## 保存
 

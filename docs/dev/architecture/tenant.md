@@ -73,6 +73,7 @@ long total = TenantContext.callIgnore(() -> mapper.selectCount(null));
 | 维护 | 平台在「系统管理 → 字典管理」（`sys:dict:*`，平台专属）中只能修改名称、颜色、排序、备注，不能新增、删除取值或修改键值 | 租户管理员在「系统管理 → 业务字典」（`sys:bizdict:list` / `edit`）中新增、改名、停用；程序依赖的取值标记为内置（`sys_dict_data.builtin = 1`，如职位类别的生产、假期类型的年假），不能删除、不能改键值 |
 | 业务代码 | 字段用枚举类型 | 字段用 `String`，保存时用 framework 的 `DictLookup.check(字典, 值, 字段名称键)` 按当前租户的字典校验，不在代码里写死允许的取值；内置取值集中定义为常量（如 `HrDictValues`） |
 
+- 「业务字典」页面的字典类型列表分页（issue #135）：`GET /system/biz-dict/types`（`SysDictService.pageBusinessTypes`）返回分页，参数 `current` / `size`、`keyword`（匹配名称、类型编码、备注）、`types`（前端 `views/system/bizDict/index.vue` 按界面语言的字典名称译文 `system.bizDict.types` 匹配到的类型编码，逗号分隔，与 `keyword` 任一匹配即可，英文界面因此能按英文名称搜索）、`sortField=type` / `sortOrder`（只允许按类型编码排序，名称按语言翻译、与数据库不一致，不参与排序；默认按类型编码升序）；前端输入关键字后 300ms 自动查询。字典管理的类型列表、两处字典数据本来就分页，前端取字典的 `/system/dict/data/type/{type}` 不变。
 - 字典类型的编码和种类保存后不能修改；业务字典的键值以大写字母开头，只含大写字母、数字、下划线，不超过 16 位（存入业务表的编码字段，最短为 `VARCHAR(16)`）。
 - 字典数据表不由租户拦截器处理：`SysDictService` 读写时，系统字典固定用平台租户，业务字典用 `TenantContext.currentOrPlatform()`（当前租户，没有租户上下文时为平台）。
 - 按类型查询的结果缓存为 `dict:{type}`（系统）/ `dict:{租户ID}:{type}`（业务），修改后立即清理，事务提交后再清理一次。
